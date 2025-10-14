@@ -5,6 +5,7 @@ from reportlab.pdfgen import canvas
 import smtplib
 from email.message import EmailMessage
 import os
+import io
 
 app = Flask(__name__)
 
