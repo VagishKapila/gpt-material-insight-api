@@ -47,7 +47,7 @@ def generate_pdf():
     if not project:
         return "Project not found", 404
 
-    filename = f"/mnt/data/Daily_Log_{data['project_id']}.pdf"
+    filename = f"Daily_Log_{data['project_id']}.pdf"
     doc = SimpleDocTemplate(filename, pagesize=LETTER)
     story = []
 
