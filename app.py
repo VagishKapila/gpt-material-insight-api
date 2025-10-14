@@ -15,10 +15,10 @@ def analyze_image():
     if not image_url:
         return jsonify({'error': 'image_url is required'}), 400
 
-    # Simulate AI detection result from image
+    # Simulated detection
     detected_material = "sheetrock"
 
-    # Simulate material price lookup
+    # Simulated result
     result = {
         "material": detected_material,
         "cheapest_found": {
@@ -27,12 +27,26 @@ def analyze_image():
             "location": "123 Main St, Sacramento, CA",
             "url": "https://lowes.com/sheetrock-deal"
         },
+        "alternatives": [
+            {
+                "name": "Type X Drywall",
+                "benefits": [
+                    "Fire resistance",
+                    "Meets stairwell and fire code"
+                ],
+                "price_range": "$9–$11/sheet"
+            },
+            {
+                "name": "Moisture-Resistant Green Board",
+                "benefits": [
+                    "Good for kitchens and bathrooms",
+                    "Mold and mildew resistant"
+                ],
+                "price_range": "$10–$12/sheet"
+            }
+        ],
+        "recommendation": f"You're currently using {detected_material}. For wet areas, Green Board may offer better protection. For fire-rated zones, Type X is recommended.",
         "message": f"Cheaper {detected_material} available at Lowe’s for $8.35."
     }
 
     return jsonify(result)
-
-# ✅ This block is needed for Render to work
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
