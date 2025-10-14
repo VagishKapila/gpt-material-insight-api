@@ -10,7 +10,7 @@ import io
 app = Flask(__name__)
 
 EMAIL_ADDRESS = "NNdailylogAI@gmail.com"
-EMAIL_PASSWORD = "jvtemkdbvwbkijtz"  # App Password from Gmail
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
 @app.route("/", methods=["GET"])
 def index():
@@ -24,7 +24,8 @@ def index():
           <input type=submit value="Generate & Email PDF">
         </form>
     """)
-
+print("📦 [DEBUG] EMAIL_ADDRESS:", os.getenv("EMAIL_ADDRESS"))
+print("📦 [DEBUG] EMAIL_PASSWORD:", os.getenv("EMAIL_PASSWORD"))
 @app.route("/generate-pdf", methods=["POST"])
 def generate_pdf():
     try:
