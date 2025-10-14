@@ -75,42 +75,44 @@ def generate_pdf():
 
 @app.route("/generate-pdf-dummy")
 def test_generate_pdf():
-    print("✅ [DEBUG] Starting PDF generation test...")
-
     try:
-        # Dummy test values
-        project_id = "test-project"
-        work_summary = "This is a test PDF generated for debugging purposes."
-        materials = "Bricks, Cement, Steel"
-        recipient_email = "vaakapila@gmail.com"
+        print("✅ [DEBUG] Starting PDF generation test...")
 
-        temp_pdf_path = f"/tmp/{project_id}_DailyLog.pdf"
-        c = canvas.Canvas(temp_pdf_path)
-        c.drawString(100, 750, f"Project ID: {project_id}")
-        c.drawString(100, 730, f"Work Summary: {work_summary}")
-        c.drawString(100, 710, f"Materials Used: {materials}")
+        # Create PDF in memory
+        buffer = io.BytesIO()
+        c = canvas.Canvas(buffer)
+        c.drawString(100, 750, "📄 This is a test PDF document.")
         c.save()
+        buffer.seek(0)
+
         print("✅ [DEBUG] PDF created successfully.")
 
-        # Email sending block
+        # Send Email
+        recipient_email = os.getenv('TEST_EMAIL', 'vaakapila@gmail.com')
+        EMAIL_ADDRESS = os.getenv('EMAIL_ADDRESS')
+        EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
+
+        if not EMAIL_ADDRESS or not EMAIL_PASSWORD:
+            raise ValueError("❌ EMAIL_ADDRESS or EMAIL_PASSWORD not set in environment!")
+
         msg = EmailMessage()
-        msg['Subject'] = f'Daily Log Report - {project_id}'
+        msg['Subject'] = 'Test Daily Log PDF'
         msg['From'] = EMAIL_ADDRESS
         msg['To'] = recipient_email
         msg.set_content('Attached is your test Daily Log PDF.')
 
-        with open(temp_pdf_path, 'rb') as f:
-            file_data = f.read()
-            msg.add_attachment(file_data, maintype='application', subtype='pdf', filename=f"{project_id}_DailyLog.pdf")
+        msg.add_attachment(buffer.read(), maintype='application', subtype='pdf', filename="Test_DailyLog.pdf")
+
+        print("📤 [DEBUG] Sending email to:", recipient_email)
 
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
             smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
             smtp.send_message(msg)
 
-        print("📧 [DEBUG] Test Email sent successfully to:", recipient_email)
+        print("📧 [DEBUG] Email sent successfully!")
 
         return "✅ PDF test passed and email sent!"
 
     except Exception as e:
-        print("❌ [DEBUG] Error during test PDF generation:", str(e))
-        return "❌ Test Failed!"
+        print("❌ [ERROR] Exception occurred:", e)
+        return f"❌ Internal error: {str(e)}"
