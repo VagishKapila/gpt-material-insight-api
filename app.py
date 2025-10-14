@@ -1,61 +1,45 @@
-import os
-from flask import Flask, request, jsonify
-from reportlab.lib.pagesizes import letter
+
+from flask import Flask, render_template, request, send_file
 from reportlab.pdfgen import canvas
-import smtplib
-from email.message import EmailMessage
-from io import BytesIO
+import io
+import os
 
 app = Flask(__name__)
 
-# ✅ HARD-CODED SETTINGS (For now — move to .env in production)
-SMTP_SERVER = "smtp.sendgrid.net"
-SMTP_PORT = 587
-SMTP_USERNAME = "apikey"
-SMTP_PASSWORD = "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"
-FROM_EMAIL = "NNdailylogAI@gmail.com"
-TO_EMAIL = "vaakapila@gmail.com"  # You can change this dynamically later
+UPLOAD_FOLDER = "generated_pdfs"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-@app.route('/')
-def home():
-    return "🚀 Nails & Notes API is running!"
+@app.route("/")
+def index():
+    return render_template("form.html")
 
-@app.route('/send-test-email', methods=['GET'])
-def send_test_email():
-    try:
-        # ✅ Generate PDF in memory
-        pdf_buffer = BytesIO()
-        c = canvas.Canvas(pdf_buffer, pagesize=letter)
-        c.drawString(100, 750, "🧠 Nails & Notes Test PDF")
-        c.save()
-        pdf_buffer.seek(0)
+@app.route("/generate-pdf", methods=["POST"])
+def generate_pdf():
+    project_id = request.form.get("project_id", "Unknown")
+    work_summary = request.form.get("work_summary", "N/A")
+    materials = request.form.get("materials", "N/A")
 
-        # ✅ Compose email
-        msg = EmailMessage()
-        msg["Subject"] = "🧾 Nails & Notes | Test PDF"
-        msg["From"] = FROM_EMAIL
-        msg["To"] = TO_EMAIL
-        msg.set_content("Hi there,\n\nAttached is a test PDF from the Nails & Notes Daily Log AI system.")
+    # Generate PDF in memory
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer)
+    c.drawString(100, 750, f"Project ID: {project_id}")
+    c.drawString(100, 730, f"Work Summary: {work_summary}")
+    c.drawString(100, 710, f"Materials Used: {materials}")
+    c.save()
+    buffer.seek(0)
 
-        # ✅ Attach the generated PDF
-        msg.add_attachment(
-            pdf_buffer.read(),
-            maintype="application",
-            subtype="pdf",
-            filename="NailsNotes_Test.pdf"
-        )
+    # Save PDF locally
+    file_path = os.path.join(UPLOAD_FOLDER, f"{project_id}_DailyLog.pdf")
+    with open(file_path, "wb") as f:
+        f.write(buffer.read())
 
-        # ✅ Send via SMTP
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            server.send_message(msg)
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=f"{project_id}_DailyLog.pdf",
+        mimetype='application/pdf'
+    )
 
-        return jsonify({"status": "✅ Test email sent successfully!"})
-
-    except Exception as e:
-        print(f"❌ Error sending email: {e}")
-        return jsonify({"error": str(e)}), 500
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)

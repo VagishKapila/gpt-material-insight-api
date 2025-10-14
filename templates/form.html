@@ -1,0 +1,17 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Nails & Notes: Create Daily Log</title>
+</head>
+<body>
+    <h1>Generate Daily Log PDF</h1>
+    <form method="POST" action="/generate-pdf">
+        <label>Project ID: <input type="text" name="project_id" required></label><br><br>
+        <label>Work Summary: <textarea name="work_summary" required></textarea></label><br><br>
+        <label>Materials Used: <textarea name="materials" required></textarea></label><br><br>
+        <button type="submit">Generate PDF</button>
+    </form>
+</body>
+</html>
