@@ -70,13 +70,14 @@ def generate_pdf():
             file_data = f.read()
             msg.add_attachment(file_data, maintype='application', subtype='pdf', filename=f"{project_id}_DailyLog.pdf")
 
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-            smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-            smtp.send_message(msg)
-
-        print("📧 [DEBUG] Email sent successfully to:", recipient_email)
-
-        return "✅ Daily Log PDF created and emailed!"
+       try:
+    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+        smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        smtp.send_message(msg)
+    print("📧 [DEBUG] Email sent successfully to:", recipient_email)
+except Exception as e:
+    print("❌ [ERROR] Email sending failed:", str(e))
+    return "PDF generated, but failed to send email."
     
     except Exception as e:
         print("❌ [ERROR] Failed during PDF/email flow:", str(e))
