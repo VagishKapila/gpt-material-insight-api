@@ -25,25 +25,60 @@ def index():
     """)
 
 @app.route("/generate-pdf", methods=["POST"])
-def test_pdf():
-    print("✅ [DEBUG] /generate-pdf endpoint was hit")
-    
-    # Try to parse the incoming request data
+def generate_pdf():
     try:
-        data = request.form.to_dict()
-        print("📥 [DEBUG] Received form data:", data)
+        print("✅ [DEBUG] Starting PDF generation...")
 
-        # If you're handling files later, log them too
-        if 'photos' in request.files:
-            photos = request.files.getlist('photos')
-            print(f"🖼️ [DEBUG] Received {len(photos)} photos")
-        else:
-            print("🖼️ [DEBUG] No photos attached")
+        # Collect form data
+        form_data = request.form.to_dict()
+        print("📥 [DEBUG] Form Data:", form_data)
 
+        project_id = form_data.get("project_id", "Unknown Project")
+        work_summary = form_data.get("work_summary", "No summary provided.")
+        materials_used = form_data.get("materials_used", "None listed")
+        recipient_email = form_data.get("email", "NNdailylogAI@gmail.com")
+
+        # Create PDF
+        pdf_buffer = io.BytesIO()
+        c = canvas.Canvas(pdf_buffer, pagesize=letter)
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(50, 750, f"Daily Log - Project: {project_id}")
+        c.setFont("Helvetica", 12)
+        c.drawString(50, 720, f"Work Summary: {work_summary}")
+        c.drawString(50, 700, f"Materials Used: {materials_used}")
+        c.save()
+        pdf_buffer.seek(0)
+
+        print("✅ [DEBUG] PDF created successfully.")
+
+        # Save temp file for emailing
+        temp_pdf_path = f"/tmp/{project_id.replace(' ', '_')}_DailyLog.pdf"
+        with open(temp_pdf_path, "wb") as f:
+            f.write(pdf_buffer.read())
+        print(f"💾 [DEBUG] PDF written to {temp_pdf_path}")
+
+        # Send Email
+        msg = EmailMessage()
+        msg['Subject'] = f'Daily Log Report - {project_id}'
+        msg['From'] = EMAIL_ADDRESS
+        msg['To'] = recipient_email
+        msg.set_content('Attached is your Daily Log PDF.')
+
+        with open(temp_pdf_path, 'rb') as f:
+            file_data = f.read()
+            msg.add_attachment(file_data, maintype='application', subtype='pdf', filename=f"{project_id}_DailyLog.pdf")
+
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+            smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            smtp.send_message(msg)
+
+        print("📧 [DEBUG] Email sent successfully to:", recipient_email)
+
+        return "✅ Daily Log PDF created and emailed!"
+    
     except Exception as e:
-        print("❌ [ERROR] Exception in /generate-pdf:", str(e))
-
-    return "PDF test passed!"
+        print("❌ [ERROR] Failed during PDF/email flow:", str(e))
+        return f"❌ Internal Server Error: {str(e)}", 500
     project_id = request.form.get("project_id")
     work_summary = request.form.get("work_summary")
     materials = request.form.get("materials")
