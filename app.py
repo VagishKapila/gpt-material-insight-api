@@ -1,114 +1,61 @@
-from flask import Flask, request
+import os
+from flask import Flask, request, jsonify
+from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 import smtplib
 from email.message import EmailMessage
-import os
-import io
+from io import BytesIO
 
 app = Flask(__name__)
 
-# Load environment variables (used for both real and dummy routes)
-EMAIL_ADDRESS = os.environ.get("EMAIL_USER")
-EMAIL_PASSWORD = os.environ.get("EMAIL_PASS")
+# ✅ ENV SETTINGS
+SMTP_SERVER = "smtp.sendgrid.net"
+SMTP_PORT = 587
+SMTP_USERNAME = "apikey"
+SMTP_PASSWORD = "your_sendgrid_api_key_here"  # ⛔ Replace with real API key securely or use os.environ["SENDGRID_API_KEY"]
+FROM_EMAIL = "NNdailylogAI@gmail.com"
+TO_EMAIL = "vaakapila@gmail.com"  # Change as needed
 
-@app.route("/")
-def index():
-    return "<h1>Nails & Notes: Daily Log API is Running!</h1>"
+@app.route('/')
+def home():
+    return "Nails & Notes Daily Log API is live!"
 
-@app.route("/generate-pdf", methods=["POST"])
-def generate_pdf():
+@app.route('/send-test-email', methods=['GET'])
+def send_test_email():
     try:
-        print("✅ [DEBUG] Starting PDF generation...")
-
-        project_id = request.form.get("project_id", "unknown")
-        work_summary = request.form.get("work_summary", "N/A")
-        materials = request.form.get("materials", "N/A")
-        recipient_email = request.form.get("email", EMAIL_ADDRESS)
-
-        print("📥 [DEBUG] Form Data:", {
-            "project_id": project_id,
-            "work_summary": work_summary,
-            "materials": materials,
-            "email": recipient_email
-        })
-
-        # Generate PDF
-        buffer = io.BytesIO()
-        c = canvas.Canvas(buffer)
-        c.setFont("Helvetica", 12)
-        c.drawString(100, 750, f"Project ID: {project_id}")
-        c.drawString(100, 730, f"Work Summary: {work_summary}")
-        c.drawString(100, 710, f"Materials Used: {materials}")
+        # ✅ Generate test PDF in memory
+        pdf_buffer = BytesIO()
+        c = canvas.Canvas(pdf_buffer, pagesize=letter)
+        c.drawString(100, 750, "Test PDF from Nails & Notes 🧠🛠️")
         c.save()
-        buffer.seek(0)
+        pdf_buffer.seek(0)
 
-        print("✅ [DEBUG] PDF created successfully.")
-
-        # Save to file
-        temp_pdf_path = f"/tmp/{project_id}_DailyLog.pdf"
-        with open(temp_pdf_path, "wb") as f:
-            f.write(buffer.read())
-        print("💾 [DEBUG] PDF written to", temp_pdf_path)
-
-        # Send Email
-        print(f"📤 [DEBUG] Sending email to: {recipient_email}")
+        # ✅ Compose email with attachment
         msg = EmailMessage()
-        msg['Subject'] = f'Daily Log Report - {project_id}'
-        msg['From'] = EMAIL_ADDRESS
-        msg['To'] = recipient_email
-        msg.set_content('Attached is your Daily Log PDF.')
+        msg["Subject"] = "🧾 Nails & Notes | Test PDF"
+        msg["From"] = FROM_EMAIL
+        msg["To"] = TO_EMAIL
+        msg.set_content("Attached is a test PDF generated from the Nails & Notes Daily Log system.")
 
-        with open(temp_pdf_path, 'rb') as f:
-            file_data = f.read()
-            msg.add_attachment(file_data, maintype='application', subtype='pdf', filename=f"{project_id}_DailyLog.pdf")
+        # ✅ Attach PDF
+        msg.add_attachment(
+            pdf_buffer.read(),
+            maintype="application",
+            subtype="pdf",
+            filename="NailsNotes_Test.pdf"
+        )
 
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-            smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-            smtp.send_message(msg)
+        # ✅ Send via SendGrid SMTP
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(msg)
 
-        print("📧 [DEBUG] Email sent successfully to:", recipient_email)
-        return "✅ Daily Log PDF created and emailed!"
+        return jsonify({"status": "✅ Email sent successfully!"})
 
     except Exception as e:
-        print("❌ [ERROR] Exception occurred:", str(e))
-        return f"❌ Internal Server Error: {str(e)}", 500
+        print(f"❌ Email error: {e}")
+        return jsonify({"error": str(e)}), 500
 
-@app.route("/generate-pdf-dummy")
-def test_generate_pdf():
-    try:
-        print("✅ [DEBUG] Starting test PDF generation...")
-
-        # Create test PDF in memory
-        buffer = io.BytesIO()
-        c = canvas.Canvas(buffer)
-        c.setFont("Helvetica", 12)
-        c.drawString(100, 750, "📄 This is a test PDF document.")
-        c.save()
-        buffer.seek(0)
-        print("✅ [DEBUG] Test PDF created successfully.")
-
-        # Get recipient from env or default
-        recipient_email = os.getenv('TEST_EMAIL', 'vaakapila@gmail.com')
-        print("📤 [DEBUG] Sending test email to:", recipient_email)
-
-        # Use global email vars
-        if not EMAIL_ADDRESS or not EMAIL_PASSWORD:
-            raise ValueError("EMAIL credentials missing in environment!")
-
-        msg = EmailMessage()
-        msg['Subject'] = 'Test Daily Log PDF'
-        msg['From'] = EMAIL_ADDRESS
-        msg['To'] = recipient_email
-        msg.set_content('Attached is your test Daily Log PDF.')
-        msg.add_attachment(buffer.read(), maintype='application', subtype='pdf', filename="Test_DailyLog.pdf")
-
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-            smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-            smtp.send_message(msg)
-
-        print("📧 [DEBUG] Test email sent successfully!")
-        return "✅ PDF test passed and email sent!"
-
-    except Exception as e:
-        print("❌ [ERROR] Test route failed:", str(e))
-        return f"❌ Internal error: {str(e)}", 500
+if __name__ == '__main__':
+    app.run(debug=True)
