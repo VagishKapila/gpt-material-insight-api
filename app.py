@@ -25,7 +25,25 @@ def index():
     """)
 
 @app.route("/generate-pdf", methods=["POST"])
-def generate_pdf():
+def test_pdf():
+    print("✅ [DEBUG] /generate-pdf endpoint was hit")
+    
+    # Try to parse the incoming request data
+    try:
+        data = request.form.to_dict()
+        print("📥 [DEBUG] Received form data:", data)
+
+        # If you're handling files later, log them too
+        if 'photos' in request.files:
+            photos = request.files.getlist('photos')
+            print(f"🖼️ [DEBUG] Received {len(photos)} photos")
+        else:
+            print("🖼️ [DEBUG] No photos attached")
+
+    except Exception as e:
+        print("❌ [ERROR] Exception in /generate-pdf:", str(e))
+
+    return "PDF test passed!"
     project_id = request.form.get("project_id")
     work_summary = request.form.get("work_summary")
     materials = request.form.get("materials")
