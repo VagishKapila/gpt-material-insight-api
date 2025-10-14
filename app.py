@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request
+from flask import Flask, request
 from reportlab.pdfgen import canvas
 import smtplib
 from email.message import EmailMessage
@@ -7,7 +7,7 @@ import io
 
 app = Flask(__name__)
 
-# Load environment variables
+# Load environment variables (used for both real and dummy routes)
 EMAIL_ADDRESS = os.environ.get("EMAIL_USER")
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASS")
 
@@ -20,7 +20,6 @@ def generate_pdf():
     try:
         print("✅ [DEBUG] Starting PDF generation...")
 
-        # Get form data
         project_id = request.form.get("project_id", "unknown")
         work_summary = request.form.get("work_summary", "N/A")
         materials = request.form.get("materials", "N/A")
@@ -41,17 +40,18 @@ def generate_pdf():
         c.drawString(100, 730, f"Work Summary: {work_summary}")
         c.drawString(100, 710, f"Materials Used: {materials}")
         c.save()
-
         buffer.seek(0)
+
         print("✅ [DEBUG] PDF created successfully.")
 
-        # Save to temporary file (for email attachment)
+        # Save to file
         temp_pdf_path = f"/tmp/{project_id}_DailyLog.pdf"
         with open(temp_pdf_path, "wb") as f:
             f.write(buffer.read())
         print("💾 [DEBUG] PDF written to", temp_pdf_path)
 
         # Send Email
+        print(f"📤 [DEBUG] Sending email to: {recipient_email}")
         msg = EmailMessage()
         msg['Subject'] = f'Daily Log Report - {project_id}'
         msg['From'] = EMAIL_ADDRESS
@@ -76,43 +76,39 @@ def generate_pdf():
 @app.route("/generate-pdf-dummy")
 def test_generate_pdf():
     try:
-        print("✅ [DEBUG] Starting PDF generation test...")
+        print("✅ [DEBUG] Starting test PDF generation...")
 
-        # Create PDF in memory
+        # Create test PDF in memory
         buffer = io.BytesIO()
         c = canvas.Canvas(buffer)
+        c.setFont("Helvetica", 12)
         c.drawString(100, 750, "📄 This is a test PDF document.")
         c.save()
         buffer.seek(0)
+        print("✅ [DEBUG] Test PDF created successfully.")
 
-        print("✅ [DEBUG] PDF created successfully.")
-
-        # Send Email
+        # Get recipient from env or default
         recipient_email = os.getenv('TEST_EMAIL', 'vaakapila@gmail.com')
-        EMAIL_ADDRESS = os.getenv('EMAIL_ADDRESS')
-        EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
+        print("📤 [DEBUG] Sending test email to:", recipient_email)
 
+        # Use global email vars
         if not EMAIL_ADDRESS or not EMAIL_PASSWORD:
-            raise ValueError("❌ EMAIL_ADDRESS or EMAIL_PASSWORD not set in environment!")
+            raise ValueError("EMAIL credentials missing in environment!")
 
         msg = EmailMessage()
         msg['Subject'] = 'Test Daily Log PDF'
         msg['From'] = EMAIL_ADDRESS
         msg['To'] = recipient_email
         msg.set_content('Attached is your test Daily Log PDF.')
-
         msg.add_attachment(buffer.read(), maintype='application', subtype='pdf', filename="Test_DailyLog.pdf")
-
-        print("📤 [DEBUG] Sending email to:", recipient_email)
 
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
             smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
             smtp.send_message(msg)
 
-        print("📧 [DEBUG] Email sent successfully!")
-
+        print("📧 [DEBUG] Test email sent successfully!")
         return "✅ PDF test passed and email sent!"
 
     except Exception as e:
-        print("❌ [ERROR] Exception occurred:", e)
-        return f"❌ Internal error: {str(e)}"
+        print("❌ [ERROR] Test route failed:", str(e))
+        return f"❌ Internal error: {str(e)}", 500
