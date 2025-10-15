@@ -1,16 +1,28 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Nails & Notes: Create Daily Log</title>
+    <title>Daily Log Form</title>
 </head>
 <body>
-    <h1>Generate Daily Log PDF</h1>
-    <form method="POST" action="/generate-pdf">
-        <label>Project ID: <input type="text" name="project_id" required></label><br><br>
-        <label>Work Summary: <textarea name="work_summary" required></textarea></label><br><br>
-        <label>Materials Used: <textarea name="materials" required></textarea></label><br><br>
+    <h2>Submit Daily Log</h2>
+    <form method="post" enctype="multipart/form-data">
+        <input type="text" name="date" placeholder="Date (YYYY-MM-DD)" /><br>
+        <input type="text" name="project_name" placeholder="Project Name" /><br>
+        <input type="text" name="client_name" placeholder="Client Name" /><br>
+        <input type="text" name="job_number" placeholder="Job Number" /><br>
+        <input type="text" name="prepared_by" placeholder="Prepared By" /><br>
+        <input type="text" name="location" placeholder="Location" /><br>
+        <input type="text" name="gc_or_sub" placeholder="GC or Sub" /><br>
+        <textarea name="crew_notes" placeholder="Crew Notes"></textarea><br>
+        <textarea name="work_done" placeholder="Work Done"></textarea><br>
+        <textarea name="deliveries" placeholder="Deliveries"></textarea><br>
+        <textarea name="inspections" placeholder="Inspections"></textarea><br>
+        <textarea name="equipment_used" placeholder="Equipment Used"></textarea><br>
+        <textarea name="safety_notes" placeholder="Safety Notes"></textarea><br>
+        <textarea name="notes" placeholder="Additional Notes"></textarea><br>
+        <input type="text" name="weather" placeholder="Weather Description" /><br>
+        <label>Upload Photos:</label><input type="file" name="photos" multiple><br>
         <button type="submit">Generate PDF</button>
     </form>
 </body>
