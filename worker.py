@@ -1,6 +1,6 @@
 import os
 from rq import Worker, Queue, Connection
-from queue import conn
+from task_queue import conn  # ✅ use your own Redis connection, not Python’s queue module
 
 listen = ['default']
 
