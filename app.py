@@ -16,8 +16,8 @@ os.makedirs(app.config['GENERATED_PDF_FOLDER'], exist_ok=True)
 def home():
     return "✅ Nails & Notes AI: Daily Log PDF Generator is running!"
 
-@app.route('/form', methods=['GET', 'POST'])
-def form():
+@app.route('/form', methods=['POST'])
+def submit_log():
     if request.method == 'POST':
         form_data = request.form.to_dict()
         images = request.files.getlist('photos')
