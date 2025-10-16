@@ -1,29 +1,88 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Daily Log Form</title>
+  <title>Nails & Notes: Upload Daily Log</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    label { display: block; margin-top: 10px; font-weight: bold; }
+    input[type="text"], textarea { width: 100%; padding: 8px; }
+    input[type="file"] { margin-top: 5px; }
+    .preview { font-size: 14px; margin-top: 5px; color: #555; }
+    .submit { margin-top: 20px; padding: 12px 24px; background: #444; color: white; border: none; cursor: pointer; }
+  </style>
 </head>
 <body>
-    <h2>Submit Daily Log</h2>
-    <form method="post" enctype="multipart/form-data">
-        <input type="text" name="date" placeholder="Date (YYYY-MM-DD)" /><br>
-        <input type="text" name="project_name" placeholder="Project Name" /><br>
-        <input type="text" name="client_name" placeholder="Client Name" /><br>
-        <input type="text" name="job_number" placeholder="Job Number" /><br>
-        <input type="text" name="prepared_by" placeholder="Prepared By" /><br>
-        <input type="text" name="location" placeholder="Location" /><br>
-        <input type="text" name="gc_or_sub" placeholder="GC or Sub" /><br>
-        <textarea name="crew_notes" placeholder="Crew Notes"></textarea><br>
-        <textarea name="work_done" placeholder="Work Done"></textarea><br>
-        <textarea name="deliveries" placeholder="Deliveries"></textarea><br>
-        <textarea name="inspections" placeholder="Inspections"></textarea><br>
-        <textarea name="equipment_used" placeholder="Equipment Used"></textarea><br>
-        <textarea name="safety_notes" placeholder="Safety Notes"></textarea><br>
-        <textarea name="notes" placeholder="Additional Notes"></textarea><br>
-        <input type="text" name="weather" placeholder="Weather Description" /><br>
-        <label>Upload Photos:</label><input type="file" name="photos" multiple><br>
-        <button type="submit">Generate PDF</button>
-    </form>
+  <h2>🛠️ Daily Log Upload (Test UI)</h2>
+  <form action="/form" method="post" enctype="multipart/form-data">
+    <label>Date</label>
+    <input type="text" name="date" value="2025-10-16" required>
+
+    <label>Project Name</label>
+    <input type="text" name="project_name" value="Sunset Villas" required>
+
+    <label>Client Name</label>
+    <input type="text" name="client_name">
+
+    <label>Job Number</label>
+    <input type="text" name="job_number">
+
+    <label>Prepared By</label>
+    <input type="text" name="prepared_by">
+
+    <label>Location</label>
+    <input type="text" name="location">
+
+    <label>GC or Sub</label>
+    <input type="text" name="gc_or_sub">
+
+    <label>Crew Notes</label>
+    <textarea name="crew_notes"></textarea>
+
+    <label>Work Done</label>
+    <textarea name="work_done"></textarea>
+
+    <label>Deliveries</label>
+    <textarea name="deliveries"></textarea>
+
+    <label>Inspections</label>
+    <textarea name="inspections"></textarea>
+
+    <label>Equipment Used</label>
+    <textarea name="equipment_used"></textarea>
+
+    <label>Safety Notes</label>
+    <textarea name="safety_notes"></textarea>
+
+    <label>Weather</label>
+    <textarea name="weather"></textarea>
+
+    <label>Additional Notes</label>
+    <textarea name="notes"></textarea>
+
+    <label>Upload Photos (max 20)</label>
+    <input type="file" name="photos" accept="image/*" multiple>
+    <div class="preview" id="filePreview"></div>
+
+    <button class="submit" type="submit">Generate PDF</button>
+  </form>
+
+  <script>
+    const input = document.querySelector('input[type="file"]');
+    const preview = document.getElementById('filePreview');
+
+    input.addEventListener('change', () => {
+      preview.innerHTML = '';
+      const files = Array.from(input.files);
+      if (files.length > 20) {
+        preview.innerHTML = "⚠️ Max 20 files allowed.";
+        input.value = ""; // clear selection
+        return;
+      }
+      files.forEach(f => {
+        const size = (f.size / 1024 / 1024).toFixed(2);
+        preview.innerHTML += `📸 ${f.name} — ${size} MB<br>`;
+      });
+    });
+  </script>
 </body>
 </html>
