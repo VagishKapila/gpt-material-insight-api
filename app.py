@@ -1,3 +1,4 @@
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # Limit: 50 MB
 from flask import Flask, render_template, request, send_file
 from werkzeug.utils import secure_filename
 import os
