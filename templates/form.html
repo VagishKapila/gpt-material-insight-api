@@ -1,88 +1,87 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Nails & Notes: Upload Daily Log</title>
-  <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    label { display: block; margin-top: 10px; font-weight: bold; }
-    input[type="text"], textarea { width: 100%; padding: 8px; }
-    input[type="file"] { margin-top: 5px; }
-    .preview { font-size: 14px; margin-top: 5px; color: #555; }
-    .submit { margin-top: 20px; padding: 12px 24px; background: #444; color: white; border: none; cursor: pointer; }
-  </style>
+  <meta charset="UTF-8">
+  <title>Daily Log Upload</title>
 </head>
 <body>
-  <h2>🛠️ Daily Log Upload (Test UI)</h2>
-  <form action="/form" method="post" enctype="multipart/form-data">
-    <label>Date</label>
-    <input type="text" name="date" value="2025-10-16" required>
+  <h2>Submit Daily Log</h2>
+  <form id="logForm" method="POST" enctype="multipart/form-data">
+    <!-- Form fields (same as before) -->
+    <label>Project Name: <input type="text" name="project_name" required></label><br>
+    <label>Date: <input type="date" name="date" required></label><br>
+    <label>Client Name: <input type="text" name="client_name"></label><br>
+    <label>Job Number: <input type="text" name="job_number"></label><br>
+    <label>Prepared By: <input type="text" name="prepared_by"></label><br>
+    <label>Location: <input type="text" name="location"></label><br>
+    <label>GC or Sub: <input type="text" name="gc_or_sub"></label><br>
+    <label>Crew Notes: <textarea name="crew_notes"></textarea></label><br>
+    <label>Work Done: <textarea name="work_done"></textarea></label><br>
+    <label>Deliveries: <textarea name="deliveries"></textarea></label><br>
+    <label>Inspections: <textarea name="inspections"></textarea></label><br>
+    <label>Equipment Used: <textarea name="equipment_used"></textarea></label><br>
+    <label>Safety Notes: <textarea name="safety_notes"></textarea></label><br>
+    <label>Weather: <input type="text" name="weather"></label><br>
+    <label>Additional Notes: <textarea name="notes"></textarea></label><br>
 
-    <label>Project Name</label>
-    <input type="text" name="project_name" value="Sunset Villas" required>
+    <!-- File input -->
+    <label>Upload Job Site Photos (up to 20):</label>
+    <input type="file" name="photos" id="photoInput" multiple accept="image/*"><br><br>
 
-    <label>Client Name</label>
-    <input type="text" name="client_name">
-
-    <label>Job Number</label>
-    <input type="text" name="job_number">
-
-    <label>Prepared By</label>
-    <input type="text" name="prepared_by">
-
-    <label>Location</label>
-    <input type="text" name="location">
-
-    <label>GC or Sub</label>
-    <input type="text" name="gc_or_sub">
-
-    <label>Crew Notes</label>
-    <textarea name="crew_notes"></textarea>
-
-    <label>Work Done</label>
-    <textarea name="work_done"></textarea>
-
-    <label>Deliveries</label>
-    <textarea name="deliveries"></textarea>
-
-    <label>Inspections</label>
-    <textarea name="inspections"></textarea>
-
-    <label>Equipment Used</label>
-    <textarea name="equipment_used"></textarea>
-
-    <label>Safety Notes</label>
-    <textarea name="safety_notes"></textarea>
-
-    <label>Weather</label>
-    <textarea name="weather"></textarea>
-
-    <label>Additional Notes</label>
-    <textarea name="notes"></textarea>
-
-    <label>Upload Photos (max 20)</label>
-    <input type="file" name="photos" accept="image/*" multiple>
-    <div class="preview" id="filePreview"></div>
-
-    <button class="submit" type="submit">Generate PDF</button>
+    <button type="submit">Submit Log</button>
   </form>
 
   <script>
-    const input = document.querySelector('input[type="file"]');
-    const preview = document.getElementById('filePreview');
+    const form = document.getElementById('logForm');
+    const photoInput = document.getElementById('photoInput');
 
-    input.addEventListener('change', () => {
-      preview.innerHTML = '';
-      const files = Array.from(input.files);
-      if (files.length > 20) {
-        preview.innerHTML = "⚠️ Max 20 files allowed.";
-        input.value = ""; // clear selection
-        return;
-      }
-      files.forEach(f => {
-        const size = (f.size / 1024 / 1024).toFixed(2);
-        preview.innerHTML += `📸 ${f.name} — ${size} MB<br>`;
+    form.addEventListener('submit', async function (event) {
+      event.preventDefault();
+
+      const compressedPhotos = await compressPhotos(photoInput.files);
+
+      const formData = new FormData(form);
+      // Remove original photos
+      formData.delete('photos');
+
+      // Append compressed ones
+      compressedPhotos.forEach((blob, index) => {
+        formData.append('photos', blob, `compressed_photo_${index}.jpg`);
       });
+
+      const response = await fetch('/form', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (response.ok) {
+        alert('Log submitted successfully!');
+      } else {
+        alert('Upload failed.');
+      }
     });
+
+    async function compressPhotos(files) {
+      const compressed = [];
+
+      for (let file of files) {
+        const img = await createImageBitmap(file);
+        const canvas = document.createElement('canvas');
+        const maxWidth = 1024;
+        const scale = maxWidth / img.width;
+        canvas.width = maxWidth;
+        canvas.height = img.height * scale;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        const blob = await new Promise(resolve =>
+          canvas.toBlob(resolve, 'image/jpeg', 0.4) // 40% quality
+        );
+        compressed.push(blob);
+      }
+      return compressed;
+    }
   </script>
 </body>
 </html>
