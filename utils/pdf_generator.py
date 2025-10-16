@@ -14,7 +14,7 @@ def compress_image(original_path, max_width=800, quality=60):
         if img.width > max_width:
             ratio = max_width / float(img.width)
             height = int(float(img.height) * ratio)
-            img = img.resize((max_width, height), PILImage.ANTIALIAS)
+            img = img.resize((max_width, height), PILImage.Resampling.LANCZOS)
 
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
         img.save(temp_file.name, format="JPEG", quality=quality)
