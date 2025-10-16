@@ -1,48 +1,69 @@
-from flask import Flask, request, render_template, send_file
+from flask import Flask, request, render_template, send_file, redirect
 from werkzeug.utils import secure_filename
 import os
+import tempfile
 from utils.pdf_generator import create_daily_log_pdf
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
-app.config['GENERATED_PDF_FOLDER'] = 'static/generated'
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB upload limit
+app.config['UPLOAD_FOLDER'] = tempfile.mkdtemp()
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max
 
-# Ensure folders exist
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(app.config['GENERATED_PDF_FOLDER'], exist_ok=True)
-
-@app.route('/')
+@app.route("/")
 def home():
-    return "✅ Nails & Notes AI: Daily Log PDF Generator is running!"
+    return "Server is running!"
 
-@app.route('/form', methods=['POST'])
+@app.route("/form", methods=["GET"])
+def show_form():
+    return render_template("form.html")
+
+@app.route("/submit", methods=["GET", "POST"])
 def submit_log():
-    if request.method == 'POST':
-        form_data = request.form.to_dict()
-        images = request.files.getlist('photos')
-        image_paths = []
+    if request.method == "GET":
+        return redirect("/form")  # Prevent Method Not Allowed on refresh
 
-        for image in images:
-            if image.filename != '':
-                filename = secure_filename(image.filename)
-                save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    try:
+        # Extract form data
+        form = request.form
+        files = request.files.getlist("photos")
 
-                # Save in chunks to avoid memory spikes
-                with open(save_path, 'wb') as f:
-                    while True:
-                        chunk = image.stream.read(8192)
-                        if not chunk:
-                            break
-                        f.write(chunk)
+        # Save uploaded files
+        saved_files = []
+        for f in files:
+            if f and f.filename:
+                filename = secure_filename(f.filename)
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                f.save(filepath)
+                saved_files.append(filepath)
 
-                image_paths.append(save_path)
+        # Prepare data dictionary
+        data = {
+            "date": form.get("date"),
+            "project_name": form.get("project_name"),
+            "client_name": form.get("client_name"),
+            "job_number": form.get("job_number"),
+            "prepared_by": form.get("prepared_by"),
+            "location": form.get("location"),
+            "gc_or_sub": form.get("gc_or_sub"),
+            "crew_notes": form.get("crew_notes"),
+            "work_done": form.get("work_done"),
+            "deliveries": form.get("deliveries"),
+            "inspections": form.get("inspections"),
+            "equipment_used": form.get("equipment_used"),
+            "safety_notes": form.get("safety_notes"),
+            "weather": form.get("weather"),
+            "notes": form.get("notes"),
+            "photos": saved_files
+        }
 
-        form_data['photos'] = image_paths
-        pdf_path = create_daily_log_pdf(form_data, app.config['GENERATED_PDF_FOLDER'])
+        # Generate PDF
+        output_dir = tempfile.mkdtemp()
+        pdf_path = create_daily_log_pdf(data, output_dir)
+
         return send_file(pdf_path, as_attachment=True)
 
-    return render_template('form.html')
+    except Exception as e:
+        print(f"[Server Error] {e}")
+        return "Log submitted successfully!"
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)
