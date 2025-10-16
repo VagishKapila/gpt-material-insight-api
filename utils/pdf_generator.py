@@ -1,3 +1,6 @@
+def create_daily_log_pdf(data, output_dir):
+    print("[DEBUG] PDF generation started.")
+    ...
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
