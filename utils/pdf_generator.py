@@ -1,9 +1,27 @@
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.units import inch
+from PIL import Image as PILImage
 import os
+import tempfile
+
+def compress_image(original_path, max_width=800, quality=60):
+    try:
+        img = PILImage.open(original_path)
+        img = img.convert("RGB")
+        if img.width > max_width:
+            ratio = max_width / float(img.width)
+            height = int(float(img.height) * ratio)
+            img = img.resize((max_width, height), PILImage.ANTIALIAS)
+
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+        img.save(temp_file.name, format="JPEG", quality=quality)
+        return temp_file.name
+    except Exception as e:
+        print(f"Image compression error: {e}")
+        return original_path
 
 def create_daily_log_pdf(data, output_dir):
     os.makedirs(output_dir, exist_ok=True)
@@ -19,6 +37,7 @@ def create_daily_log_pdf(data, output_dir):
         elements.append(Paragraph(content or "N/A", normal_style))
         elements.append(Spacer(1, 10))
 
+    # Text sections
     add_section("Date", data.get("date"))
     add_section("Project Name", data.get("project_name"))
     add_section("Client Name", data.get("client_name"))
@@ -37,13 +56,16 @@ def create_daily_log_pdf(data, output_dir):
 
     elements.append(PageBreak())
 
+    # Add compressed images
     if data.get("photos"):
         elements.append(Paragraph("Job Site Photos", header_style))
         for path in data["photos"]:
             try:
-                elements.append(Image(path, width=5 * inch, height=3 * inch))
+                compressed_path = compress_image(path)
+                elements.append(RLImage(compressed_path, width=5 * inch, height=3 * inch))
                 elements.append(Spacer(1, 12))
-            except Exception:
+            except Exception as e:
+                print(f"Photo failed: {e}")
                 continue
 
     doc.build(elements)
