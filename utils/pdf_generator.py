@@ -20,8 +20,8 @@ def compress_image(original_path, max_width=800, quality=60):
         img.save(temp_file.name, format="JPEG", quality=quality)
         return temp_file.name
     except Exception as e:
-        print(f"Image compression error: {e}")
-        return original_path
+        print(f"[Image Compression Error] {e}")
+        return original_path  # fallback to original if compression fails
 
 def create_daily_log_pdf(data, output_dir):
     os.makedirs(output_dir, exist_ok=True)
@@ -29,7 +29,8 @@ def create_daily_log_pdf(data, output_dir):
     doc = SimpleDocTemplate(pdf_path, pagesize=letter)
     elements = []
     styles = getSampleStyleSheet()
-    header_style = ParagraphStyle(name='HeaderStyle', parent=styles['Heading2'], fontSize=14, spaceAfter=10, alignment=TA_LEFT, fontName='Helvetica-Bold')
+    header_style = ParagraphStyle(name='HeaderStyle', parent=styles['Heading2'],
+                                   fontSize=14, spaceAfter=10, alignment=TA_LEFT, fontName='Helvetica-Bold')
     normal_style = styles['Normal']
 
     def add_section(title, content):
@@ -37,7 +38,7 @@ def create_daily_log_pdf(data, output_dir):
         elements.append(Paragraph(content or "N/A", normal_style))
         elements.append(Spacer(1, 10))
 
-    # Text sections
+    # Core log info
     add_section("Date", data.get("date"))
     add_section("Project Name", data.get("project_name"))
     add_section("Client Name", data.get("client_name"))
@@ -56,16 +57,16 @@ def create_daily_log_pdf(data, output_dir):
 
     elements.append(PageBreak())
 
-    # Add compressed images
+    # Job site photos
     if data.get("photos"):
         elements.append(Paragraph("Job Site Photos", header_style))
-        for path in data["photos"]:
+        for idx, path in enumerate(data["photos"], start=1):
             try:
                 compressed_path = compress_image(path)
                 elements.append(RLImage(compressed_path, width=5 * inch, height=3 * inch))
                 elements.append(Spacer(1, 12))
             except Exception as e:
-                print(f"Photo failed: {e}")
+                print(f"[Photo Skipped - {idx}] {e}")
                 continue
 
     doc.build(elements)
