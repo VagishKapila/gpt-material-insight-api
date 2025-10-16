@@ -1,3 +1,26 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI(
+    title="Nails & Notes Daily Log API",
+    description="Submit construction daily logs, upload images, and generate PDFs.",
+    version="1.0.0"
+)
+
+# Optional: CORS if using frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or restrict to frontend domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Sample route
+@app.get("/")
+def read_root():
+    return {"message": "Nails & Notes Daily Log API is live 🎯"}
+
 from flask import Flask, render_template, request, send_file
 from werkzeug.utils import secure_filename
 import os
