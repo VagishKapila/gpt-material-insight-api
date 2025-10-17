@@ -1,14 +1,12 @@
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Image as RLImage,
-                                  Table, TableStyle, PageBreak)
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, PageBreak, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT
-from reportlab.lib.units import inch
 from reportlab.lib import colors
+from reportlab.lib.units import inch
 from PIL import Image as PILImage
 import os
 import tempfile
-
 
 def compress_image(original_path, max_width=800, quality=60):
     try:
@@ -18,7 +16,6 @@ def compress_image(original_path, max_width=800, quality=60):
             ratio = max_width / float(img.width)
             height = int(float(img.height) * ratio)
             img = img.resize((max_width, height), PILImage.Resampling.LANCZOS)
-
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
         img.save(temp_file.name, format="JPEG", quality=quality)
         return temp_file.name
@@ -26,95 +23,113 @@ def compress_image(original_path, max_width=800, quality=60):
         print(f"[Image Compression Error] {e}")
         return original_path
 
-
-def create_daily_log_pdf(data, output_dir, logo_path=None):
+def create_daily_log_pdf(data, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     pdf_path = os.path.join(output_dir, f"DailyLog_{data.get('project_name', 'Unknown')}.pdf")
     doc = SimpleDocTemplate(pdf_path, pagesize=letter)
     elements = []
     styles = getSampleStyleSheet()
+    normal = styles['Normal']
+    header_style = ParagraphStyle('HeaderStyle', fontSize=14, spaceAfter=10, textColor=colors.HexColor("#1a73e8"), fontName='Helvetica-Bold')
+    subhead_style = ParagraphStyle('SubHeadStyle', fontSize=12, spaceAfter=6, textColor=colors.black)
 
-    header_style = ParagraphStyle(name='HeaderStyle', parent=styles['Heading2'], fontSize=13,
-                                  textColor=colors.darkblue, spaceAfter=8, alignment=TA_LEFT,
-                                  fontName='Helvetica-Bold')
-    normal_style = ParagraphStyle(name='NormalStyle', parent=styles['Normal'], fontSize=10)
-
-    def add_section(title, content):
-        elements.append(Paragraph(title, header_style))
-        elements.append(Paragraph(content or "N/A", normal_style))
-        elements.append(Spacer(1, 6))
-
-    # Title + Logo Row
-    table_data = [[Paragraph("<b>DAILY LOG</b>", styles['Title'])]]
+    # Header section: logo + title
+    logo_path = data.get("logo_path")
     if logo_path:
         try:
             compressed_logo = compress_image(logo_path, max_width=150)
-            table_data[0].append(RLImage(compressed_logo, width=1.2*inch, height=0.6*inch))
+            elements.append(RLImage(compressed_logo, width=1.8*inch, height=0.8*inch))
         except Exception as e:
             print(f"[Logo Error] {e}")
-            table_data[0].append("")
+    elements.append(Paragraph("DAILY LOG", header_style))
+    elements.append(Spacer(1, 10))
 
-    logo_table = Table(table_data, colWidths=[5.5*inch, 1.5*inch])
-    logo_table.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
-        ('ALIGN', (1, 0), (1, 0), 'RIGHT')
+    # Job Info Table (side-by-side)
+    def make_info_row(label, value):
+        return [Paragraph(f"<b>{label}</b>", subhead_style), Paragraph(value or "N/A", normal)]
+
+    info_table_data = [
+        make_info_row("Date", data.get("date")),
+        make_info_row("Project Name", data.get("project_name")),
+        make_info_row("Client Name", data.get("client_name")),
+        make_info_row("Job Number", data.get("job_number")),
+        make_info_row("Prepared By", data.get("prepared_by")),
+        make_info_row("Location", data.get("location")),
+        make_info_row("GC or Sub", data.get("gc_or_sub")),
+    ]
+
+    table = Table(info_table_data, colWidths=[1.8*inch, 4.7*inch])
+    table.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
     ]))
-    elements.append(logo_table)
+    elements.append(table)
     elements.append(Spacer(1, 12))
 
-    # Section Blocks
-    add_section("Date", data.get("date"))
-    add_section("Project Name", data.get("project_name"))
-    add_section("Client Name", data.get("client_name"))
-    add_section("Job Number", data.get("job_number"))
-    add_section("Prepared By", data.get("prepared_by"))
-    add_section("Location", data.get("location"))
-    add_section("GC or Sub", data.get("gc_or_sub"))
+    # Sectioned Notes
+    def add_section(title, content):
+        elements.append(Paragraph(title, header_style))
+        elements.append(Paragraph(content or "N/A", normal))
+        elements.append(Spacer(1, 10))
+
     add_section("Crew Notes", data.get("crew_notes"))
     add_section("Work Done", data.get("work_done"))
     add_section("Deliveries", data.get("deliveries"))
     add_section("Inspections", data.get("inspections"))
     add_section("Equipment Used", data.get("equipment_used"))
     add_section("Safety Notes", data.get("safety_notes"))
-    add_section("Weather", data.get("weather"))
     add_section("Additional Notes", data.get("notes"))
 
-    # Photos Section
+    # Weather with icon if available
+    elements.append(Paragraph("Weather", header_style))
+    weather_text = data.get("weather") or "N/A"
+    icon_path = data.get("weather_icon_path")
+    if icon_path:
+        try:
+            compressed_icon = compress_image(icon_path, max_width=50)
+            weather_row = Table([
+                [Paragraph(weather_text, normal), RLImage(compressed_icon, width=0.5*inch, height=0.5*inch)]
+            ])
+            elements.append(weather_row)
+        except Exception as e:
+            print(f"[Weather Icon Error] {e}")
+            elements.append(Paragraph(weather_text, normal))
+    else:
+        elements.append(Paragraph(weather_text, normal))
+    elements.append(Spacer(1, 12))
+
+    # Job Site Photos
     if data.get("photos"):
-        elements.append(Spacer(1, 10))
+        elements.append(PageBreak())
         elements.append(Paragraph("Job Site Photos", header_style))
-        for path in data["photos"]:
+        for idx, path in enumerate(data["photos"], start=1):
             try:
-                compressed_path = compress_image(path)
-                elements.append(RLImage(compressed_path, width=5*inch, height=3*inch))
+                compressed = compress_image(path)
+                elements.append(RLImage(compressed, width=5 * inch, height=3 * inch))
                 elements.append(Spacer(1, 10))
             except Exception as e:
-                print(f"[Photo Skipped] {e}")
+                print(f"[Photo Skipped - {idx}] {e}")
                 continue
 
-    elements.append(PageBreak())
+    # Optional Page 2 — Analysis (for now, placeholder)
+    if data.get("include_page_2"):
+        elements.append(PageBreak())
+        elements.append(Paragraph("Page 2: Comparative Material Pricing Analysis", header_style))
+        analysis_text = """
+        <ul>
+            <li><b>Material:</b> Sheetrock</li>
+            <li><b>Cheapest Option:</b> Lowe’s - $8</li>
+            <li><b>Alternative Supplier:</b> Home Depot - $8.75</li>
+            <li><b>Bulk Discount:</b> Yes, above 50 units</li>
+        </ul>
+        """
+        elements.append(Paragraph(analysis_text, normal))
+        elements.append(Spacer(1, 20))
 
-    # Page 2 - Material Comparison Table
-    elements.append(Paragraph("Material Price Comparison", header_style))
-    comparison_data = [["Material", "Supplier", "Price", "Notes"]]
-    for row in data.get("material_comparison", []):
-        comparison_data.append([row.get("material", ""), row.get("supplier", ""),
-                                row.get("price", ""), row.get("notes", "")])
-
-    table = Table(comparison_data, hAlign='LEFT')
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.lightblue),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
-    ]))
-    elements.append(table)
-
-    # Footer Branding
-    elements.append(Spacer(1, 30))
-    footer = Paragraph("<font size=8 color='grey'><i>Powered by Nails & Notes</i></font>", normal_style)
+    # Footer / Signature
+    footer = Paragraph("<para align=center><font size=10 color='#888888'>Powered by <b>Nails & Notes</b></font></para>", styles["Normal"])
+    elements.append(Spacer(1, 40))
     elements.append(footer)
 
     doc.build(elements)
