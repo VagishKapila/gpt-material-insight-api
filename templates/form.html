@@ -1,101 +1,76 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Nails & Notes – Daily Log</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-    form { background: white; padding: 20px; border-radius: 8px; max-width: 600px; margin: auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-    label { display: block; margin-top: 10px; font-weight: bold; }
-    input, textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-    button { margin-top: 15px; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-    button:disabled { background: #aaa; }
-    #loader { display: none; text-align: center; margin-top: 15px; color: #555; }
-    #result { margin-top: 20px; text-align: center; }
-  </style>
+    <meta charset="UTF-8">
+    <title>Daily Log Form – Nails & Notes</title>
 </head>
 <body>
-  <h2 style="text-align:center;">Submit Daily Log</h2>
+    <h2>Submit Your Daily Log</h2>
+    <form action="/generate" method="POST" enctype="multipart/form-data">
+        <!-- Core Fields -->
+        <label>Date:</label>
+        <input type="date" name="date" required><br>
 
-  <form id="logForm" method="POST" action="/submit" enctype="multipart/form-data">
-    <label>Project Name: <input type="text" name="project_name" required></label>
-    <label>Date: <input type="date" name="date" required></label>
-    <label>Client Name: <input type="text" name="client_name"></label>
-    <label>Job Number: <input type="text" name="job_number"></label>
-    <label>Prepared By: <input type="text" name="prepared_by"></label>
-    <label>Location: <input type="text" name="location"></label>
-    <label>GC or Sub: <input type="text" name="gc_or_sub"></label>
-    <label>Crew Notes: <textarea name="crew_notes"></textarea></label>
-    <label>Work Done: <textarea name="work_done"></textarea></label>
-    <label>Deliveries: <textarea name="deliveries"></textarea></label>
-    <label>Inspections: <textarea name="inspections"></textarea></label>
-    <label>Equipment Used: <textarea name="equipment_used"></textarea></label>
-    <label>Safety Notes: <textarea name="safety_notes"></textarea></label>
-    <label>Weather: <input type="text" name="weather"></label>
-    <label>Additional Notes: <textarea name="notes"></textarea></label>
-    <label>Upload Job Site Photos (up to 20):</label>
-    <input type="file" name="photos" id="photoInput" multiple accept="image/*"><br><br>
+        <label>Project Name:</label>
+        <input type="text" name="project_name" placeholder="e.g., Stanford Health TI" required><br>
 
-    <button type="submit">Submit Log</button>
-    <div id="loader">⏳ Generating PDF... Please wait...</div>
-    <div id="result"></div>
-  </form>
+        <label>Client Name:</label>
+        <input type="text" name="client_name" placeholder="e.g., Stanford Health"><br>
 
-  <script>
-    const form = document.getElementById('logForm');
-    const photoInput = document.getElementById('photoInput');
-    const loader = document.getElementById('loader');
-    const result = document.getElementById('result');
+        <label>Job Number:</label>
+        <input type="text" name="job_number" placeholder="e.g., 2025-1109"><br>
 
-    form.addEventListener('submit', async function (event) {
-      event.preventDefault();
-      loader.style.display = 'block';
-      result.innerHTML = '';
+        <label>Prepared By:</label>
+        <input type="text" name="prepared_by" placeholder="e.g., Vagish / Site Foreman"><br>
 
-      const compressedPhotos = await compressPhotos(photoInput.files);
-      const formData = new FormData(form);
-      formData.delete('photos');
-      compressedPhotos.forEach((blob, index) => {
-        formData.append('photos', blob, `compressed_${index}.jpg`);
-      });
+        <label>Location:</label>
+        <input type="text" name="location" placeholder="e.g., Menlo Park, CA"><br>
 
-      try {
-        const response = await fetch('/submit', {
-          method: 'POST',
-          body: formData
-        });
+        <label>GC or Sub:</label>
+        <input type="text" name="gc_or_sub" placeholder="e.g., BAINS (GC)"><br>
 
-        loader.style.display = 'none';
+        <!-- Work Details -->
+        <label>Crew Notes:</label><br>
+        <textarea name="crew_notes" placeholder="Any notes on crew attendance or behavior..." rows="3"></textarea><br>
 
-        if (response.ok) {
-          const blob = await response.blob();
-          const url = window.URL.createObjectURL(blob);
-          result.innerHTML = `<a href="${url}" download="DailyLog.pdf">📄 Download Your PDF</a>`;
-        } else {
-          result.innerHTML = '<span style="color:red;">Upload failed. Try again.</span>';
-        }
-      } catch (error) {
-        loader.style.display = 'none';
-        result.innerHTML = '<span style="color:red;">Network error. Please retry.</span>';
-      }
-    });
+        <label>Work Done:</label><br>
+        <textarea name="work_done" placeholder="Summary of completed work..." rows="3"></textarea><br>
 
-    async function compressPhotos(files) {
-      const compressed = [];
-      for (let file of files) {
-        const img = await createImageBitmap(file);
-        const canvas = document.createElement('canvas');
-        const maxWidth = 1024;
-        const scale = Math.min(1, maxWidth / img.width);
-        canvas.width = img.width * scale;
-        canvas.height = img.height * scale;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.5));
-        compressed.push(blob);
-      }
-      return compressed;
-    }
-  </script>
+        <label>Deliveries:</label><br>
+        <textarea name="deliveries" placeholder="Deliveries received today..." rows="2"></textarea><br>
+
+        <label>Inspections:</label><br>
+        <textarea name="inspections" placeholder="Any inspections performed..." rows="2"></textarea><br>
+
+        <label>Equipment Used:</label><br>
+        <textarea name="equipment_used" placeholder="List of equipment or tools used..." rows="2"></textarea><br>
+
+        <label>Safety Notes:</label><br>
+        <textarea name="safety_notes" placeholder="Any safety meetings, issues, or PPE info..." rows="2"></textarea><br>
+
+        <label>Additional Notes:</label><br>
+        <textarea name="notes" placeholder="Any other comments or info..." rows="2"></textarea><br>
+
+        <!-- Weather & Media -->
+        <label>Weather:</label>
+        <input type="text" name="weather" placeholder="e.g., Sunny, 72°F"><br>
+
+        <label>Upload Weather Icon (optional):</label>
+        <input type="file" name="weather_icon" accept="image/*"><br>
+
+        <label>Upload Logo (e.g., BAINS):</label>
+        <input type="file" name="logo" accept="image/*"><br>
+
+        <label>Upload Job Site Photos:</label>
+        <input type="file" name="photos" accept="image/*" multiple><br>
+
+        <!-- Page 2 Toggle -->
+        <label>
+            <input type="checkbox" name="include_page_2">
+            Include Page 2 – Material Comparison & AI Analysis
+        </label><br><br>
+
+        <button type="submit">Generate Daily Log PDF</button>
+    </form>
 </body>
 </html>
