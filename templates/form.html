@@ -2,73 +2,128 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Daily Log Form – Nails & Notes</title>
+    <title>Daily Log Submission</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background-color: #f8f8f8;
+        }
+
+        h1 {
+            color: #2b2b2b;
+        }
+
+        form {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 900px;
+            margin: auto;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+        }
+
+        label {
+            font-weight: bold;
+            display: block;
+            margin-top: 20px;
+        }
+
+        input[type="text"],
+        input[type="date"],
+        textarea {
+            width: 100%;
+            padding: 10px;
+            margin-top: 6px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
+
+        input[type="file"] {
+            margin-top: 10px;
+        }
+
+        .checkbox {
+            margin-top: 20px;
+        }
+
+        button {
+            margin-top: 30px;
+            padding: 10px 20px;
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0c5fd0;
+        }
+    </style>
 </head>
 <body>
-    <h2>Submit Your Daily Log</h2>
-    <form action="/generate" method="POST" enctype="multipart/form-data">
-        <!-- Core Fields -->
+    <h1>Submit Daily Log</h1>
+
+    <form action="/submit" method="post" enctype="multipart/form-data">
         <label>Date:</label>
-        <input type="date" name="date" required><br>
+        <input type="date" name="date" required>
 
         <label>Project Name:</label>
-        <input type="text" name="project_name" placeholder="e.g., Stanford Health TI" required><br>
+        <input type="text" name="project_name" required>
 
         <label>Client Name:</label>
-        <input type="text" name="client_name" placeholder="e.g., Stanford Health"><br>
+        <input type="text" name="client_name">
 
         <label>Job Number:</label>
-        <input type="text" name="job_number" placeholder="e.g., 2025-1109"><br>
+        <input type="text" name="job_number">
 
         <label>Prepared By:</label>
-        <input type="text" name="prepared_by" placeholder="e.g., Vagish / Site Foreman"><br>
+        <input type="text" name="prepared_by">
 
         <label>Location:</label>
-        <input type="text" name="location" placeholder="e.g., Menlo Park, CA"><br>
+        <input type="text" name="location">
 
         <label>GC or Sub:</label>
-        <input type="text" name="gc_or_sub" placeholder="e.g., BAINS (GC)"><br>
+        <input type="text" name="gc_or_sub">
 
-        <!-- Work Details -->
-        <label>Crew Notes:</label><br>
-        <textarea name="crew_notes" placeholder="Any notes on crew attendance or behavior..." rows="3"></textarea><br>
+        <label>Crew Notes:</label>
+        <textarea name="crew_notes" rows="4"></textarea>
 
-        <label>Work Done:</label><br>
-        <textarea name="work_done" placeholder="Summary of completed work..." rows="3"></textarea><br>
+        <label>Work Done:</label>
+        <textarea name="work_done" rows="4"></textarea>
 
-        <label>Deliveries:</label><br>
-        <textarea name="deliveries" placeholder="Deliveries received today..." rows="2"></textarea><br>
+        <label>Deliveries:</label>
+        <textarea name="deliveries" rows="3"></textarea>
 
-        <label>Inspections:</label><br>
-        <textarea name="inspections" placeholder="Any inspections performed..." rows="2"></textarea><br>
+        <label>Inspections:</label>
+        <textarea name="inspections" rows="3"></textarea>
 
-        <label>Equipment Used:</label><br>
-        <textarea name="equipment_used" placeholder="List of equipment or tools used..." rows="2"></textarea><br>
+        <label>Equipment Used:</label>
+        <textarea name="equipment_used" rows="3"></textarea>
 
-        <label>Safety Notes:</label><br>
-        <textarea name="safety_notes" placeholder="Any safety meetings, issues, or PPE info..." rows="2"></textarea><br>
+        <label>Safety Notes:</label>
+        <textarea name="safety_notes" rows="3"></textarea>
 
-        <label>Additional Notes:</label><br>
-        <textarea name="notes" placeholder="Any other comments or info..." rows="2"></textarea><br>
-
-        <!-- Weather & Media -->
         <label>Weather:</label>
-        <input type="text" name="weather" placeholder="e.g., Sunny, 72°F"><br>
+        <input type="text" name="weather" placeholder="e.g. Sunny, 75°F">
 
-        <label>Upload Weather Icon (optional):</label>
-        <input type="file" name="weather_icon" accept="image/*"><br>
+        <label>Weather Icon Upload (optional):</label>
+        <input type="file" name="weather_icon" accept="image/*">
 
-        <label>Upload Logo (e.g., BAINS):</label>
-        <input type="file" name="logo" accept="image/*"><br>
+        <label>Additional Notes:</label>
+        <textarea name="notes" rows="3"></textarea>
 
         <label>Upload Job Site Photos:</label>
-        <input type="file" name="photos" accept="image/*" multiple><br>
+        <input type="file" name="photos" accept="image/*" multiple>
 
-        <!-- Page 2 Toggle -->
-        <label>
-            <input type="checkbox" name="include_page_2">
-            Include Page 2 – Material Comparison & AI Analysis
-        </label><br><br>
+        <label>Upload Logo:</label>
+        <input type="file" name="logo" accept="image/*">
+
+        <div class="checkbox">
+            <input type="checkbox" name="include_page_2" id="include_page_2">
+            <label for="include_page_2">Include Page 2 (Material Pricing / Analysis)</label>
+        </div>
 
         <button type="submit">Generate Daily Log PDF</button>
     </form>
