@@ -1,7 +1,26 @@
+from flask import Flask, request, render_template, send_file, redirect
+from werkzeug.utils import secure_filename
+import os
+import tempfile
+from utils.pdf_generator import create_daily_log_pdf
+
+# ✅ must be defined BEFORE using @app.route
+app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = tempfile.mkdtemp()
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max
+
+@app.route("/")
+def home():
+    return "Server is running!"
+
+@app.route("/form", methods=["GET"])
+def show_form():
+    return render_template("form.html")
+
 @app.route("/submit", methods=["GET", "POST"])
 def submit_log():
     if request.method == "GET":
-        return redirect("/form")
+        return redirect("/form")  # Prevent Method Not Allowed on refresh
 
     try:
         form = request.form
@@ -33,10 +52,10 @@ def submit_log():
             weather_icon_path = os.path.join(app.config['UPLOAD_FOLDER'], weather_icon_filename)
             weather_icon.save(weather_icon_path)
 
-        # Check if Page 2 should be included
+        # Include Page 2 toggle
         include_page_2 = 'include_page_2' in form
 
-        # Final data dictionary
+        # Prepare all data for PDF
         data = {
             "date": form.get("date"),
             "project_name": form.get("project_name"),
@@ -62,8 +81,12 @@ def submit_log():
         # Generate PDF
         output_dir = tempfile.mkdtemp()
         pdf_path = create_daily_log_pdf(data, output_dir)
+
         return send_file(pdf_path, as_attachment=True, download_name="Daily_Log.pdf")
 
     except Exception as e:
         print(f"[Server Error] {e}")
-        return "Error occurred during log submission!"
+        return f"Error occurred during log submission: {str(e)}"
+
+if __name__ == "__main__":
+    app.run(debug=True)
