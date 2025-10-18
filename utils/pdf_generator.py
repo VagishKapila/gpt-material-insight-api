@@ -1,7 +1,6 @@
 # app.py
 from flask import Flask, render_template, request, send_file, jsonify
 import os
-from utils.pdf_generator import create_daily_log_pdf
 from werkzeug.utils import secure_filename
 import tempfile
 import requests
