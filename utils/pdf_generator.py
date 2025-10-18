@@ -30,6 +30,10 @@ import cv2
 import numpy as np
 import torch
 
+    # Optional Page 2 AI/AR Analysis
+    if include_page_2 and photo_paths:
+        add_ai_captions_page(elements, photo_paths, styles)
+        
 # Load AI Captioning Model once (if GPU/CPU available)
 processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to("cuda" if torch.cuda.is_available() else "cpu")
