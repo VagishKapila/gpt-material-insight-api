@@ -1,36 +1,3 @@
-from flask import Flask, request, render_template, send_file, redirect, jsonify
-from werkzeug.utils import secure_filename
-import os
-import tempfile
-import requests
-from utils.pdf_generator import create_daily_log_pdf
-
-app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = tempfile.mkdtemp()
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max
-
-@app.route("/")
-def home():
-    return "Server is running!"
-
-@app.route("/form", methods=["GET"])
-def show_form():
-    return render_template("form.html")
-
-@app.route("/get_weather")
-def get_weather():
-    location = request.args.get("location", "")
-    if not location:
-        return jsonify({"error": "No location provided"}), 400
-
-    try:
-        response = requests.get(f"https://wttr.in/{location}?format=1", timeout=3)
-        weather = response.text.strip()
-        return jsonify({"weather": weather})
-    except Exception as e:
-        print(f"[Weather API Error] {e}")
-        return jsonify({"error": "Unable to fetch weather"}), 500
-
 @app.route("/submit", methods=["POST"])
 def submit_log():
     try:
@@ -52,7 +19,7 @@ def submit_log():
             logo_path = os.path.join(app.config['UPLOAD_FOLDER'], logo_name)
             logo_file.save(logo_path)
 
-        # Determine which weather to use
+        # Determine weather (either auto or override)
         weather = form.get("weather_override") or form.get("weather")
 
         data = {
@@ -70,19 +37,19 @@ def submit_log():
             "equipment_used": form.get("equipment_used"),
             "safety_notes": form.get("safety_notes"),
             "weather": weather,
-            "notes": form.get("notes"),
-            "photos": saved_files,
-            "logo_path": logo_path,
-            "include_page_2": "include_page_2" in form
+            "notes": form.get("notes")
         }
 
+        include_page_2 = "include_page_2" in form
+
         output_dir = tempfile.mkdtemp()
-        pdf_path = create_daily_log_pdf(data, output_dir)
-        return send_file(pdf_path, as_attachment=True)
+        output_path = os.path.join(output_dir, "Daily_Log.pdf")
+
+        # ✅ Now call the full 5-argument version
+        create_daily_log_pdf(data, output_path, saved_files, logo_path, include_page_2)
+
+        return send_file(output_path, as_attachment=True)
 
     except Exception as e:
         print(f"[Server Error] {e}")
         return "Error occurred while submitting the log.", 500
-
-if __name__ == "__main__":
-    app.run(debug=True)
