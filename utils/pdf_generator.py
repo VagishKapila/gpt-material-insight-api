@@ -1,45 +1,36 @@
+# pdf_generator.py
+
 import os
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
-from reportlab.lib.units import inch
-from datetime import datetime
-from PIL import Image as PILImage
-from io import BytesIO
-
-# Try to import OpenCV
-try:
-    import cv2
-    import numpy as np
-    OPENCV_AVAILABLE = True
-except ImportError:
-    OPENCV_AVAILABLE = False
-
-def create_daily_log_pdf(form_data, output_path, photo_paths, logo_path=None, include_page_2=False):
-    doc = SimpleDocTemplate(output_path, pagesize=A4)
-    elements = []
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('Title', parent=styles['Heading1'], alignment=1, fontSize=18, spaceAfter=12, textColor=colors.HexColor('#003366'))
-    header_style = ParagraphStyle('Header', parent=styles['Heading2'], fontSize=14, spaceAfter=6, textColor=colors.HexColor('#005580'))
-    normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=11, spaceAfter=6)
-
-    from transformers import BlipProcessor, BlipForConditionalGeneration
-from PIL import Image
+import torch
 import cv2
 import numpy as np
-import torch
+from io import BytesIO
+from PIL import Image as PILImage
+from datetime import datetime
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Image,
+    Table, TableStyle, PageBreak
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
 
-    # Optional Page 2 AI/AR Analysis
-    if include_page_2 and photo_paths:
-        add_ai_captions_page(elements, photo_paths, styles)
-        
-# Load AI Captioning Model once (if GPU/CPU available)
+from transformers import BlipProcessor, BlipForConditionalGeneration
+
+# Load BLIP captioning model
 processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to("cuda" if torch.cuda.is_available() else "cpu")
 
+# Check OpenCV
+OPENCV_AVAILABLE = True
+try:
+    import cv2
+except ImportError:
+    OPENCV_AVAILABLE = False
+
 def generate_ai_caption(image_path):
-    image = Image.open(image_path).convert("RGB")
+    image = PILImage.open(image_path).convert("RGB")
     inputs = processor(image, return_tensors="pt").to(model.device)
     output = model.generate(**inputs)
     return processor.decode(output[0], skip_special_tokens=True)
@@ -62,28 +53,35 @@ def detect_safety_gear(image_path):
         tags.append("No visible safety gear detected")
     return tags
 
-def add_ai_captions_page(story, photo_paths, styles):
-    from reportlab.platypus import Image as RLImage, Spacer, Paragraph
-    from reportlab.lib.units import inch
-
-    story.append(Paragraph("Page 2: AI-Powered Photo Insights", styles['Heading1']))
-    story.append(Spacer(1, 12))
+def add_ai_captions_page(elements, photo_paths, styles):
+    elements.append(PageBreak())
+    elements.append(Paragraph("Page 2: AI-Powered Photo Insights", styles['Heading1']))
+    elements.append(Spacer(1, 12))
 
     for path in photo_paths:
         try:
             caption = generate_ai_caption(path)
             tags = detect_safety_gear(path)
 
-            story.append(RLImage(path, width=3.5*inch, height=3.5*inch))
-            story.append(Spacer(1, 6))
-            story.append(Paragraph(f"<b>AI Caption:</b> {caption}", styles['Normal']))
-            story.append(Paragraph(f"<b>Visual Tags:</b> {', '.join(tags)}", styles['Normal']))
-            story.append(Spacer(1, 18))
+            elements.append(Image(path, width=3.5*inch, height=3.5*inch))
+            elements.append(Spacer(1, 6))
+            elements.append(Paragraph(f"<b>AI Caption:</b> {caption}", styles['Normal']))
+            elements.append(Paragraph(f"<b>Visual Tags:</b> {', '.join(tags)}", styles['Normal']))
+            elements.append(Spacer(1, 18))
         except Exception as e:
-            story.append(Paragraph(f"Error analyzing image {path}: {e}", styles['Normal']))
-            
+            elements.append(Paragraph(f"⚠️ Error analyzing image {path}: {e}", styles['Normal']))
 
-    # --- Logo at the top ---
+def create_daily_log_pdf(form_data, output_path, photo_paths, logo_path=None, include_page_2=False):
+    doc = SimpleDocTemplate(output_path, pagesize=A4)
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # Styles
+    title_style = ParagraphStyle('Title', parent=styles['Heading1'], alignment=1, fontSize=18, spaceAfter=12, textColor=colors.HexColor('#003366'))
+    header_style = ParagraphStyle('Header', parent=styles['Heading2'], fontSize=14, spaceAfter=6, textColor=colors.HexColor('#005580'))
+    normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=11, spaceAfter=6)
+
+    # --- Logo ---
     if logo_path and os.path.exists(logo_path):
         elements.append(Image(logo_path, width=2.2 * inch, height=1 * inch))
         elements.append(Spacer(1, 0.2 * inch))
@@ -92,7 +90,7 @@ def add_ai_captions_page(story, photo_paths, styles):
     elements.append(Paragraph("DAILY LOG REPORT", title_style))
     elements.append(Spacer(1, 0.15 * inch))
 
-    # --- Form Data Section (Two columns layout) ---
+    # --- Form Data Section (Two-column layout) ---
     field_names = {
         "project_name": "Project Name",
         "project_address": "Project Address",
@@ -118,10 +116,8 @@ def add_ai_captions_page(story, photo_paths, styles):
             right_column.append(para)
 
     max_len = max(len(left_column), len(right_column))
-    while len(left_column) < max_len:
-        left_column.append(Paragraph("", normal_style))
-    while len(right_column) < max_len:
-        right_column.append(Paragraph("", normal_style))
+    left_column += [Paragraph("", normal_style)] * (max_len - len(left_column))
+    right_column += [Paragraph("", normal_style)] * (max_len - len(right_column))
 
     table_data = list(zip(left_column, right_column))
     table = Table(table_data, colWidths=[3.8 * inch, 3.8 * inch])
@@ -138,28 +134,29 @@ def add_ai_captions_page(story, photo_paths, styles):
     footer = Paragraph('<para alignment="center"><font size=10 color="#888888">Powered by Nails & Notes</font></para>', normal_style)
     elements.append(footer)
 
-    # --- Page 2: Raw Uploaded Images ---
+    # --- Page 2: AI Captions (if enabled) ---
+    if include_page_2 and photo_paths:
+        add_ai_captions_page(elements, photo_paths, styles)
+
+    # --- Page 3: Raw Uploaded Photos ---
     if photo_paths:
         elements.append(PageBreak())
         elements.append(Paragraph("Uploaded Job Site Photos", header_style))
         img_table = []
         row = []
-
         for i, path in enumerate(photo_paths):
             img = compress_image_for_report(path)
             row.append(img)
             if (i + 1) % 2 == 0:
                 img_table.append(row)
                 row = []
-
         if row:
             img_table.append(row)
-
         for r in img_table:
             elements.append(Table([r], colWidths=[3.8 * inch] * len(r), hAlign='LEFT'))
             elements.append(Spacer(1, 0.2 * inch))
 
-    # --- Page 3: AR Overlay using OpenCV ---
+    # --- Page 4: OpenCV AR Overlay ---
     if include_page_2 and OPENCV_AVAILABLE and photo_paths:
         elements.append(PageBreak())
         elements.append(Paragraph("AR Analysis & Image Highlights", header_style))
@@ -173,7 +170,6 @@ def add_ai_captions_page(story, photo_paths, styles):
             if (i + 1) % 2 == 0:
                 overlay_rows.append(row)
                 row = []
-
         if row:
             overlay_rows.append(row)
 
@@ -184,9 +180,8 @@ def add_ai_captions_page(story, photo_paths, styles):
         elements.append(PageBreak())
         elements.append(Paragraph("⚠️ OpenCV not installed — AR page skipped", normal_style))
 
-    # Build PDF
+    # Build the PDF
     doc.build(elements)
-
 
 def compress_image_for_report(image_path, max_width=400):
     try:
@@ -199,7 +194,6 @@ def compress_image_for_report(image_path, max_width=400):
     except Exception as e:
         print(f"Error compressing image: {e}")
         return Paragraph("⚠️ Error loading image", getSampleStyleSheet()["Normal"])
-
 
 def apply_opencv_overlay(image_path):
     try:
