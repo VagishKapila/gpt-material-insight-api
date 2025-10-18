@@ -2,130 +2,74 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Daily Log Submission</title>
+    <title>Daily Log Form</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            background-color: #f8f8f8;
-        }
-
-        h1 {
-            color: #2b2b2b;
-        }
-
-        form {
-            background-color: white;
-            padding: 30px;
-            border-radius: 10px;
-            max-width: 900px;
-            margin: auto;
-            box-shadow: 0 0 15px rgba(0,0,0,0.1);
-        }
-
-        label {
-            font-weight: bold;
-            display: block;
-            margin-top: 20px;
-        }
-
-        input[type="text"],
-        input[type="date"],
-        textarea {
-            width: 100%;
-            padding: 10px;
-            margin-top: 6px;
-            border-radius: 6px;
-            border: 1px solid #ccc;
-        }
-
-        input[type="file"] {
-            margin-top: 10px;
-        }
-
-        .checkbox {
-            margin-top: 20px;
-        }
-
-        button {
-            margin-top: 30px;
-            padding: 10px 20px;
-            background-color: #1a73e8;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-
-        button:hover {
-            background-color: #0c5fd0;
-        }
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input, textarea, select { width: 100%; padding: 6px; margin-top: 5px; }
+        #weather_display { margin-top: 5px; font-weight: bold; }
     </style>
+    <script>
+        let debounceTimer;
+
+        function debounceFetchWeather() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(fetchWeather, 1000);
+        }
+
+        function fetchWeather() {
+            const location = document.getElementById("location").value;
+            if (location.trim() === "") return;
+
+            fetch(`/get_weather?location=${encodeURIComponent(location)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.weather) {
+                        document.getElementById("weather_display").textContent = data.weather;
+                        document.getElementById("weather").value = data.weather;
+                    } else {
+                        document.getElementById("weather_display").textContent = "Weather unavailable";
+                    }
+                });
+        }
+    </script>
 </head>
 <body>
-    <h1>Submit Daily Log</h1>
+    <h1>Daily Log Submission</h1>
+    <form action="/submit" method="POST" enctype="multipart/form-data">
+        <label>Date: <input type="date" name="date" required></label>
+        <label>Project Name: <input type="text" name="project_name" required></label>
+        <label>Client Name: <input type="text" name="client_name" required></label>
+        <label>Job Number: <input type="text" name="job_number"></label>
+        <label>Prepared By: <input type="text" name="prepared_by" required></label>
 
-    <form action="/submit" method="post" enctype="multipart/form-data">
-        <label>Date:</label>
-        <input type="date" name="date" required>
+        <label>Project Location:
+            <input type="text" id="location" name="location" required oninput="debounceFetchWeather()">
+        </label>
 
-        <label>Project Name:</label>
-        <input type="text" name="project_name" required>
+        <label>GC or Subcontractor: <input type="text" name="gc_or_sub"></label>
 
-        <label>Client Name:</label>
-        <input type="text" name="client_name">
+        <label>Crew Notes: <textarea name="crew_notes"></textarea></label>
+        <label>Work Done: <textarea name="work_done"></textarea></label>
+        <label>Deliveries: <textarea name="deliveries"></textarea></label>
+        <label>Inspections: <textarea name="inspections"></textarea></label>
+        <label>Equipment Used: <textarea name="equipment_used"></textarea></label>
+        <label>Safety Notes: <textarea name="safety_notes"></textarea></label>
 
-        <label>Job Number:</label>
-        <input type="text" name="job_number">
+        <label>Auto-Fetched Weather:</label>
+        <div id="weather_display">Waiting for location...</div>
+        <input type="hidden" id="weather" name="weather">
+        <label>Override Weather (optional): <input type="text" name="weather_override"></label>
 
-        <label>Prepared By:</label>
-        <input type="text" name="prepared_by">
+        <label>Additional Notes: <textarea name="notes"></textarea></label>
 
-        <label>Location:</label>
-        <input type="text" name="location">
+        <label>Upload Jobsite Photos (max 20): <input type="file" name="photos" multiple accept="image/*"></label>
+        <label>Upload Company Logo: <input type="file" name="logo" accept="image/*"></label>
 
-        <label>GC or Sub:</label>
-        <input type="text" name="gc_or_sub">
+        <label>
+            <input type="checkbox" name="include_page_2"> Include Page 2 (AI/AR Analysis)
+        </label>
 
-        <label>Crew Notes:</label>
-        <textarea name="crew_notes" rows="4"></textarea>
-
-        <label>Work Done:</label>
-        <textarea name="work_done" rows="4"></textarea>
-
-        <label>Deliveries:</label>
-        <textarea name="deliveries" rows="3"></textarea>
-
-        <label>Inspections:</label>
-        <textarea name="inspections" rows="3"></textarea>
-
-        <label>Equipment Used:</label>
-        <textarea name="equipment_used" rows="3"></textarea>
-
-        <label>Safety Notes:</label>
-        <textarea name="safety_notes" rows="3"></textarea>
-
-        <label>Weather:</label>
-        <input type="text" name="weather" placeholder="e.g. Sunny, 75°F">
-
-        <label>Weather Icon Upload (optional):</label>
-        <input type="file" name="weather_icon" accept="image/*">
-
-        <label>Additional Notes:</label>
-        <textarea name="notes" rows="3"></textarea>
-
-        <label>Upload Job Site Photos:</label>
-        <input type="file" name="photos" accept="image/*" multiple>
-
-        <label>Upload Logo:</label>
-        <input type="file" name="logo" accept="image/*">
-
-        <div class="checkbox">
-            <input type="checkbox" name="include_page_2" id="include_page_2">
-            <label for="include_page_2">Include Page 2 (Material Pricing / Analysis)</label>
-        </div>
-
-        <button type="submit">Generate Daily Log PDF</button>
+        <button type="submit">Generate PDF</button>
     </form>
 </body>
 </html>
