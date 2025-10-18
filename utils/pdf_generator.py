@@ -24,6 +24,61 @@ def create_daily_log_pdf(form_data, output_path, photo_paths, logo_path=None, in
     header_style = ParagraphStyle('Header', parent=styles['Heading2'], fontSize=14, spaceAfter=6, textColor=colors.HexColor('#005580'))
     normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=11, spaceAfter=6)
 
+    from transformers import BlipProcessor, BlipForConditionalGeneration
+from PIL import Image
+import cv2
+import numpy as np
+import torch
+
+# Load AI Captioning Model once (if GPU/CPU available)
+processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to("cuda" if torch.cuda.is_available() else "cpu")
+
+def generate_ai_caption(image_path):
+    image = Image.open(image_path).convert("RGB")
+    inputs = processor(image, return_tensors="pt").to(model.device)
+    output = model.generate(**inputs)
+    return processor.decode(output[0], skip_special_tokens=True)
+
+def detect_safety_gear(image_path):
+    image = cv2.imread(image_path)
+    if image is None:
+        return []
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+    orange_mask = cv2.inRange(hsv, (5,100,100), (15,255,255))   # Safety vest
+    yellow_mask = cv2.inRange(hsv, (25,100,100), (35,255,255)) # Helmet
+
+    tags = []
+    if np.sum(orange_mask) > 10000:
+        tags.append("Safety vest detected")
+    if np.sum(yellow_mask) > 10000:
+        tags.append("Helmet detected")
+    if not tags:
+        tags.append("No visible safety gear detected")
+    return tags
+
+def add_ai_captions_page(story, photo_paths, styles):
+    from reportlab.platypus import Image as RLImage, Spacer, Paragraph
+    from reportlab.lib.units import inch
+
+    story.append(Paragraph("Page 2: AI-Powered Photo Insights", styles['Heading1']))
+    story.append(Spacer(1, 12))
+
+    for path in photo_paths:
+        try:
+            caption = generate_ai_caption(path)
+            tags = detect_safety_gear(path)
+
+            story.append(RLImage(path, width=3.5*inch, height=3.5*inch))
+            story.append(Spacer(1, 6))
+            story.append(Paragraph(f"<b>AI Caption:</b> {caption}", styles['Normal']))
+            story.append(Paragraph(f"<b>Visual Tags:</b> {', '.join(tags)}", styles['Normal']))
+            story.append(Spacer(1, 18))
+        except Exception as e:
+            story.append(Paragraph(f"Error analyzing image {path}: {e}", styles['Normal']))
+            
+
     # --- Logo at the top ---
     if logo_path and os.path.exists(logo_path):
         elements.append(Image(logo_path, width=2.2 * inch, height=1 * inch))
