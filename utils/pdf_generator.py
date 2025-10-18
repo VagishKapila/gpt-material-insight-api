@@ -55,6 +55,34 @@ def get_weather():
         response = requests.get(url)
         if response.status_code == 200:
             data = response.json()
-            icon_map = {
+            current_condition = data["current_condition"][0]
+            weather_desc = current_condition["weatherDesc"][0]["value"]
+            temperature_c = current_condition["temp_C"]
+
+            weather_icons = {
+                "Clear": "☀️",
                 "Sunny": "☀️",
-                "Clear": "
+                "Partly Cloudy": "🌤️",
+                "Cloudy": "☁️",
+                "Overcast": "☁️",
+                "Rain": "🌧️",
+                "Drizzle": "🌦️",
+                "Thunderstorm": "⛈️",
+                "Snow": "❄️",
+                "Mist": "🌫️",
+                "Fog": "🌫️",
+                "Haze": "🌁",
+            }
+
+            # Fallback to ❓ if unknown
+            icon = weather_icons.get(weather_desc, "❓")
+
+            return jsonify({
+                "weather": weather_desc,
+                "icon": icon,
+                "temperature": temperature_c
+            })
+        else:
+            return jsonify({"error": "Weather service failed"}), 502
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
