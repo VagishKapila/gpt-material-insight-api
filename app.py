@@ -1,28 +1,32 @@
-from flask import Flask, request, render_template, send_file, jsonify
+from flask import Flask, request, render_template, jsonify, send_file
 from werkzeug.utils import secure_filename
 import os
 import tempfile
-import requests
+import datetime
 from utils.pdf_generator import create_daily_log_pdf
+import requests
 
+# --- Flask setup ---
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = tempfile.mkdtemp()
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB max upload
 
+# --- Health check ---
 @app.route("/")
 def home():
-    return "Server is running!"
+    return "Nails & Notes API is live!"
 
+# --- Optional Web Form (for browser use) ---
 @app.route("/form", methods=["GET"])
 def show_form():
     return render_template("form.html")
 
+# --- Weather fetch helper ---
 @app.route("/get_weather")
 def get_weather():
     location = request.args.get("location", "")
     if not location:
         return jsonify({"error": "No location provided"}), 400
-
     try:
         response = requests.get(f"https://wttr.in/{location}?format=1", timeout=3)
         weather = response.text.strip()
@@ -31,67 +35,102 @@ def get_weather():
         print(f"[Weather API Error] {e}")
         return jsonify({"error": "Unable to fetch weather"}), 500
 
-@app.route("/submit", methods=["POST"])
-def submit_log():
+# --- API Endpoint for GPT Action ---
+@app.route("/generate", methods=["POST"])
+def generate_log():
     try:
-        form = request.form
-        files = request.files.getlist("photos")
-        logo_file = request.files.get("logo")
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Invalid or missing JSON payload"}), 400
 
-        saved_files = []
-        for f in files:
-            if f and f.filename:
-                filename = secure_filename(f.filename)
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                f.save(filepath)
-                saved_files.append(filepath)
+        # Extract JSON fields
+        project_name = data.get("project_name", "Untitled Project")
+        address = data.get("address", "")
+        general_contractor = data.get("general_contractor", "")
+        client_name = data.get("client_name", "")
+        date = data.get("date", datetime.date.today().isoformat())
+        crew_notes = data.get("crew_notes", "")
+        work_done = data.get("work_done", "")
+        safety_notes = data.get("safety_notes", "")
+        weather = data.get("weather", "")
+        photo_urls = data.get("photo_urls", [])
+        logo_url = data.get("logo_url")
 
+        # --- Save downloaded photos temporarily ---
+        saved_photos = []
+        for i, url in enumerate(photo_urls):
+            try:
+                r = requests.get(url, timeout=5)
+                if r.status_code == 200:
+                    file_path = os.path.join(app.config["UPLOAD_FOLDER"], f"photo_{i}.jpg")
+                    with open(file_path, "wb") as f:
+                        f.write(r.content)
+                    saved_photos.append(file_path)
+            except Exception as e:
+                print(f"Error downloading image: {e}")
+
+        # --- Save logo if provided ---
         logo_path = None
-        if logo_file and logo_file.filename:
-            logo_name = secure_filename(logo_file.filename)
-            logo_path = os.path.join(app.config['UPLOAD_FOLDER'], logo_name)
-            logo_file.save(logo_path)
+        if logo_url:
+            try:
+                r = requests.get(logo_url, timeout=5)
+                if r.status_code == 200:
+                    logo_path = os.path.join(app.config["UPLOAD_FOLDER"], "logo.jpg")
+                    with open(logo_path, "wb") as f:
+                        f.write(r.content)
+            except Exception as e:
+                print(f"Error downloading logo: {e}")
 
-        # Use override if provided
-        weather = form.get("weather_override") or form.get("weather")
-
-        data = {
-            "date": form.get("date"),
-            "project_name": form.get("project_name"),
-            "client_name": form.get("client_name"),
-            "job_number": form.get("job_number"),
-            "prepared_by": form.get("prepared_by"),
-            "location": form.get("location"),
-            "gc_or_sub": form.get("gc_or_sub"),
-            "crew_notes": form.get("crew_notes"),
-            "work_done": form.get("work_done"),
-            "deliveries": form.get("deliveries"),
-            "inspections": form.get("inspections"),
-            "equipment_used": form.get("equipment_used"),
-            "safety_notes": form.get("safety_notes"),
-            "weather": weather,
-            "notes": form.get("notes")
-        }
-
-        include_page_2 = "include_page_2" in form
-
-        # Save the PDF to a temp location
+        # --- Generate PDF ---
         output_dir = tempfile.mkdtemp()
-        output_path = os.path.join(output_dir, "daily_log.pdf")
-
-        create_daily_log_pdf(
-            form_data=data,
-            output_path=output_path,
-            photo_paths=saved_files,
-            logo_path=logo_path,
-            include_page_2=include_page_2
+        pdf_path = os.path.join(
+            output_dir, f"{project_name.replace(' ', '_')}_Report_{date}.pdf"
         )
 
-        return send_file(output_path, as_attachment=True)
+        # The function writes PDF file
+        create_daily_log_pdf(
+            {
+                "project_name": project_name,
+                "project_address": address,
+                "weather": weather,
+                "date": date,
+                "crew_notes": crew_notes,
+                "work_done": work_done,
+                "safety_notes": safety_notes,
+                "equipment_used": data.get("equipment_used", ""),
+                "material_summary": data.get("material_summary", ""),
+                "hours_worked": data.get("hours_worked", ""),
+            },
+            pdf_path,
+            photo_paths=saved_photos,
+            logo_path=logo_path,
+            include_page_2=True
+        )
+
+        # --- Return direct Render file URL ---
+        file_name = os.path.basename(pdf_path)
+        public_url = f"https://nails-and-notes.onrender.com/generated/{file_name}"
+
+        # Save for access
+        os.makedirs("static/generated", exist_ok=True)
+        os.rename(pdf_path, f"static/generated/{file_name}")
+
+        return jsonify({"pdf_url": public_url})
 
     except Exception as e:
         print(f"[Server Error] {e}")
-        return "Error occurred while submitting the log.", 500
+        return jsonify({"error": f"Server error: {e}"}), 500
+
+
+# --- Serve generated PDFs publicly ---
+@app.route("/generated/<filename>")
+def serve_pdf(filename):
+    file_path = os.path.join("static/generated", filename)
+    if os.path.exists(file_path):
+        return send_file(file_path, as_attachment=False)
+    else:
+        return "File not found", 404
+
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=10000, debug=True)
