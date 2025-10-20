@@ -107,19 +107,19 @@ def generate_log():
             include_page_2=True
         )
 
-        # --- Return direct Render file URL ---
+                # --- Return direct Render file URL ---
         file_name = os.path.basename(pdf_path)
         public_url = f"https://nails-and-notes.onrender.com/generated/{file_name}"
 
-        # Save for access
-        os.makedirs("static/generated", exist_ok=True)
-        os.rename(pdf_path, f"static/generated/{file_name}")
+        # Ensure static/generated directory exists
+        static_folder = "static/generated"
+        os.makedirs(static_folder, exist_ok=True)
+
+        # Move the file into that folder
+        final_path = os.path.join(static_folder, file_name)
+        os.rename(pdf_path, final_path)
 
         return jsonify({"pdf_url": public_url})
-
-    except Exception as e:
-        print(f"[Server Error] {e}")
-        return jsonify({"error": f"Server error: {e}"}), 500
 
 
 # --- Serve generated PDFs publicly ---
