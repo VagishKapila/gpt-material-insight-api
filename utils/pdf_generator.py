@@ -3,13 +3,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RL
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
-from transformers import BlipProcessor, BlipForConditionalGeneration
-import torch
-import os
-
-# Load BLIP model globally
-processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+from utils.image_analyzer import analyze_and_overlay
 
 def analyze_and_overlay(image_path, output_path):
     """Analyze image, overlay a caption and bounding box, and save to output_path."""
