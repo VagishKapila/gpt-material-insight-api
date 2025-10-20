@@ -1,75 +1,138 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Daily Log Form</title>
-    <style>
-        label { display: block; margin-top: 10px; font-weight: bold; }
-        input, textarea, select { width: 100%; padding: 6px; margin-top: 5px; }
-        #weather_display { margin-top: 5px; font-weight: bold; }
-    </style>
-    <script>
-        let debounceTimer;
-
-        function debounceFetchWeather() {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(fetchWeather, 1000);
-        }
-
-        function fetchWeather() {
-            const location = document.getElementById("location").value;
-            if (location.trim() === "") return;
-
-            fetch(`/get_weather?location=${encodeURIComponent(location)}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.weather) {
-                        document.getElementById("weather_display").textContent = data.weather;
-                        document.getElementById("weather").value = data.weather;
-                    } else {
-                        document.getElementById("weather_display").textContent = "Weather unavailable";
-                    }
-                });
-        }
-    </script>
+  <meta charset="UTF-8">
+  <title>Daily Log Form</title>
+  <style>
+    label { display: block; margin-top: 10px; font-weight: bold; }
+    input, textarea, select { width: 100%; padding: 6px; margin-top: 5px; }
+    #weather_display { margin-top: 5px; font-weight: bold; }
+    #result { margin-top: 20px; font-weight: bold; }
+    button { margin-top: 20px; padding: 10px 20px; }
+  </style>
 </head>
 <body>
-    <h1>Daily Log Submission</h1>
-    <form action="/submit" method="POST" enctype="multipart/form-data">
-        <label>Date: <input type="date" name="date" required></label>
-        <label>Project Name: <input type="text" name="project_name" required></label>
-        <label>Client Name: <input type="text" name="client_name" required></label>
-        <label>Job Number: <input type="text" name="job_number"></label>
-        <label>Prepared By: <input type="text" name="prepared_by" required></label>
+  <h1>Daily Log Submission</h1>
+  <form id="dailyForm">
+    <label>Date: <input type="date" name="date" required></label>
+    <label>Project Name: <input type="text" name="project_name" required></label>
+    <label>Client Name: <input type="text" name="client_name"></label>
+    <label>Project Location:
+      <input type="text" id="location" name="address" oninput="debounceFetchWeather()" required>
+    </label>
+    <label>General Contractor: <input type="text" name="general_contractor"></label>
+    <label>Crew Notes: <textarea name="crew_notes"></textarea></label>
+    <label>Work Done: <textarea name="work_done"></textarea></label>
+    <label>Equipment Used: <textarea name="equipment_used"></textarea></label>
+    <label>Safety Notes: <textarea name="safety_notes"></textarea></label>
+    <label>Material Summary: <textarea name="material_summary"></textarea></label>
+    <label>Hours Worked: <input type="text" name="hours_worked"></label>
 
-        <label>Project Location:
-            <input type="text" id="location" name="location" required oninput="debounceFetchWeather()">
-        </label>
+    <label>Weather:
+      <div id="weather_display">Waiting for location...</div>
+      <input type="hidden" id="weather" name="weather">
+    </label>
 
-        <label>GC or Subcontractor: <input type="text" name="gc_or_sub"></label>
+    <label>Upload Jobsite Photos (max 20): <input type="file" id="photos" name="photos" multiple accept="image/*"></label>
+    <label>Upload Company Logo: <input type="file" id="logo" name="logo" accept="image/*"></label>
 
-        <label>Crew Notes: <textarea name="crew_notes"></textarea></label>
-        <label>Work Done: <textarea name="work_done"></textarea></label>
-        <label>Deliveries: <textarea name="deliveries"></textarea></label>
-        <label>Inspections: <textarea name="inspections"></textarea></label>
-        <label>Equipment Used: <textarea name="equipment_used"></textarea></label>
-        <label>Safety Notes: <textarea name="safety_notes"></textarea></label>
+    <label>
+      <input type="checkbox" name="include_page_2" id="include_page_2"> Include Page 2 (AI/AR Analysis)
+    </label>
 
-        <label>Auto-Fetched Weather:</label>
-        <div id="weather_display">Waiting for location...</div>
-        <input type="hidden" id="weather" name="weather">
-        <label>Override Weather (optional): <input type="text" name="weather_override"></label>
+    <button type="submit">Generate PDF</button>
+  </form>
 
-        <label>Additional Notes: <textarea name="notes"></textarea></label>
+  <div id="result"></div>
 
-        <label>Upload Jobsite Photos (max 20): <input type="file" name="photos" multiple accept="image/*"></label>
-        <label>Upload Company Logo: <input type="file" name="logo" accept="image/*"></label>
+  <script>
+    let debounceTimer;
+    function debounceFetchWeather() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(fetchWeather, 1000);
+    }
 
-        <label>
-            <input type="checkbox" name="include_page_2"> Include Page 2 (AI/AR Analysis)
-        </label>
+    function fetchWeather() {
+      const location = document.getElementById("location").value;
+      if (location.trim() === "") return;
+      fetch(`/get_weather?location=${encodeURIComponent(location)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.weather) {
+            document.getElementById("weather_display").textContent = data.weather;
+            document.getElementById("weather").value = data.weather;
+          } else {
+            document.getElementById("weather_display").textContent = "Weather unavailable";
+          }
+        });
+    }
 
-        <button type="submit">Generate PDF</button>
-    </form>
+    async function uploadToTemp(file) {
+      const reader = new FileReader();
+      return new Promise(resolve => {
+        reader.onload = () => {
+          // Convert to blob URL (simulate external upload – backend fetches from URL)
+          const blob = new Blob([reader.result]);
+          const blobUrl = URL.createObjectURL(blob);
+          resolve(blobUrl);
+        };
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    document.getElementById("dailyForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      const form = e.target;
+      const formData = new FormData(form);
+      const resultDiv = document.getElementById("result");
+      resultDiv.textContent = "Submitting...";
+
+      // Upload jobsite photos to local blob URLs
+      const photos = document.getElementById("photos").files;
+      const photo_urls = [];
+      for (let i = 0; i < Math.min(photos.length, 20); i++) {
+        const url = await uploadToTemp(photos[i]);
+        photo_urls.push(url);
+      }
+
+      // Upload logo
+      let logo_url = null;
+      const logoFile = document.getElementById("logo").files[0];
+      if (logoFile) {
+        logo_url = await uploadToTemp(logoFile);
+      }
+
+      const payload = {
+        project_name: formData.get("project_name"),
+        address: formData.get("address"),
+        general_contractor: formData.get("general_contractor"),
+        client_name: formData.get("client_name"),
+        date: formData.get("date"),
+        crew_notes: formData.get("crew_notes"),
+        work_done: formData.get("work_done"),
+        safety_notes: formData.get("safety_notes"),
+        equipment_used: formData.get("equipment_used"),
+        material_summary: formData.get("material_summary"),
+        hours_worked: formData.get("hours_worked"),
+        weather: formData.get("weather"),
+        photo_urls,
+        logo_url,
+        include_page_2: formData.get("include_page_2") ? true : false
+      };
+
+      const res = await fetch("/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const json = await res.json();
+      if (json.pdf_url) {
+        resultDiv.innerHTML = `✅ <a href="${json.pdf_url}" target="_blank">Download your Daily Log PDF</a>`;
+      } else {
+        resultDiv.textContent = `❌ Error: ${json.error || "Unknown error"}`;
+      }
+    });
+  </script>
 </body>
 </html>
