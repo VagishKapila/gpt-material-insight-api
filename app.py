@@ -18,7 +18,7 @@ def home():
     return "Nails & Notes API is live!"
 
 
-# --- Optional Web Form (for browser use) ---
+# --- Optional Web Form ---
 @app.route("/form", methods=["GET"])
 def show_form():
     return render_template("form.html")
@@ -108,19 +108,15 @@ def generate_log():
             include_page_2=True
         )
 
-        # --- Return direct Render file URL ---
+        # --- Save file to static folder and return URL ---
         file_name = os.path.basename(pdf_path)
-        public_url = f"https://nails-and-notes.onrender.com/generated/{file_name}"
-
-        # --- Ensure static folder exists ---
         static_folder = os.path.join("static", "generated")
         os.makedirs(static_folder, exist_ok=True)
 
-        # --- Move the file into static folder ---
         final_path = os.path.join(static_folder, file_name)
         os.replace(pdf_path, final_path)
 
-        # ✅ Success response
+        public_url = f"https://nails-and-notes.onrender.com/generated/{file_name}"
         return jsonify({"pdf_url": public_url})
 
     except Exception as e:
