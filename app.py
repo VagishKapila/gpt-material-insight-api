@@ -11,15 +11,18 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = tempfile.mkdtemp()
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB max upload
 
+
 # --- Health check ---
 @app.route("/")
 def home():
     return "Nails & Notes API is live!"
 
+
 # --- Optional Web Form (for browser use) ---
 @app.route("/form", methods=["GET"])
 def show_form():
     return render_template("form.html")
+
 
 # --- Weather fetch helper ---
 @app.route("/get_weather")
@@ -34,6 +37,7 @@ def get_weather():
     except Exception as e:
         print(f"[Weather API Error] {e}")
         return jsonify({"error": "Unable to fetch weather"}), 500
+
 
 # --- API Endpoint for GPT Action ---
 @app.route("/generate", methods=["POST"])
@@ -83,11 +87,8 @@ def generate_log():
 
         # --- Generate PDF ---
         output_dir = tempfile.mkdtemp()
-        pdf_path = os.path.join(
-            output_dir, f"{project_name.replace(' ', '_')}_Report_{date}.pdf"
-        )
+        pdf_path = os.path.join(output_dir, f"{project_name.replace(' ', '_')}_Report_{date}.pdf")
 
-        # The function writes PDF file
         create_daily_log_pdf(
             {
                 "project_name": project_name,
@@ -107,7 +108,7 @@ def generate_log():
             include_page_2=True
         )
 
-                       # --- Return direct Render file URL ---
+        # --- Return direct Render file URL ---
         file_name = os.path.basename(pdf_path)
         public_url = f"https://nails-and-notes.onrender.com/generated/{file_name}"
 
@@ -119,6 +120,7 @@ def generate_log():
         final_path = os.path.join(static_folder, file_name)
         os.replace(pdf_path, final_path)
 
+        # ✅ Success response
         return jsonify({"pdf_url": public_url})
 
     except Exception as e:
