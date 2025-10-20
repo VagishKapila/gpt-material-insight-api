@@ -1,3 +1,4 @@
+from utils.image_analyzer import analyze_and_overlay
 from flask import Flask, request, render_template, jsonify, send_file
 from werkzeug.utils import secure_filename
 import os
