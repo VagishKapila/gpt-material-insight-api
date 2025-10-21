@@ -8,23 +8,19 @@ from utils.pdf_generator import create_daily_log_pdf
 import requests
 
 # --- Flask setup ---
-template_dir = os.path.abspath('templates')
-app = Flask(__name__, template_folder=template_dir)
+app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = tempfile.mkdtemp()
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB max upload
-
+app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200 MB max upload size
 
 # --- Health check ---
 @app.route("/")
 def home():
     return "Nails & Notes API is live!"
 
-
 # --- Optional Web Form ---
 @app.route("/form", methods=["GET"])
 def show_form():
     return render_template("form.html")
-
 
 # --- Weather fetch helper ---
 @app.route("/get_weather")
@@ -40,8 +36,7 @@ def get_weather():
         print(f"[Weather API Error] {e}")
         return jsonify({"error": "Unable to fetch weather"}), 500
 
-
-# --- API Endpoint for GPT Action ---
+# --- API Endpoint for GPT Action (JSON input from GPT or frontend JS) ---
 @app.route("/generate", methods=["POST"])
 def generate_log():
     try:
@@ -49,7 +44,7 @@ def generate_log():
         if not data:
             return jsonify({"error": "Invalid or missing JSON payload"}), 400
 
-        # Extract JSON fields
+        # Extract fields
         project_name = data.get("project_name", "Untitled Project")
         address = data.get("address", "")
         general_contractor = data.get("general_contractor", "")
@@ -62,7 +57,7 @@ def generate_log():
         photo_urls = data.get("photo_urls", [])
         logo_url = data.get("logo_url")
 
-        # --- Save downloaded photos temporarily ---
+        # Download photos
         saved_photos = []
         for i, url in enumerate(photo_urls):
             try:
@@ -75,7 +70,7 @@ def generate_log():
             except Exception as e:
                 print(f"Error downloading image: {e}")
 
-        # --- Save logo if provided ---
+        # Download logo
         logo_path = None
         if logo_url:
             try:
@@ -87,7 +82,7 @@ def generate_log():
             except Exception as e:
                 print(f"Error downloading logo: {e}")
 
-        # --- Generate PDF ---
+        # Generate PDF
         output_dir = tempfile.mkdtemp()
         pdf_path = os.path.join(output_dir, f"{project_name.replace(' ', '_')}_Report_{date}.pdf")
 
@@ -110,11 +105,10 @@ def generate_log():
             include_page_2=True
         )
 
-        # --- Save file to static folder and return URL ---
+        # Save final PDF
         file_name = os.path.basename(pdf_path)
         static_folder = os.path.join("static", "generated")
         os.makedirs(static_folder, exist_ok=True)
-
         final_path = os.path.join(static_folder, file_name)
         os.replace(pdf_path, final_path)
 
@@ -125,8 +119,7 @@ def generate_log():
         print(f"[Server Error] {e}")
         return jsonify({"error": f"Server error: {e}"}), 500
 
-
-# --- Serve generated PDFs publicly ---
+# --- Serve static PDF file ---
 @app.route("/generated/<filename>")
 def serve_pdf(filename):
     file_path = os.path.join("static/generated", filename)
@@ -136,6 +129,50 @@ def serve_pdf(filename):
         return "File not found", 404
 
 
+# --- New route for <form> uploads (multipart/form-data) ---
+@app.route("/generate_form", methods=["POST"])
+def generate_form_log():
+    try:
+        data = request.form
+        files = request.files
+        photo_files = request.files.getlist("photos")
+        logo_file = request.files.get("logo")
+
+        saved_photos = []
+        for i, photo in enumerate(photo_files):
+            if photo.filename:
+                path = os.path.join(app.config["UPLOAD_FOLDER"], f"photo_{i}.jpg")
+                photo.save(path)
+                saved_photos.append(path)
+
+        logo_path = None
+        if logo_file and logo_file.filename:
+            logo_path = os.path.join(app.config["UPLOAD_FOLDER"], "logo.jpg")
+            logo_file.save(logo_path)
+
+        pdf_path = os.path.join("static", "generated", f"{data.get('project_name','Untitled')}_Report_{datetime.date.today()}.pdf")
+        os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
+
+        create_daily_log_pdf({
+            "project_name": data.get("project_name"),
+            "project_address": data.get("address"),
+            "weather": data.get("weather"),
+            "date": data.get("date"),
+            "crew_notes": data.get("crew_notes"),
+            "work_done": data.get("work_done"),
+            "safety_notes": data.get("safety_notes"),
+            "equipment_used": data.get("equipment_used"),
+            "material_summary": data.get("material_summary"),
+            "hours_worked": data.get("hours_worked"),
+        }, pdf_path, photo_paths=saved_photos, logo_path=logo_path, include_page_2=data.get("include_page_2") == "on")
+
+        return jsonify({"pdf_url": f"/{pdf_path}"})
+    except Exception as e:
+        print(f"[Server Error] {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# --- Run server ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, debug=True)
