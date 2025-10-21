@@ -3,8 +3,8 @@ services:
     name: daily-log-ai
     env: python
     plan: free
-    buildCommand: ""
-    startCommand: gunicorn app:app
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --timeout 300
     envVars:
       - key: PYTHON_VERSION
         value: 3.10.12
@@ -12,11 +12,6 @@ services:
       name: temp-storage
       mountPath: /tmp
       sizeGB: 1
-    headers:
-      - source: /*
-        headers:
-          - key: Content-Length
-            value: 0
     request:
       timeout: 300
       bodySizeLimit: 100mb
