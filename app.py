@@ -4,7 +4,7 @@ import os
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 
-# ROUTE: Health check
+# ROUTE: Health check root
 @app.route("/")
 def index():
     return "✅ Daily Log AI is running"
@@ -17,23 +17,26 @@ def serve_pdf(filename):
     except FileNotFoundError:
         return "PDF not found", 404
 
-# ROUTE: Form page (optional, can delete if not using)
+# ROUTE: Optional form (only needed if you use a form.html template)
 @app.route("/form")
 def form_page():
-    return render_template("form.html")  # Only if using templates
+    return render_template("form.html")
 
-# ROUTE: Generate dummy PDF (for test purposes only)
+# ROUTE: Generate dummy PDF (testing only)
 @app.route("/generate-test-pdf", methods=["GET"])
 def generate_test_pdf():
-    test_pdf_path = os.path.join("static/generated", "test_upload.pdf")
-    if not os.path.exists("static/generated"):
-        os.makedirs("static/generated")
+    output_dir = os.path.join("static", "generated")
+    os.makedirs(output_dir, exist_ok=True)
+    test_pdf_path = os.path.join(output_dir, "test_upload.pdf")
+    
     with open(test_pdf_path, "wb") as f:
         f.write(b"%PDF-1.4\n% Dummy test PDF\n%%EOF")
+    
     return jsonify({
-        "message": "Test PDF created successfully",
-        "pdf_url": f"/generated/test_upload.pdf"
+        "message": "✅ Test PDF created",
+        "pdf_url": "/generated/test_upload.pdf"
     })
 
+# RUN LOCALLY (not used on Render)
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5000)
