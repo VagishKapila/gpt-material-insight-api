@@ -37,6 +37,11 @@ def generate_test_pdf():
         "pdf_url": "/generated/test_upload.pdf"
     })
 
+# ROUTE: Ping test
+@app.route("/ping")
+def ping():
+    return "PONG"
+    
 # RUN LOCALLY (not used on Render)
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
