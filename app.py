@@ -1,8 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory, render_template
 from datetime import datetime
 import os
-port = int(os.environ.get("PORT", 10000))
-app.run(host="0.0.0.0", port=port)
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 
@@ -11,6 +9,11 @@ app = Flask(__name__, static_folder="static", static_url_path="/static")
 @app.route("/")
 def index():
     return "✅ Daily Log AI is running"
+
+# Only run when executing this file directly (not when gunicorn loads it)
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
 
 # ROUTE: Serve PDF files from /static/generated
 @app.route("/generated/<filename>")
