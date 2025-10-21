@@ -1,0 +1,9 @@
+{
+  "build": {
+    "env": {
+      "PYTHON_VERSION": "3.10.13"
+    }
+  },
+  "start": "gunicorn app:app",
+  "plugins": []
+}
