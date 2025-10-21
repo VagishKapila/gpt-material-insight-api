@@ -10,10 +10,32 @@
     #result { margin-top: 20px; font-weight: bold; }
     button { margin-top: 20px; padding: 10px 20px; }
   </style>
+  <script>
+    let debounceTimer;
+    function debounceFetchWeather() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(fetchWeather, 1000);
+    }
+
+    function fetchWeather() {
+      const location = document.getElementById("location").value;
+      if (location.trim() === "") return;
+      fetch(`/get_weather?location=${encodeURIComponent(location)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.weather) {
+            document.getElementById("weather_display").textContent = data.weather;
+            document.getElementById("weather").value = data.weather;
+          } else {
+            document.getElementById("weather_display").textContent = "Weather unavailable";
+          }
+        });
+    }
+  </script>
 </head>
 <body>
   <h1>Daily Log Submission</h1>
-  <form id="dailyForm">
+  <form id="dailyForm" enctype="multipart/form-data">
     <label>Date: <input type="date" name="date" required></label>
     <label>Project Name: <input type="text" name="project_name" required></label>
     <label>Client Name: <input type="text" name="client_name"></label>
@@ -46,91 +68,28 @@
   <div id="result"></div>
 
   <script>
-    let debounceTimer;
-    function debounceFetchWeather() {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(fetchWeather, 1000);
-    }
-
-    function fetchWeather() {
-      const location = document.getElementById("location").value;
-      if (location.trim() === "") return;
-      fetch(`/get_weather?location=${encodeURIComponent(location)}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.weather) {
-            document.getElementById("weather_display").textContent = data.weather;
-            document.getElementById("weather").value = data.weather;
-          } else {
-            document.getElementById("weather_display").textContent = "Weather unavailable";
-          }
-        });
-    }
-
-    async function uploadToTemp(file) {
-      const reader = new FileReader();
-      return new Promise(resolve => {
-        reader.onload = () => {
-          // Convert to blob URL (simulate external upload – backend fetches from URL)
-          const blob = new Blob([reader.result]);
-          const blobUrl = URL.createObjectURL(blob);
-          resolve(blobUrl);
-        };
-        reader.readAsArrayBuffer(file);
-      });
-    }
-
     document.getElementById("dailyForm").addEventListener("submit", async function (e) {
       e.preventDefault();
-      const form = e.target;
-      const formData = new FormData(form);
       const resultDiv = document.getElementById("result");
-      resultDiv.textContent = "Submitting...";
+      resultDiv.textContent = "Uploading and generating PDF... please wait.";
 
-      // Upload jobsite photos to local blob URLs
-      const photos = document.getElementById("photos").files;
-      const photo_urls = [];
-      for (let i = 0; i < Math.min(photos.length, 20); i++) {
-        const url = await uploadToTemp(photos[i]);
-        photo_urls.push(url);
-      }
+      const formData = new FormData(this);
 
-      // Upload logo
-      let logo_url = null;
-      const logoFile = document.getElementById("logo").files[0];
-      if (logoFile) {
-        logo_url = await uploadToTemp(logoFile);
-      }
+      try {
+        const res = await fetch("/generate_form", {
+          method: "POST",
+          body: formData
+        });
 
-      const payload = {
-        project_name: formData.get("project_name"),
-        address: formData.get("address"),
-        general_contractor: formData.get("general_contractor"),
-        client_name: formData.get("client_name"),
-        date: formData.get("date"),
-        crew_notes: formData.get("crew_notes"),
-        work_done: formData.get("work_done"),
-        safety_notes: formData.get("safety_notes"),
-        equipment_used: formData.get("equipment_used"),
-        material_summary: formData.get("material_summary"),
-        hours_worked: formData.get("hours_worked"),
-        weather: formData.get("weather"),
-        photo_urls,
-        logo_url,
-        include_page_2: formData.get("include_page_2") ? true : false
-      };
-
-      const res = await fetch("/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      const json = await res.json();
-      if (json.pdf_url) {
-        resultDiv.innerHTML = `✅ <a href="${json.pdf_url}" target="_blank">Download your Daily Log PDF</a>`;
-      } else {
-        resultDiv.textContent = `❌ Error: ${json.error || "Unknown error"}`;
+        const json = await res.json();
+        if (json.pdf_url) {
+          resultDiv.innerHTML = `✅ <a href="${json.pdf_url}" target="_blank">Download your Daily Log PDF</a>`;
+        } else {
+          resultDiv.textContent = `❌ Error: ${json.error || "Unknown error"}`;
+        }
+      } catch (err) {
+        console.error(err);
+        resultDiv.textContent = "❌ Network or server error.";
       }
     });
   </script>
