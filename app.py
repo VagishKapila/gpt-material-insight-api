@@ -1,53 +1,61 @@
 from flask import Flask, request, jsonify, send_from_directory, render_template
 from datetime import datetime
 import os
+import requests
 
-app = Flask(__name__, static_folder="static", static_url_path="/static")
+# Flask app setup
+app = Flask(__name__, static_folder="static", static_url_path="/static", template_folder="templates")
 
-# Rebuild trigger - 10/21
-# ROUTE: Health check root
+# Port config (for Render or local)
+port = int(os.environ.get("PORT", 10000))
+
+# ─────────────────────────────────────────
+# ✅ HEALTH CHECK ROUTE
 @app.route("/")
 def index():
     return "✅ Daily Log AI is running"
 
-# Only run when executing this file directly (not when gunicorn loads it)
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-
-# ROUTE: Serve PDF files from /static/generated
-@app.route("/generated/<filename>")
-def serve_pdf(filename):
+# ─────────────────────────────────────────
+# ✅ WEATHER LOOKUP ROUTE
+@app.route("/get_weather")
+def get_weather():
+    location = request.args.get("location", "")
+    if not location:
+        return jsonify({"error": "Location not provided"}), 400
     try:
-        return send_from_directory("static/generated", filename)
-    except FileNotFoundError:
-        return "PDF not found", 404
+        res = requests.get(f"https://wttr.in/{location}?format=3", timeout=5)
+        if res.status_code == 200:
+            return jsonify({"weather": res.text})
+        else:
+            return jsonify({"error": "Weather service not available"}), 502
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-# ROUTE: Optional form (only needed if you use a form.html template)
+# ─────────────────────────────────────────
+# ✅ FORM VIEW (HTML Page)
 @app.route("/form")
-def form_page():
-    return render_template("form.html")
+def form():
+    return render_template("form.html")  # Make sure templates/form.html exists
 
-# ROUTE: Generate dummy PDF (testing only)
-@app.route("/generate-test-pdf", methods=["GET"])
-def generate_test_pdf():
-    output_dir = os.path.join("static", "generated")
-    os.makedirs(output_dir, exist_ok=True)
-    test_pdf_path = os.path.join(output_dir, "test_upload.pdf")
-    
-    with open(test_pdf_path, "wb") as f:
-        f.write(b"%PDF-1.4\n% Dummy test PDF\n%%EOF")
+# ─────────────────────────────────────────
+# ✅ FORM SUBMISSION HANDLER
+@app.route("/generate_form", methods=["POST"])
+def generate_form():
+    data = request.form.to_dict()
+    # Log received data (for debugging)
+    print("📄 Received form submission:", data)
+
+    # TODO: Add logic here to generate the daily log PDF using uploaded data and photos
+    # You can call your existing function here, for example:
+    # pdf_url = create_daily_log_pdf(data)
     
     return jsonify({
-        "message": "✅ Test PDF created",
-        "pdf_url": "/generated/test_upload.pdf"
+        "message": "Form received successfully.",
+        "data": data,
+        "note": "PDF generation logic not yet included in this route"
     })
 
-# ROUTE: Ping test
-@app.route("/ping")
-def ping():
-    return "PONG"
-    
-# RUN LOCALLY (not used on Render)
+# ─────────────────────────────────────────
+# ✅ MAIN LAUNCHER
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=port)
