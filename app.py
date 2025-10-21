@@ -4,6 +4,7 @@ import os
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 
+# Rebuild trigger - 10/21
 # ROUTE: Health check root
 @app.route("/")
 def index():
