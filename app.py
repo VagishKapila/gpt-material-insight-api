@@ -1,34 +1,39 @@
-from flask import Flask, request, send_from_directory, render_template, jsonify
+from flask import Flask, request, jsonify, send_from_directory, render_template
+from datetime import datetime
 import os
-from utils.pdf_generator import create_daily_log_pdf
 
-app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = os.path.join('static', 'generated')
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+app = Flask(__name__, static_folder="static", static_url_path="/static")
 
-@app.route("/form")
-def form():
-    return render_template("form.html")
+# ROUTE: Health check
+@app.route("/")
+def index():
+    return "✅ Daily Log AI is running"
 
-@app.route("/generate_form", methods=["POST"])
-def generate_form():
-    try:
-        # Handle uploaded files and inputs here (placeholder)
-        # You can expand this as needed to read form data
-
-        # For now, generate a dummy PDF file
-        filename = "output.pdf"
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        with open(filepath, "wb") as f:
-            f.write(b"%PDF-1.4 dummy content")
-
-        return jsonify({"success": True, "pdf_url": f"/static/generated/{filename}"})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
-@app.route("/static/generated/<path:filename>")
+# ROUTE: Serve PDF files from /static/generated
+@app.route("/generated/<filename>")
 def serve_pdf(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    try:
+        return send_from_directory("static/generated", filename)
+    except FileNotFoundError:
+        return "PDF not found", 404
+
+# ROUTE: Form page (optional, can delete if not using)
+@app.route("/form")
+def form_page():
+    return render_template("form.html")  # Only if using templates
+
+# ROUTE: Generate dummy PDF (for test purposes only)
+@app.route("/generate-test-pdf", methods=["GET"])
+def generate_test_pdf():
+    test_pdf_path = os.path.join("static/generated", "test_upload.pdf")
+    if not os.path.exists("static/generated"):
+        os.makedirs("static/generated")
+    with open(test_pdf_path, "wb") as f:
+        f.write(b"%PDF-1.4\n% Dummy test PDF\n%%EOF")
+    return jsonify({
+        "message": "Test PDF created successfully",
+        "pdf_url": f"/generated/test_upload.pdf"
+    })
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5000)
