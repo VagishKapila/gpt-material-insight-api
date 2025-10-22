@@ -5,17 +5,33 @@ from reportlab.lib.utils import ImageReader
 from reportlab.lib import colors
 from PIL import Image
 from datetime import datetime
-from .ai_analysis import analyze_images_with_mobilenet
+
+# Import AI/AR analysis
+from ai_analysis import analyze_images_with_mobilenet
+
+
+def compress_for_pdf(img_path, output_path, quality=25, max_size=(800, 600)):
+    """Lightweight compression for PDF embedding"""
+    try:
+        img = Image.open(img_path)
+        img.thumbnail(max_size)
+        img.save(output_path, optimize=True, quality=quality)
+        return output_path
+    except Exception as e:
+        print(f"[Image Compression Error] {e}")
+        return img_path
 
 
 def create_daily_log_pdf(form_data, photo_paths, logo_path=None, include_page_2=True):
-    # Output path
+    """Generates the full Daily Log PDF with AI/AR Analysis"""
+
+    # Setup output path
     output_dir = "static/generated"
     os.makedirs(output_dir, exist_ok=True)
     filename = f"{form_data.get('project_name','Project')}_Report_{datetime.now().date()}.pdf"
     filepath = os.path.join(output_dir, filename)
 
-    # Setup canvas
+    # Canvas setup
     c = canvas.Canvas(filepath, pagesize=letter)
     width, height = letter
 
@@ -24,15 +40,13 @@ def create_daily_log_pdf(form_data, photo_paths, logo_path=None, include_page_2=
     c.setFont("Helvetica-Bold", 16)
     c.drawString(50, y, "DAILY LOG")
 
-    # Logo
     if logo_path:
         try:
             c.drawImage(ImageReader(logo_path), width - 120, y - 40, width=60, height=60)
-        except:
-            pass
+        except Exception as e:
+            print(f"[Logo Error] {e}")
 
     y -= 60
-    c.setFont("Helvetica", 10)
     fields = [
         ("Date", form_data.get("date")),
         ("Project Name", form_data.get("project_name")),
@@ -45,7 +59,7 @@ def create_daily_log_pdf(form_data, photo_paths, logo_path=None, include_page_2=
         ("Equipment Used", form_data.get("equipment_used")),
         ("Safety Notes", form_data.get("safety_notes")),
         ("Material Summary", form_data.get("material_summary")),
-        ("Hours Worked", form_data.get("hours_worked"))
+        ("Hours Worked", form_data.get("hours_worked")),
     ]
 
     for label, value in fields:
@@ -65,42 +79,50 @@ def create_daily_log_pdf(form_data, photo_paths, logo_path=None, include_page_2=
         c.drawText(text_obj)
         y -= 60
 
-  # === PAGE 2: AI/AR Analysis ===
-if include_page_2 and photo_paths:
-    c.showPage()
-    c.setFont("Helvetica-Bold", 14)
-    c.setFillColor(colors.black)
-    c.drawString(50, height - 50, "AI/AR Image Analysis")
+    # === PAGE 2: AI/AR Analysis ===
+    if include_page_2 and photo_paths:
+        c.showPage()
+        c.setFont("Helvetica-Bold", 14)
+        c.setFillColor(colors.black)
+        c.drawString(50, height - 50, "AI/AR Image Analysis")
 
-    try:
-        analyzed = analyze_images_with_mobilenet(photo_paths)
-    except Exception as e:
-        analyzed = []
-        c.setFont("Helvetica", 10)
-        c.setFillColor(colors.red)
-        c.drawString(50, height - 80, f"AI Analysis failed: {str(e)}")
-        print("[AI ERROR]", str(e))
-
-    # Image rendering happens whether analysis succeeded or not
-    x, y = 50, height - 100
-    img_width, img_height = 200, 150
-
-    for path, label in analyzed:
         try:
-            img = ImageReader(path)
-            c.drawImage(img, x, y, width=img_width, height=img_height)
-            c.setFont("Helvetica", 10)
-            c.setFillColor(colors.black)
-            c.drawString(x, y - 12, f"Analysis: {label}")
-
-            x += img_width + 20
-            if x + img_width > width:
-                x = 50
-                y -= img_height + 40
-                if y < 100:
-                    c.showPage()
-                    y = height - 100
+            analyzed = analyze_images_with_mobilenet(photo_paths)
         except Exception as e:
+            analyzed = []
+            c.setFont("Helvetica", 10)
             c.setFillColor(colors.red)
-            c.drawString(x, y - 12, f"Image error: {str(e)}")
-            x += img_width + 20
+            c.drawString(50, height - 80, f"AI Analysis failed: {str(e)}")
+            print("[AI ERROR]", str(e))
+
+        x, y = 50, height - 100
+        img_width, img_height = 180, 130  # slightly smaller, lighter
+
+        for path, label in analyzed:
+            try:
+                compressed_path = compress_for_pdf(path, path.replace(".jpg", "_compressed.jpg"))
+                img = ImageReader(compressed_path)
+                c.drawImage(img, x, y, width=img_width, height=img_height)
+                c.setFont("Helvetica", 9)
+                c.setFillColor(colors.black)
+                c.drawString(x, y - 12, f"AI Analysis: {label}")
+                x += img_width + 20
+                if x + img_width > width:
+                    x = 50
+                    y -= img_height + 40
+                    if y < 100:
+                        c.showPage()
+                        y = height - 100
+            except Exception as e:
+                print(f"[Image Draw Error] {e}")
+                c.drawString(x, y - 12, f"Error loading image: {str(e)}")
+                x += img_width + 20
+
+    # === Footer ===
+    c.setFont("Helvetica-Oblique", 8)
+    c.setFillColor(colors.gray)
+    c.drawString(50, 20, "Confidential - Generated by Nails & Notes: Construction Daily Log AI")
+
+    c.save()
+    print(f"[SUCCESS] PDF created at {filepath}")
+    return filename
