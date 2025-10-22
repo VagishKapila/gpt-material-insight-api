@@ -1,46 +1,66 @@
+from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
-from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import inch
+from reportlab.lib.utils import ImageReader
+from reportlab.lib import colors
 import os
 
-def create_daily_log_pdf(data, output_path):
-    doc = SimpleDocTemplate(output_path, pagesize=A4)
-    elements = []
+def create_daily_log_pdf(output_path, data, photo_paths=None, logo_path=None):
+    doc = SimpleDocTemplate(output_path, pagesize=letter)
     styles = getSampleStyleSheet()
+    Story = []
 
-    elements.append(Paragraph("DAILY LOG REPORT", styles['Title']))
-    elements.append(Spacer(1, 12))
+    def add_header(title):
+        Story.append(Paragraph(f"<b>{title}</b>", styles["Heading2"]))
+        Story.append(Spacer(1, 6))
 
-    fields = [
-        ("Project Name", data.get("project_name", "")),
-        ("Date", data.get("date", "")),
-        ("Location", data.get("location", "")),
-        ("Weather", data.get("weather", "")),
-        ("Crew Notes", data.get("crew_notes", "")),
-        ("Work Performed", data.get("work_performed", "")),
-        ("Safety Notes", data.get("safety_notes", "")),
-        ("Equipment Used", data.get("equipment_used", ""))
-    ]
+    # Add logo if provided
+    if logo_path and os.path.exists(logo_path):
+        try:
+            logo = Image(logo_path, width=100, height=50)
+            Story.append(logo)
+            Story.append(Spacer(1, 12))
+        except Exception as e:
+            print("Logo load error:", e)
 
-    for label, value in fields:
-        elements.append(Paragraph(f"<b>{label}:</b> {value}", styles["Normal"]))
-        elements.append(Spacer(1, 8))
+    Story.append(Paragraph("<b>DAILY LOG</b>", styles["Title"]))
+    Story.append(Spacer(1, 12))
 
-    # Add logo
-    if data.get("logo_path") and os.path.exists(data["logo_path"]):
-        elements.append(Spacer(1, 12))
-        elements.append(Image(data["logo_path"], width=120, height=60))
+    # Add project and weather details
+    for key in ["project_name", "project_address", "client", "date", "weather"]:
+        if key in data:
+            Story.append(Paragraph(f"<b>{key.replace('_', ' ').title()}:</b> {data[key]}", styles["Normal"]))
+            Story.append(Spacer(1, 6))
 
-    # Page 2 — Photos
-    if data.get("images"):
-        elements.append(PageBreak())
-        elements.append(Paragraph("Site Photos", styles['Title']))
-        elements.append(Spacer(1, 12))
+    Story.append(Spacer(1, 12))
 
-        for img_path in data["images"]:
-            if os.path.exists(img_path):
-                elements.append(Image(img_path, width=2.5 * inch, height=2.5 * inch))
-                elements.append(Spacer(1, 12))
+    # Add main sections
+    sections = {
+        "crew_notes": "Crew Notes",
+        "work_done": "Work Completed",
+        "equipment_used": "Equipment Used",
+        "safety_notes": "Safety Notes",
+        "additional_notes": "Additional Notes"
+    }
 
-    doc.build(elements)
+    for field, title in sections.items():
+        if field in data and data[field].strip():
+            add_header(title)
+            Story.append(Paragraph(data[field], styles["Normal"]))
+            Story.append(Spacer(1, 12))
+
+    # Add photos if provided
+    if photo_paths:
+        Story.append(PageBreak())
+        Story.append(Paragraph("<b>Job Site Photos</b>", styles["Heading2"]))
+        Story.append(Spacer(1, 12))
+        for path in photo_paths:
+            if os.path.exists(path):
+                try:
+                    img = Image(path, width=400, height=300)
+                    Story.append(img)
+                    Story.append(Spacer(1, 12))
+                except Exception as e:
+                    print("Image load error:", e)
+
+    doc.build(Story)
