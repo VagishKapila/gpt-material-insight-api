@@ -3,6 +3,7 @@ from datetime import datetime
 import requests, os
 from werkzeug.utils import secure_filename
 from utils.pdf_generator import create_daily_log_pdf
+from utils.image_compression import compress_and_rotate_image
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
@@ -37,7 +38,6 @@ def get_weather():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 # ==========================
 # ROUTE: Generate Daily Log PDF
 # ==========================
@@ -52,12 +52,16 @@ def generate_form():
         os.makedirs(upload_dir, exist_ok=True)
         photo_paths, logo_path, scope_path = [], None, None
 
-        # Save uploaded photos (limit 20)
+        # Save and compress uploaded photos (limit 20)
         for photo in photos[:20]:
             if photo and photo.filename:
-                photo_path = os.path.join(upload_dir, secure_filename(photo.filename))
-                photo.save(photo_path)
-                photo_paths.append(photo_path)
+                original_path = os.path.join(upload_dir, secure_filename(photo.filename))
+                compressed_path = os.path.join(upload_dir, "compressed_" + secure_filename(photo.filename))
+
+                # Save original, then compress and rotate
+                photo.save(original_path)
+                compress_and_rotate_image(original_path, compressed_path, max_width=1024, quality=75)
+                photo_paths.append(compressed_path)
 
         # Save logo
         if logo and logo.filename:
@@ -89,14 +93,12 @@ def generate_form():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 # ==========================
 # ROUTE: Serve generated PDFs
 # ==========================
 @app.route("/generated/<path:filename>")
 def serve_generated(filename):
     return send_from_directory("static/generated", filename)
-
 
 # ==========================
 # MAIN ENTRY POINT
