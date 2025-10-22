@@ -1,89 +1,73 @@
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from reportlab.lib import colors
-from reportlab.lib.utils import ImageReader
-from PIL import Image
 import os
-import io
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import inch
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.utils import ImageReader
+from PIL import Image as PILImage
 
-def compress_image(image_path, quality=20):
-    """Compress image using PIL and return a BytesIO object"""
-    img = Image.open(image_path)
-    img = img.convert("RGB")
-    buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=quality, optimize=True)
-    buffer.seek(0)
-    return buffer
 
-def create_daily_log_pdf(project_name, date, weather, crew_notes, work_done, safety_notes, equipment, logo_path, photo_paths, include_page_2=True):
-    filename = f"{project_name.replace(' ', '_')}_{date}.pdf"
-    output_path = os.path.join("static", "generated", filename)
+def compress_image(input_path, max_size=(400, 400)):
+    img = PILImage.open(input_path)
+    img.thumbnail(max_size)
+    compressed_path = input_path.replace(".", "_compressed.")
+    img.save(compressed_path, optimize=True, quality=40)
+    return compressed_path
 
-    c = canvas.Canvas(output_path, pagesize=A4)
-    width, height = A4
 
-    # --- HEADER ---
-    if logo_path:
-        try:
-            c.drawImage(logo_path, 50, height - 100, width=120, preserveAspectRatio=True, mask='auto')
-        except:
-            pass
-    c.setFont("Helvetica-Bold", 20)
-    c.setFillColor(colors.darkblue)
-    c.drawString(200, height - 60, "DAILY LOG REPORT")
+def create_daily_log_pdf(data, output_path):
+    doc = SimpleDocTemplate(output_path, pagesize=A4)
+    elements = []
+    styles = getSampleStyleSheet()
 
-    c.setFont("Helvetica", 12)
-    c.setFillColor(colors.black)
-    c.drawString(50, height - 130, f"Project: {project_name}")
-    c.drawString(50, height - 150, f"Date: {date}")
-    c.drawString(50, height - 170, f"Weather: {weather}")
+    title_style = ParagraphStyle(
+        name='CenterTitle',
+        parent=styles['Heading1'],
+        alignment=TA_CENTER,
+        spaceAfter=20
+    )
 
-    # --- SECTION 1: CREW NOTES ---
-    y = height - 210
-    sections = [
-        ("Crew Notes", crew_notes),
-        ("Work Done", work_done),
-        ("Safety Notes", safety_notes),
-        ("Equipment Used", equipment)
+    # Page 1 — Main Log
+    elements.append(Paragraph("DAILY LOG REPORT", title_style))
+    elements.append(Spacer(1, 12))
+
+    fields = [
+        ("Project Name", data.get("project_name", "")),
+        ("Date", data.get("date", "")),
+        ("Location", data.get("location", "")),
+        ("Weather", data.get("weather", "")),
+        ("Crew Notes", data.get("crew_notes", "")),
+        ("Work Performed", data.get("work_performed", "")),
+        ("Safety Notes", data.get("safety_notes", "")),
+        ("Equipment Used", data.get("equipment_used", ""))
     ]
 
-    for title, content in sections:
-        c.setFont("Helvetica-Bold", 14)
-        c.setFillColor(colors.black)
-        c.drawString(50, y, title)
-        y -= 20
-        c.setFont("Helvetica", 12)
-        text_obj = c.beginText(50, y)
-        text_obj.textLines(content)
-        c.drawText(text_obj)
-        y -= 80
+    for label, value in fields:
+        elements.append(Paragraph(f"<b>{label}:</b> {value}", styles["Normal"]))
+        elements.append(Spacer(1, 8))
 
-    # --- PAGE 2: PHOTOS ---
-    if include_page_2 and photo_paths:
-        c.showPage()
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(50, height - 50, "Job Site Photos")
+    # Add logo
+    if data.get("logo_path") and os.path.exists(data["logo_path"]):
+        logo = Image(data["logo_path"], width=120, height=60)
+        elements.append(Spacer(1, 12))
+        elements.append(logo)
 
-        x, y = 50, height - 120
-        max_width = 200
-        max_height = 150
-        spacing_x = 240
-        spacing_y = 170
-        photos_per_row = 2
+    # Page 2 — Photos
+    images = data.get("images", [])
+    if images:
+        elements.append(PageBreak())
+        elements.append(Paragraph("Site Photos", title_style))
+        elements.append(Spacer(1, 12))
 
-        for i, path in enumerate(photo_paths):
+        for i, path in enumerate(images):
             try:
-                img_buffer = compress_image(path, quality=20)
-                img = ImageReader(img_buffer)
-                c.drawImage(img, x, y, width=max_width, height=max_height, preserveAspectRatio=True, mask='auto')
+                compressed = compress_image(path)
+                img = Image(compressed, width=2.5 * inch, height=2.5 * inch)
+                elements.append(img)
+                elements.append(Spacer(1, 6))
             except Exception as e:
-                print("[IMAGE ERROR]", e)
+                elements.append(Paragraph(f"Error loading image {path}: {str(e)}", styles["Normal"]))
+                elements.append(Spacer(1, 6))
 
-            if (i + 1) % photos_per_row == 0:
-                x = 50
-                y -= spacing_y
-            else:
-                x += spacing_x
-
-    c.save()
-    return filename
+    doc.build(elements)
