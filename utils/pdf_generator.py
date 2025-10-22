@@ -1,37 +1,15 @@
-import os
-import io
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.lib.enums import TA_CENTER
-from reportlab.lib.utils import ImageReader
-from PIL import Image as PILImage
-
-
-def compress_image_to_buffer(input_path, max_size=(400, 400)):
-    img = PILImage.open(input_path)
-    img.thumbnail(max_size)
-    buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=40)
-    buffer.seek(0)
-    return buffer
-
+import os
 
 def create_daily_log_pdf(data, output_path):
     doc = SimpleDocTemplate(output_path, pagesize=A4)
     elements = []
     styles = getSampleStyleSheet()
 
-    title_style = ParagraphStyle(
-        name='CenterTitle',
-        parent=styles['Heading1'],
-        alignment=TA_CENTER,
-        spaceAfter=20
-    )
-
-    # === Page 1 — Main Log ===
-    elements.append(Paragraph("DAILY LOG REPORT", title_style))
+    elements.append(Paragraph("DAILY LOG REPORT", styles['Title']))
     elements.append(Spacer(1, 12))
 
     fields = [
@@ -49,25 +27,20 @@ def create_daily_log_pdf(data, output_path):
         elements.append(Paragraph(f"<b>{label}:</b> {value}", styles["Normal"]))
         elements.append(Spacer(1, 8))
 
-    # === Add Logo (Optional) ===
+    # Add logo
     if data.get("logo_path") and os.path.exists(data["logo_path"]):
         elements.append(Spacer(1, 12))
         elements.append(Image(data["logo_path"], width=120, height=60))
 
-    # === Page 2 — Photos ===
-    images = data.get("images", [])
-    if images:
+    # Page 2 — Photos
+    if data.get("images"):
         elements.append(PageBreak())
-        elements.append(Paragraph("Site Photos", title_style))
+        elements.append(Paragraph("Site Photos", styles['Title']))
         elements.append(Spacer(1, 12))
 
-        for path in images:
-            try:
-                buffer = compress_image_to_buffer(path)
-                elements.append(Image(buffer, width=2.5 * inch, height=2.5 * inch))
-                elements.append(Spacer(1, 6))
-            except Exception as e:
-                elements.append(Paragraph(f"Error loading image {path}: {str(e)}", styles["Normal"]))
-                elements.append(Spacer(1, 6))
+        for img_path in data["images"]:
+            if os.path.exists(img_path):
+                elements.append(Image(img_path, width=2.5 * inch, height=2.5 * inch))
+                elements.append(Spacer(1, 12))
 
     doc.build(elements)
