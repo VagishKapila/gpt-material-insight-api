@@ -7,23 +7,14 @@ from utils.image_compression import compress_and_rotate_image
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
-# ==========================
-# ROUTE: Root / Health check
-# ==========================
 @app.route("/")
 def index():
     return "✅ Daily Log AI is running"
 
-# ==========================
-# ROUTE: Web Form
-# ==========================
 @app.route("/form")
 def form():
     return render_template("form.html")
 
-# ==========================
-# ROUTE: Weather fetch (uses wttr.in)
-# ==========================
 @app.route("/get_weather")
 def get_weather():
     location = request.args.get("location", "")
@@ -38,9 +29,6 @@ def get_weather():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ==========================
-# ROUTE: Generate Daily Log PDF
-# ==========================
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
     try:
@@ -52,23 +40,19 @@ def generate_form():
         os.makedirs(upload_dir, exist_ok=True)
         photo_paths, logo_path, scope_path = [], None, None
 
-        # Save and compress uploaded photos (limit 20)
         for photo in photos[:20]:
             if photo and photo.filename:
-                original_path = os.path.join(upload_dir, secure_filename(photo.filename))
-                compressed_path = os.path.join(upload_dir, "compressed_" + secure_filename(photo.filename))
+                raw_path = os.path.join(upload_dir, secure_filename(photo.filename))
+                photo.save(raw_path)
 
-                # Save original, then compress and rotate
-                photo.save(original_path)
-                compress_and_rotate_image(original_path, compressed_path, max_width=1024, quality=75)
+                # Compress + rotate image
+                compressed_path = compress_and_rotate_image(raw_path)
                 photo_paths.append(compressed_path)
 
-        # Save logo
         if logo and logo.filename:
             logo_path = os.path.join(upload_dir, secure_filename(logo.filename))
             logo.save(logo_path)
 
-        # Save Scope of Work file
         scope_file = request.files.get("scope_file")
         if scope_file and scope_file.filename:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -79,7 +63,6 @@ def generate_form():
 
         include_page_2 = "include_page_2" in form_data
 
-        # Generate PDF
         pdf_filename = create_daily_log_pdf(
             form_data,
             photo_paths=photo_paths,
@@ -93,16 +76,10 @@ def generate_form():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ==========================
-# ROUTE: Serve generated PDFs
-# ==========================
 @app.route("/generated/<path:filename>")
 def serve_generated(filename):
     return send_from_directory("static/generated", filename)
 
-# ==========================
-# MAIN ENTRY POINT
-# ==========================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
