@@ -65,13 +65,38 @@ def generate_form():
 
         include_page_2 = "include_page_2" in form_data
 
-       # Generate PDF (compatible with stable pdf_generator)
-pdf_filename = create_daily_log_pdf(
-    form_data,
-    photo_paths=photo_paths,
-    logo_path=logo_path,
-    include_page_2=include_page_2
-)
+       @app.route("/generate_form", methods=["POST"])
+def generate_form():
+    try:
+        form_data = request.form.to_dict()
+        photos = request.files.getlist("photos")
+        logo = request.files.get("logo")
+
+        upload_dir = "static/uploads"
+        os.makedirs(upload_dir, exist_ok=True)
+        photo_paths, logo_path = [], None
+
+        # Save uploaded photos (limit 20)
+        for photo in photos[:20]:
+            if photo and photo.filename:
+                photo_path = os.path.join(upload_dir, photo.filename)
+                photo.save(photo_path)
+                photo_paths.append(photo_path)
+
+        # Save logo
+        if logo and logo.filename:
+            logo_path = os.path.join(upload_dir, logo.filename)
+            logo.save(logo_path)
+
+        include_page_2 = "include_page_2" in form_data
+
+        # ✅ THIS MUST BE INDENTED!
+        pdf_filename = create_daily_log_pdf(
+            form_data,
+            photo_paths=photo_paths,
+            logo_path=logo_path,
+            include_page_2=include_page_2
+        )
 
         pdf_url = f"/generated/{pdf_filename}"
         return jsonify({"pdf_url": pdf_url})
