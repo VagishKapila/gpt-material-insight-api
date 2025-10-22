@@ -49,7 +49,16 @@ def generate_form():
             logo.save(logo_path)
 
         include_page_2 = "include_page_2" in form_data
+        
+# Handle uploaded scope of work file
+scope_file = request.files.get('scope_file')
+scope_path = None
 
+if scope_file and scope_file.filename != '':
+    filename = secure_filename(scope_file.filename)
+    scope_path = os.path.join(app.config['UPLOAD_FOLDER'], f"scope_{timestamp}_{filename}")
+    scope_file.save(scope_path)
+    print(f"Scope of work file saved to: {scope_path}")
         # Generate PDF
         pdf_filename = create_daily_log_pdf(
             form_data,
