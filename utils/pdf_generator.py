@@ -1,73 +1,74 @@
-import os
-from datetime import datetime
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak, Table, TableStyle
+
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
-from reportlab.lib import colors
-from reportlab.lib.units import inch
+from reportlab.lib.enums import TA_CENTER
+from datetime import datetime
+import os
 
-def create_daily_log_pdf(form_data, photo_paths=None, logo_path=None, include_page_2=True):
-    output_dir = "static/generated"
-    os.makedirs(output_dir, exist_ok=True)
-    filename = f"{form_data.get('project_name','Project')}_Report_{datetime.now().date()}.pdf"
-    filepath = os.path.join(output_dir, filename)
+def create_daily_log_pdf(data, photo_paths=None, logo_path=None, include_page_2=False):
+    now = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    output_filename = f"DailyLog_{now}.pdf"
+    output_path = os.path.join("static/generated", output_filename)
 
-    doc = SimpleDocTemplate(filepath, pagesize=A4)
-    elements = []
-
+    doc = SimpleDocTemplate(output_path, pagesize=letter)
     styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name='CenterTitle', alignment=TA_CENTER, fontSize=18, leading=22, spaceAfter=10))
-    styles.add(ParagraphStyle(name='SectionHeader', fontSize=14, leading=18, spaceAfter=6, textColor=colors.HexColor('#003262')))
-    styles.add(ParagraphStyle(name='NormalLeft', fontSize=11, leading=14, alignment=TA_LEFT))
+    story = []
 
-    # HEADER
+    # Custom styles
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], alignment=TA_CENTER, fontSize=16, spaceAfter=10)
+    section_style = ParagraphStyle('SectionStyle', parent=styles['Heading2'], spaceAfter=6)
+    normal_style = styles['Normal']
+
+    # Logo if available
     if logo_path and os.path.exists(logo_path):
-        elements.append(Image(logo_path, width=120, height=40))
-    elements.append(Paragraph("DAILY LOG", styles['CenterTitle']))
-    elements.append(Spacer(1, 12))
+        img = Image(logo_path, width=150, height=60)
+        story.append(img)
+        story.append(Spacer(1, 12))
 
-    # Project info
+    # Title
+    story.append(Paragraph("DAILY LOG REPORT", title_style))
+    story.append(Spacer(1, 12))
+
+    # Main fields
     fields = [
-        ("Date", form_data.get("date")),
-        ("Project Name", form_data.get("project_name")),
-        ("Client", form_data.get("client_name")),
-        ("Location", form_data.get("address")),
-        ("Weather", form_data.get("weather")),
-        ("Crew Notes", form_data.get("crew_notes")),
-        ("Work Done", form_data.get("work_done")),
-        ("Safety Notes", form_data.get("safety_notes")),
-        ("Equipment Used", form_data.get("equipment_used")),
-        ("Material Summary", form_data.get("material_summary")),
-        ("Hours Worked", form_data.get("hours_worked"))
+        ("Date", data.get("date", "")),
+        ("Project Name", data.get("project_name", "")),
+        ("Client", data.get("client_name", "")),
+        ("Location", data.get("location", "")),
+        ("Weather", data.get("weather", "")),
+        ("Crew Notes", data.get("crew_notes", "")),
+        ("Work Performed", data.get("work_performed", "")),
+        ("Safety Notes", data.get("safety_notes", "")),
+        ("Additional Notes", data.get("additional_notes", "")),
     ]
 
     for label, value in fields:
-        if not value:
-            continue
-        elements.append(Paragraph(f"<b>{label}:</b> {value}", styles['NormalLeft']))
-        elements.append(Spacer(1, 8))
+        story.append(Paragraph(f"<b>{label}:</b> {value}", normal_style))
+        story.append(Spacer(1, 6))
 
-    # Page 2 – Photos
-    if include_page_2 and photo_paths:
-        elements.append(PageBreak())
-        elements.append(Paragraph("Jobsite Photos", styles['SectionHeader']))
+    # Page 2 placeholder (if requested)
+    if include_page_2:
+        story.append(PageBreak())
+        story.append(Paragraph("Page 2 – AI/AR Material Analysis", section_style))
+        story.append(Paragraph("Coming soon: material comparison, supplier options, and AR-based insights.", normal_style))
 
-        image_table = []
-        row = []
-        for idx, path in enumerate(photo_paths):
-            if os.path.exists(path):
-                img = Image(path, width=2.5 * inch, height=2 * inch)
-                row.append(img)
-                if (idx + 1) % 2 == 0:
-                    image_table.append(row)
-                    row = []
-        if row:
-            image_table.append(row)
-        if image_table:
-            t = Table(image_table, hAlign='LEFT', spaceBefore=10)
-            t.setStyle(TableStyle([('BOTTOMPADDING', (0, 0), (-1, -1), 12)]))
-            elements.append(t)
+    # Photos
+    if photo_paths:
+        story.append(PageBreak())
+        story.append(Paragraph("Job Site Photos", section_style))
+        for img_path in photo_paths:
+            if os.path.exists(img_path):
+                try:
+                    img = Image(img_path, width=400, height=300)
+                    story.append(img)
+                    story.append(Spacer(1, 12))
+                except Exception as e:
+                    story.append(Paragraph(f"Could not load image {img_path}: {e}", normal_style))
 
-    doc.build(elements)
-    return filename
+    # Build PDF
+    doc.build(story)
+
+    return output_filename
