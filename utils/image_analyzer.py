@@ -1,38 +1,36 @@
-import replicate
-import requests
-from PIL import Image, ImageDraw, ImageFont
-from io import BytesIO
+# utils/image_analyzer.py
+
+import torch
+from torchvision import models, transforms
+from PIL import Image
 import os
 
-def analyze_and_overlay(image_url):
-    # Load your Replicate API token from the environment
-    replicate_token = os.getenv("REPLICATE_API_TOKEN")
-    if not replicate_token:
-        raise ValueError("REPLICATE_API_TOKEN is not set in the environment")
+# Load the ImageNet labels
+with open(os.path.join(os.path.dirname(__file__), "imagenet_classes.txt")) as f:
+    classes = [line.strip() for line in f.readlines()]
 
-    # Initialize Replicate client
-    replicate_client = replicate.Client(api_token=replicate_token)
+# Load the pre-trained model once
+model = models.mobilenet_v2(pretrained=True)
+model.eval()
 
-    # Download the image from URL
-    response = requests.get(image_url)
-    image = Image.open(BytesIO(response.content)).convert("RGB")
+# Define transform
+preprocess = transforms.Compose([
+    transforms.Resize(256),
+    transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                         std=[0.229, 0.224, 0.225])
+])
 
-    # Run image captioning
-    output = replicate_client.run(
-        "salesforce/blip-2:ca061f69b8f1625c6cc56b72e3b3e5cc662fcd38c3f8659c129b3f6ea4f1a9f3",
-        input={"image": image_url}
-    )
-    caption = output if isinstance(output, str) else output[0]
+def classify_image(image_path):
+    image = Image.open(image_path).convert("RGB")
+    input_tensor = preprocess(image).unsqueeze(0)
 
-    # Draw caption on the image
-    draw = ImageDraw.Draw(image)
-    font = ImageFont.load_default()
-    draw.rectangle([(0, 0), (image.width, 30)], fill="black")
-    draw.text((10, 5), caption, font=font, fill="white")
-
-    # Save locally for later use
-    output_path = os.path.join("static", "captioned.jpg")
-    os.makedirs("static", exist_ok=True)
-    image.save(output_path)
-
-    return caption, output_path
+    with torch.no_grad():
+        output = model(input_tensor)
+        probabilities = torch.nn.functional.softmax(output[0], dim=0)
+        top_class = probabilities.argmax().item()
+        label = classes[top_class]
+        confidence = float(probabilities[top_class])
+    
+    return label, confidence
