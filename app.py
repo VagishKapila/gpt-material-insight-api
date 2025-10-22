@@ -65,13 +65,13 @@ def generate_form():
 
         include_page_2 = "include_page_2" in form_data
 
-        # Generate PDF
-        pdf_filename = create_daily_log_pdf(
-            form_data=form_data,
-            photo_paths=photo_paths,
-            logo_path=logo_path,
-            include_page_2=include_page_2
-        )
+       # Generate PDF (compatible with stable pdf_generator)
+pdf_filename = create_daily_log_pdf(
+    form_data,
+    photo_paths=photo_paths,
+    logo_path=logo_path,
+    include_page_2=include_page_2
+)
 
         pdf_url = f"/generated/{pdf_filename}"
         return jsonify({"pdf_url": pdf_url})
