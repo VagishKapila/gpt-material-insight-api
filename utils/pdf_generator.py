@@ -1,60 +1,48 @@
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
-from PIL import Image, ExifTags
+from PIL import Image, ImageOps
 import os
 
 def create_daily_log_pdf(form_data, image_paths, output_path, logo_path=None):
     c = canvas.Canvas(output_path, pagesize=letter)
     width, height = letter
     margin = 50
+    temp_files = []  # To track temporary compressed images
 
     def compress_and_correct_image(image_path):
         try:
             img = Image.open(image_path)
 
-            # Auto-orient using EXIF
-            try:
-                for orientation in ExifTags.TAGS.keys():
-                    if ExifTags.TAGS[orientation] == 'Orientation':
-                        break
-                exif = img._getexif()
-                if exif is not None:
-                    orientation_value = exif.get(orientation, None)
-                    if orientation_value == 3:
-                        img = img.rotate(180, expand=True)
-                    elif orientation_value == 6:
-                        img = img.rotate(270, expand=True)
-                    elif orientation_value == 8:
-                        img = img.rotate(90, expand=True)
-            except Exception as e:
-                pass  # Ignore EXIF issues
+            # ✅ Auto-correct orientation (replaces EXIF manual code)
+            img = ImageOps.exif_transpose(img)
 
-            # Resize
-            img.thumbnail((1600, 1600))
-
-            # Convert to JPEG and compress
-            temp_path = image_path + ".jpg"
-            img.convert('RGB').save(temp_path, "JPEG", quality=50)
+            # ✅ Resize and compress
+            img.thumbnail((1200, 1200))
+            temp_path = os.path.splitext(image_path)[0] + "_compressed.jpg"
+            img.convert('RGB').save(temp_path, "JPEG", quality=40)
+            temp_files.append(temp_path)
             return temp_path
 
         except Exception as e:
             print(f"Error processing image {image_path}: {e}")
             return image_path
 
-    # Header
+    # ---------- HEADER ----------
     c.setFont("Helvetica-Bold", 20)
     c.drawString(margin, height - margin, "DAILY LOG")
     c.setFont("Helvetica", 12)
 
     if logo_path:
         try:
-            c.drawImage(ImageReader(logo_path), width - 120, height - 100, width=70, preserveAspectRatio=True, mask='auto')
+            c.drawImage(ImageReader(logo_path), width - 120, height - 100,
+                        width=70, preserveAspectRatio=True, mask='auto')
         except:
             pass
 
     y = height - 80
-    for key in ["project_name", "location", "date", "crew_notes", "work_done", "safety_notes", "weather"]:
+    for key in ["project_name", "location", "date", "crew_notes",
+                "work_done", "safety_notes", "weather"]:
         if key in form_data:
             label = key.replace("_", " ").title()
             c.drawString(margin, y, f"{label}: {form_data.get(key)}")
@@ -62,7 +50,7 @@ def create_daily_log_pdf(form_data, image_paths, output_path, logo_path=None):
 
     c.showPage()
 
-    # Images page
+    # ---------- IMAGES ----------
     c.setFont("Helvetica-Bold", 14)
     c.drawString(margin, height - margin, "Job Site Photos")
 
@@ -88,3 +76,10 @@ def create_daily_log_pdf(form_data, image_paths, output_path, logo_path=None):
 
     c.save()
 
+    # ✅ Cleanup temporary compressed images
+    for temp_file in temp_files:
+        try:
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+        except Exception as e:
+            print(f"Cleanup failed for {temp_file}: {e}")
