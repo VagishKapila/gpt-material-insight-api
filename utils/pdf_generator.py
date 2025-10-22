@@ -1,165 +1,103 @@
 import os
-from datetime import datetime
-from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
-from reportlab.lib.units import inch
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
-)
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfgen import canvas
-from PIL import Image as PILImage
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.utils import ImageReader
+from reportlab.lib import colors
+from PIL import Image
+from datetime import datetime
+from .ai_analysis import analyze_images_with_mobilenet
 
-# ==========================
-# Utility: Safe image compression
-# ==========================
-def compress_image(input_path, max_size=(1200, 1200)):
-    try:
-        img = PILImage.open(input_path)
-        img.thumbnail(max_size)
-        temp_path = input_path.replace(".", "_compressed.")
-        img.save(temp_path, optimize=True, quality=70)
-        return temp_path
-    except Exception:
-        return input_path
 
-# ==========================
-# Core PDF builder
-# ==========================
-def create_daily_log_pdf(form_data, photo_paths, logo_path=None, include_page_2=False):
-    os.makedirs("static/generated", exist_ok=True)
+def create_daily_log_pdf(form_data, photo_paths, logo_path=None, include_page_2=True):
+    # Setup output directory and filename
+    output_dir = "static/generated"
+    os.makedirs(output_dir, exist_ok=True)
+    filename = f"{form_data.get('project_name','Project')}_Report_{datetime.now().date()}.pdf"
+    filepath = os.path.join(output_dir, filename)
 
-    project_name = form_data.get("project_name", "Project")
-    address = form_data.get("address", "")
-    date_str = datetime.now().strftime("%Y-%m-%d")
-    filename = f"{project_name.replace(' ', '_')}_Report_{date_str}.pdf"
-    pdf_path = os.path.join("static/generated", filename)
+    # Canvas setup
+    c = canvas.Canvas(filepath, pagesize=letter)
+    width, height = letter
 
-    doc = SimpleDocTemplate(pdf_path, pagesize=letter, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
-    styles = getSampleStyleSheet()
-    elements = []
+    # === PAGE 1 ===
+    y = height - 50
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(50, y, "DAILY LOG")
 
-    # Header section
-    header_style = ParagraphStyle("HeaderTitle", parent=styles["Heading1"], fontSize=20, textColor=colors.HexColor("#002060"), spaceAfter=10)
-    section_style = ParagraphStyle("Section", parent=styles["Heading2"], fontSize=13, textColor=colors.HexColor("#1F4E79"), spaceBefore=12)
-    normal = ParagraphStyle("Normal", parent=styles["BodyText"], fontSize=10, leading=14)
+    if logo_path:
+        try:
+            c.drawImage(ImageReader(logo_path), width - 120, y - 40, width=60, height=60)
+        except:
+            pass
 
-    # ==========================
-    # PAGE 1
-    # ==========================
-    if logo_path and os.path.exists(logo_path):
-        logo_temp = compress_image(logo_path, (150, 150))
-        elements.append(Image(logo_temp, width=1.5 * inch, height=1.5 * inch))
-    else:
-        elements.append(Spacer(1, 0.5 * inch))
-
-    elements.append(Paragraph("DAILY LOG REPORT", header_style))
-    elements.append(Spacer(1, 6))
-
-    # Info Table
-    info_data = [
-        ["Date", form_data.get("date", date_str)],
-        ["Project Name", project_name],
-        ["Client", form_data.get("client_name", "")],
-        ["Address", address],
-        ["General Contractor", form_data.get("general_contractor", "")],
-        ["Weather", form_data.get("weather", "N/A")],
-        ["Hours Worked", form_data.get("hours_worked", "")]
+    y -= 60
+    c.setFont("Helvetica", 10)
+    fields = [
+        ("Date", form_data.get("date")),
+        ("Project Name", form_data.get("project_name")),
+        ("Client Name", form_data.get("client_name")),
+        ("Project Location", form_data.get("address")),
+        ("General Contractor", form_data.get("general_contractor")),
+        ("Weather", form_data.get("weather")),
+        ("Crew Notes", form_data.get("crew_notes")),
+        ("Work Done", form_data.get("work_done")),
+        ("Equipment Used", form_data.get("equipment_used")),
+        ("Safety Notes", form_data.get("safety_notes")),
+        ("Material Summary", form_data.get("material_summary")),
+        ("Hours Worked", form_data.get("hours_worked"))
     ]
-    info_table = Table(info_data, colWidths=[1.8 * inch, 4.5 * inch])
-    info_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#D9E1F2")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#1F4E79")),
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-        ("FONTSIZE", (0, 0), (-1, -1), 10),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE")
-    ]))
-    elements.append(info_table)
-    elements.append(Spacer(1, 12))
 
-    # Main content sections
-    def add_section(title, text):
-        elements.append(Paragraph(title, section_style))
-        elements.append(Paragraph(text or "—", normal))
-        elements.append(Spacer(1, 8))
+    for label, value in fields:
+        if not value:
+            continue
+        if y < 100:
+            c.showPage()
+            y = height - 50
+        c.setFont("Helvetica-Bold", 11)
+        c.setFillColor(colors.darkblue)
+        c.drawString(50, y, f"{label}:")
+        c.setFont("Helvetica", 10)
+        c.setFillColor(colors.black)
+        text_obj = c.beginText(160, y)
+        for line in str(value).splitlines():
+            text_obj.textLine(line)
+        c.drawText(text_obj)
+        y -= 60
 
-    add_section("Crew Notes", form_data.get("crew_notes", ""))
-    add_section("Work Done", form_data.get("work_done", ""))
-    add_section("Equipment Used", form_data.get("equipment_used", ""))
-    add_section("Safety Notes", form_data.get("safety_notes", ""))
-    add_section("Material Summary", form_data.get("material_summary", ""))
+    # === PAGE 2: AI Analysis ===
+    if include_page_2 and photo_paths:
+        c.showPage()
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(50, height - 50, "AI/AR Image Analysis")
 
-    # ==========================
-    # PHOTO GRID
-    # ==========================
-    if photo_paths:
-        elements.append(Paragraph("Job Site Photos", section_style))
-        img_table_data, row = [], []
-        for i, path in enumerate(photo_paths):
+        analyzed = analyze_images_with_mobilenet(photo_paths)
+
+        x, y = 50, height - 100
+        img_width, img_height = 200, 150
+
+        for path, label in analyzed:
             try:
-                img_temp = compress_image(path, (400, 400))
-                row.append(Image(img_temp, width=2.4 * inch, height=2.4 * inch))
-                if (i + 1) % 2 == 0:
-                    img_table_data.append(row)
-                    row = []
-            except Exception:
-                continue
-        if row:
-            img_table_data.append(row)
-        elements.append(Table(img_table_data, hAlign="LEFT"))
-        elements.append(Spacer(1, 12))
+                img = ImageReader(path)
+                c.drawImage(img, x, y, width=img_width, height=img_height)
+                c.setFont("Helvetica", 10)
+                c.setFillColor(colors.black)
+                c.drawString(x, y - 12, f"Analysis: {label}")
+
+                x += img_width + 20
+                if x + img_width > width:
+                    x = 50
+                    y -= img_height + 40
+                    if y < 100:
+                        c.showPage()
+                        y = height - 100
+            except Exception as e:
+                c.drawString(x, y - 12, f"Error loading image: {str(e)}")
+                x += img_width + 20
 
     # Footer
-    footer_text = Paragraph("<para align='right'><font size=8 color='#999999'>Powered by Nails & Notes</font></para>", styles["Normal"])
-    elements.append(footer_text)
+    c.setFont("Helvetica-Oblique", 8)
+    c.setFillColor(colors.gray)
+    c.drawString(50, 20, "Confidential - Generated by Nails & Notes: Construction Daily Log AI")
 
-    # ==========================
-    # PAGE 2 - AI/AR ANALYSIS
-    # ==========================
-    if include_page_2:
-        elements.append(PageBreak())
-        elements.append(Paragraph("AI / AR ANALYSIS & COMPARATIVE INSIGHTS", header_style))
-        elements.append(Spacer(1, 10))
-
-        ai_text = """
-        This section is auto‑generated by AI and AR systems (in development).  
-        Future versions will include:
-        <ul>
-          <li>⚙️ Material detection & cost comparison</li>
-          <li>📏 AR‑based site measurement validation</li>
-          <li>🧠 Image captioning and context analysis</li>
-          <li>💲 Supplier price comparison charts</li>
-        </ul>
-        """
-        elements.append(Paragraph(ai_text, normal))
-        elements.append(Spacer(1, 12))
-
-        table_data = [
-            ["Material", "Supplier", "Unit Price ($)", "Notes"],
-            ["Concrete", "Lowe's", "7.50", "Standard Mix 80lb bag"],
-            ["Steel Rebar", "Home Depot", "1.20", "Per foot"],
-            ["PVC Pipe", "Ferguson", "3.10", "Schedule 40, 2‑inch"]
-        ]
-        ai_table = Table(table_data, colWidths=[1.5 * inch] * 4)
-        ai_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#CFE2F3")),
-            ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 9),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE")
-        ]))
-        elements.append(ai_table)
-        elements.append(Spacer(1, 20))
-
-        elements.append(Paragraph(
-            "🔍 This data will later merge with AI outputs from your uploaded site images to detect materials, "
-            "estimate pricing, and benchmark vendor options automatically.", normal))
-
-        elements.append(Spacer(1, 24))
-        footer_text2 = Paragraph("<para align='right'><font size=8 color='#999999'>Powered by Nails & Notes</font></para>", styles["Normal"])
-        elements.append(footer_text2)
-
-    # Build PDF
-    doc.build(elements)
+    c.save()
     return filename
