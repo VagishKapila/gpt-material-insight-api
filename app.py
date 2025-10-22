@@ -1,85 +1,75 @@
-from flask import Flask, request, jsonify, send_from_directory, render_template
-from datetime import datetime
-import requests, os
+from flask import Flask, render_template, request, send_from_directory, jsonify
 from werkzeug.utils import secure_filename
 from utils.pdf_generator import create_daily_log_pdf
-from utils.image_compression import compress_and_rotate_image
+import os
+import datetime
+import requests
 
-app = Flask(__name__, static_folder="static", template_folder="templates")
+app = Flask(__name__)
+UPLOAD_FOLDER = 'static/uploads'
+GENERATED_FOLDER = 'static/generated'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(GENERATED_FOLDER, exist_ok=True)
 
-@app.route("/")
-def index():
-    return "✅ Daily Log AI is running"
+@app.route('/')
+def health():
+    return "App is running"
 
-@app.route("/form")
+@app.route('/form')
 def form():
-    return render_template("form.html")
+    return render_template('form.html')
 
-@app.route("/get_weather")
+@app.route('/get_weather')
 def get_weather():
     location = request.args.get("location", "")
-    if not location:
-        return jsonify({"error": "No location provided"}), 400
     try:
-        url = f"https://wttr.in/{location}?format=3"
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            return jsonify({"weather": response.text.strip()})
-        return jsonify({"error": "Weather unavailable"}), 502
+        response = requests.get(f"https://wttr.in/{location}?format=3")
+        return jsonify({"weather": response.text.strip()})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"weather": "Could not fetch weather"})
 
-@app.route("/generate_form", methods=["POST"])
-def generate_form():
+@app.route('/generate_form', methods=['POST'])
+def generate():
     try:
-        form_data = request.form.to_dict()
-        photos = request.files.getlist("photos")
-        logo = request.files.get("logo")
+        data = request.form
 
-        upload_dir = "static/uploads"
-        os.makedirs(upload_dir, exist_ok=True)
-        photo_paths, logo_path, scope_path = [], None, None
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        photos = request.files.getlist('photos')
+        logo = request.files.get('logo')
+        scope_file = request.files.get('scope_file')
 
-        for photo in photos[:20]:
-            if photo and photo.filename:
-                raw_path = os.path.join(upload_dir, secure_filename(photo.filename))
-                photo.save(raw_path)
+        saved_photo_paths = []
+        for photo in photos:
+            if photo.filename:
+                filename = secure_filename(photo.filename)
+                path = os.path.join(UPLOAD_FOLDER, f"{timestamp}_{filename}")
+                photo.save(path)
+                saved_photo_paths.append(path)
 
-                # Compress + rotate image
-                compressed_path = compress_and_rotate_image(raw_path)
-                photo_paths.append(compressed_path)
-
+        logo_path = None
         if logo and logo.filename:
-            logo_path = os.path.join(upload_dir, secure_filename(logo.filename))
+            filename = secure_filename(logo.filename)
+            logo_path = os.path.join(UPLOAD_FOLDER, f"logo_{timestamp}_{filename}")
             logo.save(logo_path)
 
-        scope_file = request.files.get("scope_file")
         if scope_file and scope_file.filename:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = secure_filename(scope_file.filename)
-            scope_path = os.path.join(upload_dir, f"scope_{timestamp}_{filename}")
+            scope_path = os.path.join(UPLOAD_FOLDER, f"scope_{timestamp}_{filename}")
             scope_file.save(scope_path)
             print(f"Scope of Work file saved to: {scope_path}")
 
-        include_page_2 = "include_page_2" in form_data
+        output_pdf = os.path.join(GENERATED_FOLDER, f"DailyLog_{timestamp}.pdf")
+        create_daily_log_pdf(data, saved_photo_paths, output_pdf, logo_path)
 
-        pdf_filename = create_daily_log_pdf(
-            form_data,
-            photo_paths=photo_paths,
-            logo_path=logo_path,
-            include_page_2=include_page_2
-        )
-
-        pdf_url = f"/generated/{pdf_filename}"
-        return jsonify({"pdf_url": pdf_url})
+        return jsonify({"pdf_url": f"/generated/{os.path.basename(output_pdf)}"})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print("Error in /generate_form:", e)
+        return "Internal Server Error", 500
 
-@app.route("/generated/<path:filename>")
-def serve_generated(filename):
-    return send_from_directory("static/generated", filename)
+@app.route('/generated/<filename>')
+def serve_pdf(filename):
+    return send_from_directory(GENERATED_FOLDER, filename)
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+if __name__ == '__main__':
+    app.run(debug=True)
