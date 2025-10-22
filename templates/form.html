@@ -2,96 +2,55 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Daily Log Form</title>
-  <style>
-    label { display: block; margin-top: 10px; font-weight: bold; }
-    input, textarea, select { width: 100%; padding: 6px; margin-top: 5px; }
-    #weather_display { margin-top: 5px; font-weight: bold; }
-    #result { margin-top: 20px; font-weight: bold; }
-    button { margin-top: 20px; padding: 10px 20px; }
-  </style>
+  <title>Daily Log Submission</title>
   <script>
-    let debounceTimer;
-    function debounceFetchWeather() {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(fetchWeather, 1000);
-    }
-
-    function fetchWeather() {
-      const location = document.getElementById("location").value;
-      if (location.trim() === "") return;
+    // Fetch weather once location is typed
+    function fetchWeather(location) {
+      if (location.length < 2) return;
       fetch(`/get_weather?location=${encodeURIComponent(location)}`)
-        .then(res => res.json())
+        .then(response => response.json())
         .then(data => {
           if (data.weather) {
-            document.getElementById("weather_display").textContent = data.weather;
-            document.getElementById("weather").value = data.weather;
+            document.getElementById('weather_display').textContent = data.weather;
+            document.getElementById('weather').value = data.weather;
           } else {
-            document.getElementById("weather_display").textContent = "Weather unavailable";
+            document.getElementById('weather_display').textContent = "Weather unavailable";
           }
+        })
+        .catch(() => {
+          document.getElementById('weather_display').textContent = "Weather fetch error";
         });
     }
   </script>
 </head>
 <body>
   <h1>Daily Log Submission</h1>
-  <form id="dailyForm" enctype="multipart/form-data">
-    <label>Date: <input type="date" name="date" required></label>
-    <label>Project Name: <input type="text" name="project_name" required></label>
-    <label>Client Name: <input type="text" name="client_name"></label>
+  <form id="dailyForm" enctype="multipart/form-data" method="post" action="/generate_form">
+    <label>Date: <input type="date" name="date" required></label><br>
+    <label>Project Name: <input type="text" name="project_name" required></label><br>
+    <label>Client Name: <input type="text" name="client_name"></label><br>
     <label>Project Location:
-      <input type="text" id="location" name="location" ...>
-    </label>
-    <label>General Contractor: <input type="text" name="general_contractor"></label>
-    <label>Crew Notes: <textarea name="crew_notes"></textarea></label>
-    <label>Work Done: <textarea name="work_done"></textarea></label>
-    <label>Equipment Used: <textarea name="equipment_used"></textarea></label>
-    <label>Safety Notes: <textarea name="safety_notes"></textarea></label>
-    <label>Material Summary: <textarea name="material_summary"></textarea></label>
-    <label>Hours Worked: <input type="text" name="hours_worked"></label>
+      <input type="text" id="location" name="location" oninput="fetchWeather(this.value)">
+    </label><br>
+    <label>General Contractor: <input type="text" name="general_contractor"></label><br>
+    <label>Crew Notes: <textarea name="crew_notes"></textarea></label><br>
+    <label>Work Done: <textarea name="work_done"></textarea></label><br>
+    <label>Equipment Used: <textarea name="equipment_used"></textarea></label><br>
+    <label>Safety Notes: <textarea name="safety_notes"></textarea></label><br>
+    <label>Material Summary: <textarea name="material_summary"></textarea></label><br>
+    <label>Hours Worked: <input type="text" name="hours_worked"></label><br>
 
     <label>Weather:
       <div id="weather_display">Waiting for location...</div>
       <input type="hidden" id="weather" name="weather">
-    </label>
+    </label><br>
 
-    <label>Upload Jobsite Photos (max 20): <input type="file" id="photos" name="photos" multiple accept="image/*"></label>
-    <label>Upload Company Logo: <input type="file" id="logo" name="logo" accept="image/*"></label>
+    <label>Upload Photos: <input type="file" name="photos" multiple accept="image/*"></label><br>
+    <label>Upload Logo: <input type="file" name="logo" accept="image/*"></label><br>
 
-    <label>
-      <input type="checkbox" name="include_page_2" id="include_page_2"> Include Page 2 (AI/AR Analysis)
-    </label>
+    <label><input type="checkbox" name="include_page_2"> Include Page 2 (AI/AR Analysis)</label><br>
 
     <button type="submit">Generate PDF</button>
   </form>
-
-  <div id="result"></div>
-
-  <script>
-    document.getElementById("dailyForm").addEventListener("submit", async function (e) {
-      e.preventDefault();
-      const resultDiv = document.getElementById("result");
-      resultDiv.textContent = "Uploading and generating PDF... please wait.";
-
-      const formData = new FormData(this);
-
-      try {
-        const res = await fetch("/generate_form", {
-          method: "POST",
-          body: formData
-        });
-
-        const json = await res.json();
-        if (json.pdf_url) {
-          resultDiv.innerHTML = `✅ <a href="${json.pdf_url}" target="_blank">Download your Daily Log PDF</a>`;
-        } else {
-          resultDiv.textContent = `❌ Error: ${json.error || "Unknown error"}`;
-        }
-      } catch (err) {
-        console.error(err);
-        resultDiv.textContent = "❌ Network or server error.";
-      }
-    });
-  </script>
 </body>
 </html>
