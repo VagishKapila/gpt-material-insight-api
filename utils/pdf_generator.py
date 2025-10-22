@@ -73,7 +73,7 @@ def create_daily_log_pdf(form_data, photo_paths, logo_path=None, include_page_2=
         c.drawString(50, height - 50, "AI/AR Image Analysis")
 
         # Run MobileNet image classification
-        analyzed = analyze_images_with_mobilenet(photo_paths)
+       # analyzed = analyze_images_with_mobilenet(photo_paths)
 
         x, y = 50, height - 100
         img_width, img_height = 200, 150
