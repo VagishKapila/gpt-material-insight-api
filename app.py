@@ -14,7 +14,7 @@ GENERATED_FOLDER = 'static/generated'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(GENERATED_FOLDER, exist_ok=True)
 
-# Prefill memory cache (in-memory only)
+# Prefill memory cache
 PROJECT_CACHE = {}
 
 @app.route('/')
@@ -43,20 +43,19 @@ def generate_form():
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         project_id = form.get("project_name", "").strip().lower().replace(" ", "_")
 
-        # Restore prior form data
+        # Restore saved fields
         if project_id in PROJECT_CACHE:
             for k, v in PROJECT_CACHE[project_id].items():
                 if not form.get(k):
                     form[k] = v
 
-        # Save current data (excluding dynamic fields)
         reusable_fields = [
             "project_name", "client_name", "location", "job_number", "gc_name",
             "crew_notes", "work_done", "safety_notes", "equipment_used"
         ]
         PROJECT_CACHE[project_id] = {k: form.get(k, "") for k in reusable_fields}
 
-        # Save & compress job site photos
+        # Save & compress job site images
         saved_photo_paths = []
         for file in request.files.getlist("images"):
             if file.filename:
@@ -73,20 +72,35 @@ def generate_form():
             logo_path = os.path.join(UPLOAD_FOLDER, f"logo_{timestamp}_{fname}")
             logo.save(logo_path)
 
-        # Determine AI checkbox
-        enable_ai = form.get("run_ai", "on").lower() in ["on", "true", "yes", "1"]
+        # Save scope file (optional)
+        scope = request.files.get("scope_file")
+        if scope and scope.filename:
+            fname = secure_filename(scope.filename)
+            scope_path = os.path.join(UPLOAD_FOLDER, f"scope_{timestamp}_{fname}")
+            scope.save(scope_path)
+            print("🔹 Scope file uploaded:", scope_path)
 
-        # Final PDF output
-        output_path = os.path.join(GENERATED_FOLDER, f"DailyLog_{timestamp}.pdf")
+        # Checkbox logic
+        enable_ai_analysis = form.get("run_ai", "on").lower() in ["on", "true", "yes", "1"]
+
+        # Weather value
+        weather = form.get("weather", "")
+
+        # Final PDF path
+        output_pdf_path = os.path.join(GENERATED_FOLDER, f"DailyLog_{timestamp}.pdf")
+
         create_daily_log_pdf(
-    form_data=data,
-    image_paths=saved_photo_paths,
-    output_path=output_pdf_path,
-    logo_path=logo_path
-)
+            form_data=form,
+            image_paths=saved_photo_paths,
+            output_path=output_pdf_path,
+            logo_path=logo_path,
+            weather=weather,
+            enable_ai_analysis=enable_ai_analysis
+        )
 
         clean_temp_images()
-        return jsonify({"pdf_url": f"/generated/{os.path.basename(output_path)}"})
+
+        return jsonify({"pdf_url": f"/generated/{os.path.basename(output_pdf_path)}"})
 
     except Exception as e:
         print("🔥 ERROR generating log:", e)
