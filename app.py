@@ -82,27 +82,34 @@ def generate_form():
         scope_file.save(scope_path)
         scope_text = extract_scope_text(scope_path)
 
-    # Analyze AI
+      # Analyze AI
     ai_analysis = ""
     progress_report = ""
     if data.get('enable_ai') == 'on':
-    ai_analysis = analyze_images(image_paths)
-    if scope_text:
-        # Combine log notes for comparison
-        log_text = " ".join([
-            data.get("crew_notes", ""),
-            data.get("work_done", ""),
-            data.get("safety_notes", "")
-        ])
-        progress_report = analyze_scope_progress(scope_text, log_text)
+        ai_analysis = analyze_images(image_paths)
+        if scope_text:
+            # Combine log notes for comparison
+            log_text = " ".join([
+                data.get("crew_notes", ""),
+                data.get("work_done", ""),
+                data.get("safety_notes", "")
+            ])
+            progress_report = analyze_scope_progress(scope_text, log_text)
 
     # Generate PDF
     pdf_filename = f"Log_{uuid.uuid4().hex}.pdf"
     save_path = os.path.join(app.config['GENERATED_FOLDER'], pdf_filename)
-    create_daily_log_pdf(data, image_paths, logo_path=logo_path, ai_analysis=ai_analysis, scope_progress=progress_report, save_path=save_path, safety_path=safety_path)
+    create_daily_log_pdf(
+        data,
+        image_paths,
+        logo_path=logo_path,
+        ai_analysis=ai_analysis,
+        scope_progress=progress_report,
+        save_path=save_path,
+        safety_path=safety_path
+    )
 
     return jsonify({'pdf_url': f"/generated/{pdf_filename}"})
-
 @app.route('/generated/<filename>')
 def serve_pdf(filename):
     return send_from_directory(app.config['GENERATED_FOLDER'], filename)
