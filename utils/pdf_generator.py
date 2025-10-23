@@ -1,166 +1,120 @@
-import os
-from datetime import datetime
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.utils import ImageReader
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import (
-    Paragraph, SimpleDocTemplate, Spacer, Image as PlatypusImage
-)
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
 from reportlab.pdfgen import canvas
-from PyPDF2 import PdfMerger
-from PIL import Image, ExifTags
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Image
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import PageBreak
+from PyPDF2 import PdfMerger, PdfReader
+from PIL import Image as PILImage
+import os
 
+def add_footer(canvas_obj, doc):
+    canvas_obj.saveState()
+    canvas_obj.setFont('Helvetica', 8)
+    canvas_obj.drawString(40, 20, "Confidential – Do Not Duplicate without written consent from BAINS Dev Comm")
+    canvas_obj.drawRightString(570, 20, f"Page {doc.page}")
+    canvas_obj.restoreState()
 
-def auto_rotate_image(path):
-    try:
-        img = Image.open(path)
-        for orientation in ExifTags.TAGS:
-            if ExifTags.TAGS[orientation] == 'Orientation':
-                break
-        exif = img._getexif()
-        if exif is not None:
-            orientation_value = exif.get(orientation)
-            if orientation_value == 3:
-                img = img.rotate(180, expand=True)
-            elif orientation_value == 6:
-                img = img.rotate(270, expand=True)
-            elif orientation_value == 8:
-                img = img.rotate(90, expand=True)
-            img.save(path)
-    except Exception:
-        pass
-
-
-def create_daily_log_pdf(data, image_paths, logo_path=None, ai_analysis="", scope_progress="", save_path="daily_log.pdf"):
-    temp_log_pdf = "temp_log.pdf"
-    temp_photo_pdf = "temp_photos.pdf"
-    temp_analysis_pdf = "temp_analysis.pdf"
-
+def create_daily_log_pdf(data, image_paths, logo_path=None, ai_analysis=None, scope_progress=None, save_path="output.pdf", safety_path=None):
+    temp_pdf = "temp_main.pdf"
+    doc = SimpleDocTemplate(temp_pdf, pagesize=letter)
+    elements = []
     styles = getSampleStyleSheet()
-    story = []
+    normal = styles["Normal"]
+    title_style = styles["Heading1"]
 
-    # 🛠️ PAGE 1: Daily Log
-    story.append(Paragraph("<b>🛠️ DAILY LOG</b>", styles['Title']))
-    story.append(Spacer(1, 12))
+    # Header + Logo
+    if logo_path and os.path.exists(logo_path):
+        img = PILImage.open(logo_path)
+        img.thumbnail((100, 100))
+        img.save("temp_logo.png")
+        logo = Image("temp_logo.png", width=60, height=60)
+        elements.append(logo)
 
-    if logo_path:
-        try:
-            logo_img = PlatypusImage(logo_path, width=120, height=50)
-            story.append(logo_img)
-            story.append(Spacer(1, 12))
-        except:
-            pass
+    elements.append(Paragraph("DAILY LOG", title_style))
+    elements.append(Spacer(1, 12))
 
-    # Project Metadata
-    for field in ["project_name", "location", "date", "weather"]:
+    def colored_label(label): return f'<font color="blue"><b>{label}:</b></font>'
+
+    # Key Info
+    for field in ["date", "location", "crew_notes", "work_done", "safety_notes", "weather", "equipment_used"]:
         label = field.replace("_", " ").title()
-        story.append(Paragraph(f"<b>{label}:</b> {data.get(field, '')}", styles['Normal']))
-    story.append(Spacer(1, 12))
+        value = data.get(field, "—")
+        elements.append(Paragraph(f"{colored_label(label)} {value}", normal))
+        elements.append(Spacer(1, 6))
 
-    # Notes Section
-    for field in ["crew_notes", "work_done", "safety_notes"]:
-        label = field.replace("_", " ").title()
-        story.append(Paragraph(f"<b>{label}</b>", styles['Heading4']))
-        story.append(Paragraph(data.get(field, ""), styles['Normal']))
-        story.append(Spacer(1, 8))
+    elements.append(PageBreak())
 
-    story.append(Spacer(1, 20))
-    story.append(Paragraph("<i>Powered by Nails & Notes</i>", styles['Normal']))
+    # PAGE 2 — PHOTOS
+    elements.append(Paragraph("📸 Job Site Photos", title_style))
+    elements.append(Spacer(1, 12))
+    img_width = 250
+    img_height = 180
+    row = []
 
-    doc = SimpleDocTemplate(temp_log_pdf, pagesize=A4)
-    doc.build(story)
-
-    # 📸 PAGE 2: Photos
-    c = canvas.Canvas(temp_photo_pdf, pagesize=A4)
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(40, 800, "📸 Job Site Photos")
-
-    x, y = 40, 750
-    img_count = 0
-    page_num = 2
-
-    for path in image_paths[:20]:
+    for i, img_path in enumerate(image_paths):
         try:
-            auto_rotate_image(path)  # Fix orientation before drawing
-            img = ImageReader(path)
-            c.drawImage(img, x, y, width=240, height=180, preserveAspectRatio=True)
-            x += 270
-            if x > 500:
-                x = 40
-                y -= 200
-            if y < 100:
-                c.setFont("Helvetica", 10)
-                c.drawRightString(580, 20, f"Page {page_num}")
-                c.showPage()
-                c.setFont("Helvetica-Bold", 16)
-                c.drawString(40, 800, "📸 Continued")
-                x, y = 40, 750
-                page_num += 1
-            img_count += 1
+            img = PILImage.open(img_path)
+            img = img.convert('RGB')
+            if img.width > img.height:
+                img = img.rotate(270, expand=True)
+            img.thumbnail((img_width, img_height))
+            temp_name = f"temp_img_{i}.jpg"
+            img.save(temp_name)
+            row.append(Image(temp_name, width=img_width, height=img_height))
+            if len(row) == 2:
+                elements.extend(row)
+                elements.append(Spacer(1, 12))
+                row = []
         except:
             continue
+    if row:
+        elements.extend(row)
+        elements.append(Spacer(1, 12))
 
-    if img_count:
-        c.setFont("Helvetica", 10)
-        c.drawRightString(580, 20, f"Page {page_num}")
-        c.save()
-    else:
-        open(temp_photo_pdf, 'w').close()
+    elements.append(PageBreak())
 
-    # 🤖 PAGE 3: AI + Scope
-    include_analysis = ai_analysis.strip() or scope_progress.strip()
-    if include_analysis:
-        c = canvas.Canvas(temp_analysis_pdf, pagesize=A4)
-        page_num += 1
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(40, 800, "🤖 AI/AR Analysis")
-        c.setFont("Helvetica", 12)
+    # PAGE 3 — AI/Scope Analysis
+    elements.append(Paragraph("🤖 AI + Scope Progress Analysis", title_style))
+    elements.append(Spacer(1, 12))
+    if ai_analysis:
+        elements.append(Paragraph(f"{colored_label('AI Image Analysis')} {ai_analysis}", normal))
+        elements.append(Spacer(1, 12))
+    if scope_progress:
+        elements.append(Paragraph(f"{colored_label('Scope Progress')} {scope_progress}", normal))
+    elements.append(PageBreak())
 
-        y = 780
-        for line in ai_analysis.splitlines():
-            c.drawString(40, y, line)
-            y -= 16
-            if y < 60:
-                c.showPage()
-                y = 800
+    # PAGE 4 — Safety Upload
+    if safety_path:
+        elements.append(Paragraph("🛡️ Safety Sheet Upload", title_style))
+        elements.append(Spacer(1, 12))
+        if safety_path.lower().endswith(".pdf"):
+            doc.build(elements, onFirstPage=add_footer, onLaterPages=add_footer)
+            merger = PdfMerger()
+            merger.append(temp_pdf)
+            merger.append(safety_path)
+            merger.write(save_path)
+            merger.close()
+            os.remove(temp_pdf)
+            return
+        else:
+            try:
+                img = PILImage.open(safety_path)
+                if img.width > img.height:
+                    img = img.rotate(270, expand=True)
+                img.thumbnail((500, 650))
+                img.save("temp_safety.jpg")
+                elements.append(Image("temp_safety.jpg", width=400, height=500))
+            except:
+                elements.append(Paragraph("⚠️ Error displaying safety image.", normal))
 
-        if scope_progress.strip():
-            c.setFont("Helvetica-Bold", 16)
-            y -= 20
-            c.drawString(40, y, "📋 Scope Progress Tracker")
-            c.setFont("Helvetica", 12)
-            y -= 20
-            for line in scope_progress.splitlines():
-                if y < 60:
-                    c.showPage()
-                    y = 800
-                c.drawString(40, y, line)
-                y -= 16
+    doc.build(elements, onFirstPage=add_footer, onLaterPages=add_footer)
 
-        # Final footer
-        c.setFont("Helvetica-Oblique", 10)
-        c.drawCentredString(A4[0]/2, 30, "Confidential – Do Not Duplicate without written consent from BAINS Dev Comm")
-        c.setFont("Helvetica", 10)
-        c.drawRightString(580, 20, f"Page {page_num}")
-        c.save()
-    else:
-        open(temp_analysis_pdf, 'w').close()
-
-    # ✅ Merge all pages
-    merger = PdfMerger()
-    merger.append(temp_log_pdf)
-    if os.path.getsize(temp_photo_pdf) > 0:
-        merger.append(temp_photo_pdf)
-    if os.path.getsize(temp_analysis_pdf) > 0:
-        merger.append(temp_analysis_pdf)
-    merger.write(save_path)
-    merger.close()
-
-    # 🧹 Cleanup
-    for f in [temp_log_pdf, temp_photo_pdf, temp_analysis_pdf]:
-        try:
-            os.remove(f)
-        except:
-            pass
-
-    return save_path
+    # Clean up temp
+    for f in os.listdir():
+        if f.startswith("temp_"):
+            try:
+                os.remove(f)
+            except:
+                pass
