@@ -86,9 +86,15 @@ def generate_form():
     ai_analysis = ""
     progress_report = ""
     if data.get('enable_ai') == 'on':
-        ai_analysis = analyze_images(image_paths)
-        if scope_text:
-            progress_report = analyze_scope_progress(scope_text, image_paths)
+    ai_analysis = analyze_images(image_paths)
+    if scope_text:
+        # Combine log notes for comparison
+        log_text = " ".join([
+            data.get("crew_notes", ""),
+            data.get("work_done", ""),
+            data.get("safety_notes", "")
+        ])
+        progress_report = analyze_scope_progress(scope_text, log_text)
 
     # Generate PDF
     pdf_filename = f"Log_{uuid.uuid4().hex}.pdf"
