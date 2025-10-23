@@ -17,9 +17,11 @@ os.makedirs(GENERATED_FOLDER, exist_ok=True)
 # Prefill memory cache
 PROJECT_CACHE = {}
 
+
 @app.route('/')
 def health_check():
     return "✅ Nails & Notes: Daily Log AI is running!"
+
 
 @app.route('/form')
 def form():
@@ -27,14 +29,16 @@ def form():
     last_data = PROJECT_CACHE.get(project_id, {}) if project_id else {}
     return render_template('form.html', last_data=last_data)
 
+
 @app.route('/get_weather')
 def get_weather():
     location = request.args.get("location", "")
     try:
         res = requests.get(f"https://wttr.in/{location}?format=3", timeout=5)
         return jsonify({"weather": res.text.strip()})
-    except:
+    except Exception:
         return jsonify({"weather": "Could not fetch weather"})
+
 
 @app.route('/generate_form', methods=['POST'])
 def generate_form():
@@ -43,7 +47,7 @@ def generate_form():
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         project_id = form.get("project_name", "").strip().lower().replace(" ", "_")
 
-        # Restore saved fields
+        # Restore saved fields for this project
         if project_id in PROJECT_CACHE:
             for k, v in PROJECT_CACHE[project_id].items():
                 if not form.get(k):
@@ -55,16 +59,16 @@ def generate_form():
         ]
         PROJECT_CACHE[project_id] = {k: form.get(k, "") for k in reusable_fields}
 
-        # Save & compress job site images
+        # Save & compress photos
         saved_photo_paths = []
-        for file in request.files.getlist("images"):
+        for file in request.files.getlist("photos"):
             if file.filename:
                 fname = secure_filename(file.filename)
                 path = os.path.join(UPLOAD_FOLDER, f"{timestamp}_{uuid.uuid4().hex}_{fname}")
                 file.save(path)
                 saved_photo_paths.append(compress_and_rotate_image(path))
 
-        # Save logo
+        # Save logo (optional)
         logo = request.files.get("logo")
         logo_path = None
         if logo and logo.filename:
@@ -72,7 +76,7 @@ def generate_form():
             logo_path = os.path.join(UPLOAD_FOLDER, f"logo_{timestamp}_{fname}")
             logo.save(logo_path)
 
-        # Save scope file (optional)
+        # Optional scope file
         scope = request.files.get("scope_file")
         if scope and scope.filename:
             fname = secure_filename(scope.filename)
@@ -81,17 +85,18 @@ def generate_form():
             print("🔹 Scope file uploaded:", scope_path)
 
         # Checkbox logic
-        enable_ai_analysis = form.get("run_ai", "on").lower() in ["on", "true", "yes", "1"]
+        enable_ai_analysis = form.get("enable_ai", "on").lower() in ["on", "true", "yes", "1"]
 
-        # Weather value
+        # Weather data
         weather = form.get("weather", "")
 
-        # Final PDF path
+        # Output PDF path
         output_pdf_path = os.path.join(GENERATED_FOLDER, f"DailyLog_{timestamp}.pdf")
 
+        # ✅ FIX: match pdf_generator.py function
         create_daily_log_pdf(
             form_data=form,
-            image_paths=saved_photo_paths,
+            photo_paths=saved_photo_paths,
             output_path=output_pdf_path,
             logo_path=logo_path,
             weather=weather,
@@ -100,15 +105,18 @@ def generate_form():
 
         clean_temp_images()
 
+        print(f"✅ PDF generated successfully: {output_pdf_path}")
         return jsonify({"pdf_url": f"/generated/{os.path.basename(output_pdf_path)}"})
 
     except Exception as e:
         print("🔥 ERROR generating log:", e)
         return "Internal Server Error", 500
 
+
 @app.route('/generated/<filename>')
 def serve_pdf(filename):
     return send_from_directory(GENERATED_FOLDER, filename)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
