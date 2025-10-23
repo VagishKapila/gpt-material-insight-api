@@ -1,118 +1,96 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Daily Log Form – Nails & Notes</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 40px;
-      background-color: #f4f4f4;
-    }
-    h1 {
-      color: #222;
-    }
-    form {
-      background: #fff;
-      padding: 30px;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-      max-width: 800px;
-    }
-    label {
-      display: block;
-      margin-top: 20px;
-      font-weight: bold;
-    }
-    input[type="text"],
-    input[type="date"],
-    textarea {
-      width: 100%;
-      padding: 10px;
-      margin-top: 5px;
-      box-sizing: border-box;
-    }
-    input[type="file"] {
-      margin-top: 10px;
-    }
-    .checkbox-group {
-      margin-top: 20px;
-    }
-    button {
-      margin-top: 30px;
-      padding: 12px 24px;
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      font-size: 16px;
-      cursor: pointer;
-      border-radius: 5px;
-    }
-    button:hover {
-      background-color: #45a049;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>Nails & Notes – Daily Log</title>
+    <style>
+        body {
+            background-color: #f2f2f2;
+            font-family: Arial, sans-serif;
+        }
+        form {
+            background: white;
+            max-width: 700px;
+            margin: auto;
+            padding: 30px;
+            border-radius: 10px;
+        }
+        label, input, textarea, select {
+            display: block;
+            width: 100%;
+            margin-bottom: 15px;
+        }
+        input[type="submit"], button {
+            width: auto;
+            padding: 10px 20px;
+            margin-top: 10px;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            color: #888;
+            font-size: 0.9em;
+        }
+    </style>
+    <script>
+        function clearForm() {
+            document.getElementById("dailyLogForm").reset();
+            document.getElementById("aiCheckbox").checked = true;
+        }
+
+        window.onload = function () {
+            document.getElementById("aiCheckbox").checked = true;
+        };
+    </script>
 </head>
 <body>
+    <form id="dailyLogForm" action="/generate_form" method="post" enctype="multipart/form-data">
+        <h2>Daily Log Form</h2>
 
-<h1>🛠️ Nails & Notes: Daily Log Submission</h1>
+        <label for="project_name">Project Name</label>
+        <input type="text" name="project_name" required>
 
-<form action="/generate_form" method="post" enctype="multipart/form-data">
-  <label for="project_name">Project Name</label>
-  <input type="text" name="project_name" required>
+        <label for="client_name">Client Name</label>
+        <input type="text" name="client_name" required>
 
-  <label for="location">Location</label>
-  <input type="text" name="location" id="location" required>
+        <label for="job_number">Job Number</label>
+        <input type="text" name="job_number" required>
 
-  <label for="date">Date</label>
-  <input type="date" name="date" required>
+        <label for="location">Location</label>
+        <input type="text" name="location" required>
 
-  <label for="crew_notes">Crew Notes</label>
-  <textarea name="crew_notes" rows="3"></textarea>
+        <label for="crew_notes">Crew Notes</label>
+        <textarea name="crew_notes" rows="4" required></textarea>
 
-  <label for="work_done">Work Done</label>
-  <textarea name="work_done" rows="3"></textarea>
+        <label for="work_done">Work Performed</label>
+        <textarea name="work_done" rows="4" required></textarea>
 
-  <label for="safety_notes">Safety Notes</label>
-  <textarea name="safety_notes" rows="3"></textarea>
+        <label for="safety_notes">Safety Notes</label>
+        <textarea name="safety_notes" rows="3" required></textarea>
 
-  <label for="weather">Weather</label>
-  <input type="text" name="weather" id="weather" placeholder="Auto-filled if location entered">
+        <label for="weather">Weather (leave blank to auto-fill)</label>
+        <input type="text" name="weather">
 
-  <label for="photos">Upload Job Site Photos (Max 20)</label>
-  <input type="file" name="photos" multiple accept="image/*">
+        <label for="images">Upload Site Photos (multiple allowed)</label>
+        <input type="file" name="images" multiple>
 
-  <label for="logo">Upload Your Logo (Optional)</label>
-  <input type="file" name="logo" accept="image/*">
+        <label for="logo">Company Logo (optional)</label>
+        <input type="file" name="logo">
 
-  <div class="checkbox-group">
-    <input type="checkbox" id="enable_ai" name="enable_ai" checked>
-    <label for="enable_ai" style="display: inline;">Run AI/AR Comparison Analysis</label>
-  </div>
+        <label for="scope_doc">Scope of Work Upload (only needed once)</label>
+        <input type="file" name="scope_doc" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.html,.htm,.csv,.txt">
 
-  <button type="submit">Generate PDF</button>
-</form>
+        <label>
+            <input type="checkbox" name="enable_ai" id="aiCheckbox" checked>
+            Enable AI/AR Image Analysis
+        </label>
 
-<script>
-  // Auto-fetch weather when location is entered
-  document.getElementById("location").addEventListener("blur", function () {
-    const location = this.value.trim();
-    if (!location) return;
-    fetch(`/get_weather?location=${encodeURIComponent(location)}`)
-      .then(res => res.text())
-      .then(data => {
-        document.getElementById("weather").value = data;
-      })
-      .catch(err => console.log("Weather fetch failed:", err));
-  });
+        <input type="submit" value="Generate Daily Log PDF">
+        <button type="button" onclick="clearForm()">Clear Form</button>
+    </form>
 
-  // Persist checkbox state after refresh
-  const checkbox = document.getElementById("enable_ai");
-  checkbox.checked = localStorage.getItem("enable_ai") !== "false"; // default = true
-  checkbox.addEventListener("change", function () {
-    localStorage.setItem("enable_ai", this.checked);
-  });
-</script>
-
+    <div class="footer">
+        Powered by Nails & Notes – Daily Log AI
+    </div>
 </body>
 </html>
