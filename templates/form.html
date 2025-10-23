@@ -1,96 +1,152 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Nails & Notes – Daily Log</title>
-    <style>
-        body {
-            background-color: #f2f2f2;
-            font-family: Arial, sans-serif;
-        }
-        form {
-            background: white;
-            max-width: 700px;
-            margin: auto;
-            padding: 30px;
-            border-radius: 10px;
-        }
-        label, input, textarea, select {
-            display: block;
-            width: 100%;
-            margin-bottom: 15px;
-        }
-        input[type="submit"], button {
-            width: auto;
-            padding: 10px 20px;
-            margin-top: 10px;
-        }
-        .footer {
-            text-align: center;
-            margin-top: 40px;
-            color: #888;
-            font-size: 0.9em;
-        }
-    </style>
-    <script>
-        function clearForm() {
-            document.getElementById("dailyLogForm").reset();
-            document.getElementById("aiCheckbox").checked = true;
-        }
+  <meta charset="UTF-8" />
+  <title>🛠️ Nails & Notes: Daily Log Submission</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f2f2f2;
+      margin: 0;
+      padding: 20px;
+    }
+    .form-container {
+      max-width: 600px;
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      margin: auto;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    input[type="text"],
+    input[type="date"],
+    textarea {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    input[type="file"] {
+      margin-top: 5px;
+    }
+    .checkbox {
+      margin-top: 10px;
+    }
+    button {
+      margin-top: 20px;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 5px;
+      background-color: #28a745;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #218838;
+    }
+    .clear-btn {
+      background-color: #6c757d;
+      margin-left: 10px;
+    }
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      font-size: 0.9em;
+      color: #777;
+    }
+  </style>
+  <script>
+    async function autofillWeather() {
+      const location = document.getElementById('location').value;
+      if (location.length > 2) {
+        const res = await fetch(`/get_weather?location=${location}`);
+        const text = await res.text();
+        document.getElementById('weather').value = text;
+      }
+    }
 
-        window.onload = function () {
-            document.getElementById("aiCheckbox").checked = true;
-        };
-    </script>
+    function clearForm() {
+      const inputs = document.querySelectorAll("input, textarea");
+      inputs.forEach(input => {
+        if (input.type !== "file" && input.name !== "project_name" && input.name !== "client_name") {
+          input.value = "";
+        }
+      });
+      document.getElementById("images").value = "";
+      document.getElementById("logo").value = "";
+      document.getElementById("scope_doc").value = "";
+      document.getElementById("enable_ai").checked = true;
+    }
+
+    async function handleSubmit(e) {
+      e.preventDefault();
+
+      const formData = new FormData(document.getElementById("dailyLogForm"));
+      const res = await fetch("/generate_form", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.pdf_url) {
+        window.open(data.pdf_url, "_blank");
+      } else {
+        alert("Error generating PDF");
+      }
+    }
+  </script>
 </head>
 <body>
-    <form id="dailyLogForm" action="/generate_form" method="post" enctype="multipart/form-data">
-        <h2>Daily Log Form</h2>
+  <div class="form-container">
+    <h2>🛠️ Nails & Notes: Daily Log Submission</h2>
+    <form id="dailyLogForm" onsubmit="handleSubmit(event)">
+      <label>Project Name</label>
+      <input type="text" name="project_name" required value="{{ last_data.get('project_name', '') }}" />
 
-        <label for="project_name">Project Name</label>
-        <input type="text" name="project_name" required>
+      <label>Location</label>
+      <input type="text" name="location" id="location" required onblur="autofillWeather()" value="{{ last_data.get('location', '') }}" />
 
-        <label for="client_name">Client Name</label>
-        <input type="text" name="client_name" required>
+      <label>Date</label>
+      <input type="date" name="date" required />
 
-        <label for="job_number">Job Number</label>
-        <input type="text" name="job_number" required>
+      <label>Crew Notes</label>
+      <textarea name="crew_notes">{{ last_data.get('crew_notes', '') }}</textarea>
 
-        <label for="location">Location</label>
-        <input type="text" name="location" required>
+      <label>Work Done</label>
+      <textarea name="work_done">{{ last_data.get('work_done', '') }}</textarea>
 
-        <label for="crew_notes">Crew Notes</label>
-        <textarea name="crew_notes" rows="4" required></textarea>
+      <label>Safety Notes</label>
+      <textarea name="safety_notes">{{ last_data.get('safety_notes', '') }}</textarea>
 
-        <label for="work_done">Work Performed</label>
-        <textarea name="work_done" rows="4" required></textarea>
+      <label>Weather</label>
+      <input type="text" name="weather" id="weather" placeholder="Auto-filled if location entered" value="{{ last_data.get('weather', '') }}" />
 
-        <label for="safety_notes">Safety Notes</label>
-        <textarea name="safety_notes" rows="3" required></textarea>
+      <label>Upload Job Site Photos (Max 20)</label>
+      <input type="file" name="images" id="images" multiple accept="image/*" />
 
-        <label for="weather">Weather (leave blank to auto-fill)</label>
-        <input type="text" name="weather">
+      <label>Upload Your Logo (Optional)</label>
+      <input type="file" name="logo" id="logo" accept="image/*" />
 
-        <label for="images">Upload Site Photos (multiple allowed)</label>
-        <input type="file" name="images" multiple>
+      <label>Scope of Work Upload (One-Time Only)</label>
+      <input type="file" name="scope_doc" id="scope_doc" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.html,.htm,.csv,.txt" />
 
-        <label for="logo">Company Logo (optional)</label>
-        <input type="file" name="logo">
+      <div class="checkbox">
+        <label><input type="checkbox" name="enable_ai" id="enable_ai" checked /> Run AI/AR Comparison Analysis</label>
+      </div>
 
-        <label for="scope_doc">Scope of Work Upload (only needed once)</label>
-        <input type="file" name="scope_doc" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.html,.htm,.csv,.txt">
-
-        <label>
-            <input type="checkbox" name="enable_ai" id="aiCheckbox" checked>
-            Enable AI/AR Image Analysis
-        </label>
-
-        <input type="submit" value="Generate Daily Log PDF">
-        <button type="button" onclick="clearForm()">Clear Form</button>
+      <button type="submit">Generate PDF</button>
+      <button type="button" class="clear-btn" onclick="clearForm()">Clear Form</button>
     </form>
+  </div>
 
-    <div class="footer">
-        Powered by Nails & Notes – Daily Log AI
-    </div>
+  <footer>
+    Powered by <strong>Nails & Notes: Construction Daily Log AI</strong> © 2025 — Created by Vagish Kapila
+  </footer>
 </body>
 </html>
