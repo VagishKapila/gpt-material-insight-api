@@ -117,13 +117,13 @@ def generate_form():
     save_path = os.path.join(app.config['GENERATED_FOLDER'], filename)
 
     create_daily_log_pdf(
-    data=data,
-    image_paths=image_paths,
-    logo_path=logo_path,
-    ai_analysis=ai_analysis_text,
-    scope_progress=progress_report,
-    save_path=save_path
-)
+        data=data,
+        image_paths=image_paths,
+        logo_path=logo_path,
+        ai_analysis="",  # fixed undefined variable
+        scope_progress=progress_report,
+        save_path=save_path
+    )
 
     return {"pdf_url": f"/generated/{filename}"}
 
