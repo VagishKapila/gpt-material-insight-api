@@ -1,84 +1,141 @@
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
-from reportlab.lib.units import inch
+# ✅ UPDATED `pdf_generator.py`
+# Includes:
+# - Page 1: Daily Log
+# - Page 2: Photos (2-column layout)
+# - Page 3: AI Analysis + Scope Progress
+# - Uses user logo (optional)
+
 import os
-from PIL import Image as PILImage, ImageOps
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Image, Table, TableStyle
+from datetime import datetime
+from PyPDF2 import PdfReader
+import docx
+import json
 
-def create_daily_log_pdf(data, image_paths, pdf_path, logo_path=None, scope_path=None, enable_ai_analysis=False):
-    doc = SimpleDocTemplate(pdf_path, pagesize=letter, topMargin=50, bottomMargin=50)
-    story = []
+
+# Utility: Extract text from PDF/DOCX for Scope
+
+def extract_text_from_scope(scope_path):
+    if scope_path.endswith(".pdf"):
+        with open(scope_path, "rb") as f:
+            reader = PdfReader(f)
+            return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
+    elif scope_path.endswith(".docx"):
+        doc = docx.Document(scope_path)
+        return "\n".join([para.text for para in doc.paragraphs])
+    else:
+        return ""
+
+
+def generate_scope_progress(scope_tasks, work_done):
+    completed, in_progress, not_started = [], [], []
+    work_text = work_done.lower()
+
+    for task in scope_tasks:
+        task_lower = task.lower()
+        if task_lower in work_text:
+            completed.append(task)
+        elif any(word in work_text for word in task_lower.split()[:3]):
+            in_progress.append(task)
+        else:
+            not_started.append(task)
+
+    return completed, in_progress, not_started
+
+
+def parse_scope_tasks(text):
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    bullets = [line[2:] if line[:2] in ("- ", "• ") else line for line in lines]
+    return bullets
+
+
+# Main PDF Generator
+
+def create_daily_log_pdf(data, photo_paths, logo_path=None, ai_analysis_text="", scope_progress_text="", output_path="daily_log.pdf"):
+    doc = SimpleDocTemplate(output_path, pagesize=A4)
     styles = getSampleStyleSheet()
+    story = []
 
-    title_style = ParagraphStyle(
-        "Title",
-        parent=styles["Heading1"],
-        fontSize=20,
-        leading=22,
-        textColor=colors.black,
-        spaceAfter=12,
-    )
-    field_label = ParagraphStyle(
-        "Label",
-        parent=styles["Normal"],
-        fontSize=12,
-        textColor=colors.black,
-        spaceAfter=4,
-    )
-
-    # --- HEADER / TITLE ---
-    story.append(Paragraph("DAILY LOG", title_style))
-    story.append(Spacer(1, 10))
-
-    # --- Project Info ---
-    for key in ["project_name", "location", "crew_notes", "work_done", "safety_notes", "weather"]:
-        value = data.get(key, "").strip()
-        if value:
-            label = key.replace("_", " ").title()
-            story.append(Paragraph(f"<b>{label}:</b> {value.replace('\n', '<br/>')}", field_label))
-            story.append(Spacer(1, 8))
-
-    if scope_path:
-        story.append(Paragraph(f"<i>Scope of Work Linked:</i> {os.path.basename(scope_path)}", field_label))
-        story.append(Spacer(1, 8))
-
-    story.append(PageBreak())
-
-    # --- PHOTOS PAGE ---
-    story.append(Paragraph("Job Site Photos", title_style))
+    # Title
+    story.append(Paragraph("<b>🛠️ DAILY LOG</b>", styles['Title']))
     story.append(Spacer(1, 12))
 
-    for img_path in image_paths:
+    if logo_path:
         try:
-            img = PILImage.open(img_path)
-            img = ImageOps.exif_transpose(img)
-            img.thumbnail((600, 400))
-            temp_path = os.path.splitext(img_path)[0] + "_compressed.jpg"
-            img.convert("RGB").save(temp_path, "JPEG", quality=60)
-            story.append(Image(temp_path, width=5.5 * inch, height=3.5 * inch))
-            story.append(Spacer(1, 12))
-        except Exception as e:
-            print(f"⚠️ Error loading image {img_path}: {e}")
+            img = Image(logo_path, width=100, height=40)
+            story.append(img)
+        except:
+            pass
 
-    story.append(PageBreak())
+    # Section 1: Metadata
+    for field in ["project_name", "location", "date", "weather"]:
+        label = field.replace("_", " ").title()
+        story.append(Paragraph(f"<b>{label}:</b> {data.get(field, '')}", styles['Normal']))
+    story.append(Spacer(1, 12))
 
-    # --- AI/AR ANALYSIS ---
-    if enable_ai_analysis:
-        story.append(Paragraph("AI / AR Analysis & Progress Tracking", title_style))
-        story.append(Spacer(1, 10))
-        story.append(Paragraph("🔍 Detected Materials: Sheetrock, Concrete, Rebar", field_label))
-        story.append(Spacer(1, 6))
-        story.append(Paragraph("📈 Progress: 45% of work aligns with Scope of Work.", field_label))
-        story.append(Spacer(1, 6))
-        story.append(Paragraph("📌 Next Steps: Verify trench sealing and concrete curing.", field_label))
-        story.append(Spacer(1, 20))
+    # Section 2: Notes
+    for field in ["crew_notes", "work_done", "safety_notes"]:
+        label = field.replace("_", " ").title()
+        story.append(Paragraph(f"<b>{label}</b>", styles['Heading4']))
+        story.append(Paragraph(data.get(field, ""), styles['Normal']))
+        story.append(Spacer(1, 8))
 
-    # --- FOOTER / SIGNATURE ---
     story.append(Spacer(1, 20))
-    story.append(Paragraph(
-        "<i>Powered by <b>Nails & Notes: Construction Daily Log AI</b> — Created by Vagish Kapila © 2025</i>",
-        ParagraphStyle("Footer", parent=styles["Normal"], fontSize=9, textColor=colors.gray),
-    ))
-
+    story.append(Paragraph("<i>Powered by Nails & Notes</i>", styles['Normal']))
     doc.build(story)
+
+    # Page 2: Job Site Photos
+    c = canvas.Canvas(output_path, pagesize=A4)
+    c.showPage()
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(40, 800, "📸 Job Site Photos")
+
+    x, y = 40, 750
+    for i, path in enumerate(photo_paths[:20]):
+        try:
+            img = ImageReader(path)
+            c.drawImage(img, x, y, width=240, height=180, preserveAspectRatio=True)
+            x += 270
+            if x > 500:
+                x = 40
+                y -= 200
+                if y < 100:
+                    c.showPage()
+                    c.setFont("Helvetica-Bold", 16)
+                    c.drawString(40, 800, "📸 Job Site Photos (Cont.)")
+                    y = 750
+        except:
+            continue
+
+    # Page 3: AI + Scope Progress
+    c.showPage()
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(40, 800, "🤖 AI/AR Analysis")
+    c.setFont("Helvetica", 12)
+    text_obj = c.beginText(40, 780)
+    for line in ai_analysis_text.splitlines():
+        text_obj.textLine(line)
+    c.drawText(text_obj)
+
+    if scope_progress_text:
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(40, 600, "📋 Scope Progress Tracker")
+        c.setFont("Helvetica", 12)
+        y = 580
+        for line in scope_progress_text.splitlines():
+            if y < 60:
+                c.showPage()
+                y = 800
+            c.drawString(40, y, line)
+            y -= 16
+
+    c.setFont("Helvetica-Oblique", 10)
+    c.drawCentredString(A4[0]/2, 30, "Confidential – Do Not Duplicate without written consent from BAINS Dev Comm")
+    c.save()
+
+    return output_path
