@@ -122,7 +122,10 @@
       <textarea name="work_done">{{ last_data.get('work_done', '') }}</textarea>
 
       <label>Safety Notes</label>
-      <textarea name="safety_notes">{{ last_data.get('safety_notes', '') }}</textarea>
+<textarea name="safety_notes">{{ last_data.get('safety_notes', '') }}</textarea>
+
+<label>Upload Safety Sheet (JPG, PNG, PDF)</label>
+<input type="file" name="safety_file" id="safety_file" accept=".jpg,.jpeg,.png,.pdf" />
 
       <label>Weather</label>
       <input type="text" name="weather" id="weather" placeholder="Auto-filled if location entered" value="{{ last_data.get('weather', '') }}" />
