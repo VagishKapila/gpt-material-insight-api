@@ -7,116 +7,110 @@ import uuid
 import requests
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev_secret")
 
-# ---- Folders ----
+# --- Directories ---
 UPLOAD_FOLDER = "static/uploads"
 GENERATED_FOLDER = "static/generated"
 SCOPE_FOLDER = "static/scope_docs"
+
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(GENERATED_FOLDER, exist_ok=True)
 os.makedirs(SCOPE_FOLDER, exist_ok=True)
 
-# ---- In-memory project cache ----
+# --- Allowed file extensions ---
+ALLOWED_EXTENSIONS = {"pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "html", "htm", "csv", "txt", "png", "jpg", "jpeg"}
+
+# --- In-memory cache for per-project data ---
 PROJECT_CACHE = {}
-ALLOWED_EXTENSIONS = {"pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "html", "htm", "csv", "txt", "jpg", "jpeg", "png", "gif"}
 
-# ---- Utility ----
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def get_scope_path(project_id):
+    """Return previously saved scope file if exists"""
+    for ext in ALLOWED_EXTENSIONS:
+        candidate = os.path.join(SCOPE_FOLDER, f"{project_id}_scope.{ext}")
+        if os.path.exists(candidate):
+            return candidate
+    return None
 
 @app.route("/")
-def health_check():
-    return "✅ Nails & Notes: Daily Log AI is running!"
-
+def health():
+    return "✅ Nails & Notes: Daily Log AI is live and running."
 
 @app.route("/form")
 def form():
-    project_id = request.args.get("project", "").strip().lower().replace(" ", "_")
-    last_data = PROJECT_CACHE.get(project_id, {}) if project_id else {}
+    project_name = request.args.get("project_name", "").strip().lower().replace(" ", "_")
+    last_data = PROJECT_CACHE.get(project_name, {})
     return render_template("form.html", last_data=last_data)
-
 
 @app.route("/get_weather")
 def get_weather():
     location = request.args.get("location", "")
+    if not location:
+        return "N/A"
     try:
-        res = requests.get(f"https://wttr.in/{location}?format=3", timeout=5)
-        return res.text.strip()
-    except Exception:
-        return "Could not fetch weather"
-
+        response = requests.get(f"https://wttr.in/{location}?format=%l:+%t", timeout=4)
+        return response.text.strip()
+    except:
+        return "N/A"
 
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
     try:
-        form = request.form.to_dict()
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        project_id = form.get("project_name", "").strip().lower().replace(" ", "_") or str(uuid.uuid4())
+        form_data = request.form.to_dict()
+        project_id = form_data.get("project_name", "default_project").strip().lower().replace(" ", "_")
 
-        # ---- Restore saved fields ----
+        # Restore cached fields
         if project_id in PROJECT_CACHE:
-            for k, v in PROJECT_CACHE[project_id].items():
-                if not form.get(k):
-                    form[k] = v
+            cached = PROJECT_CACHE[project_id]
+            for key, val in cached.items():
+                if not form_data.get(key):
+                    form_data[key] = val
 
-        reusable_fields = [
-            "project_name", "client_name", "location", "job_number",
-            "crew_notes", "work_done", "safety_notes", "weather"
-        ]
-        PROJECT_CACHE[project_id] = {k: form.get(k, "") for k in reusable_fields}
+        # Save current fields for next session autofill
+        cache_fields = ["project_name", "location", "crew_notes", "work_done", "safety_notes", "weather"]
+        PROJECT_CACHE[project_id] = {key: form_data.get(key, "") for key in cache_fields}
 
-        # ---- Save photos ----
-        saved_photo_paths = []
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # --- Save Photos ---
+        photo_paths = []
         for file in request.files.getlist("images"):
             if file and allowed_file(file.filename):
-                fname = secure_filename(file.filename)
-                path = os.path.join(UPLOAD_FOLDER, f"{timestamp}_{fname}")
+                filename = secure_filename(f"{timestamp}_{uuid.uuid4().hex}_{file.filename}")
+                path = os.path.join(UPLOAD_FOLDER, filename)
                 file.save(path)
-                saved_photo_paths.append(path)
+                photo_paths.append(path)
 
-        # ---- Save logo ----
+        # --- Save Logo (optional) ---
+        logo_file = request.files.get("logo")
         logo_path = None
-        logo = request.files.get("logo")
-        if logo and allowed_file(logo.filename):
-            fname = secure_filename(logo.filename)
-            logo_path = os.path.join(UPLOAD_FOLDER, f"logo_{timestamp}_{fname}")
-            logo.save(logo_path)
+        if logo_file and allowed_file(logo_file.filename):
+            logo_filename = secure_filename(f"logo_{timestamp}_{logo_file.filename}")
+            logo_path = os.path.join(UPLOAD_FOLDER, logo_filename)
+            logo_file.save(logo_path)
 
-        # ---- Scope of Work (one-time) ----
-        scope_path = None
+        # --- Scope of Work (one-time upload) ---
         scope_file = request.files.get("scope_doc")
-        scope_filename = f"{project_id}_scope"
-        if scope_file and allowed_file(scope_file.filename):
-            # Save only if not already stored
-            for ext in ALLOWED_EXTENSIONS:
-                candidate = os.path.join(SCOPE_FOLDER, f"{scope_filename}.{ext}")
-                if os.path.exists(candidate):
-                    scope_path = candidate
-                    break
-            if not scope_path:
-                ext = os.path.splitext(scope_file.filename)[1]
-                scope_path = os.path.join(SCOPE_FOLDER, f"{scope_filename}{ext}")
-                scope_file.save(scope_path)
+        scope_path = get_scope_path(project_id)
+        if scope_file and allowed_file(scope_file.filename) and not scope_path:
+            ext = scope_file.filename.rsplit(".", 1)[1].lower()
+            scope_filename = secure_filename(f"{project_id}_scope.{ext}")
+            scope_path = os.path.join(SCOPE_FOLDER, scope_filename)
+            scope_file.save(scope_path)
 
-        # ---- Weather ----
-        weather = form.get("weather", "")
-
-        # ---- Enable AI/AR ----
-        enable_ai_analysis = form.get("enable_ai", "on").lower() in ["on", "true", "yes", "1"]
-
-        # ---- Output path ----
+        # --- Generate PDF ---
         output_pdf_path = os.path.join(GENERATED_FOLDER, f"DailyLog_{timestamp}.pdf")
 
-        # ---- Generate PDF ----
         create_daily_log_pdf(
-            form_data=form,
-            photo_paths=saved_photo_paths,
-            output_path=output_pdf_path,
+            data=form_data,
+            image_paths=photo_paths,
+            pdf_path=output_pdf_path,
             logo_path=logo_path,
             scope_path=scope_path,
-            weather=weather,
-            enable_ai_analysis=enable_ai_analysis
+            enable_ai_analysis=form_data.get("enable_ai", "on").lower() in ["on", "true", "1"]
         )
 
         print(f"✅ PDF generated successfully: {output_pdf_path}")
@@ -124,13 +118,11 @@ def generate_form():
 
     except Exception as e:
         print("🔥 ERROR generating log:", e)
-        return "Internal Server Error", 500
-
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/generated/<filename>")
 def serve_pdf(filename):
     return send_from_directory(GENERATED_FOLDER, filename)
-
 
 if __name__ == "__main__":
     app.run(debug=True)
