@@ -7,6 +7,8 @@
     body {
       font-family: Arial, sans-serif;
       padding: 20px;
+      max-width: 700px;
+      margin: auto;
     }
     label {
       display: block;
@@ -18,15 +20,19 @@
       padding: 8px;
       margin-top: 5px;
     }
+    input[type="file"] {
+      margin-top: 5px;
+    }
     .checkbox-container {
-      margin-top: 15px;
+      margin-top: 20px;
     }
     .button-group {
-      margin-top: 25px;
+      margin-top: 30px;
     }
     .button-group button {
       margin-right: 10px;
       padding: 10px 15px;
+      font-weight: bold;
     }
   </style>
 </head>
@@ -52,13 +58,17 @@
     <textarea id="equipment_used" name="equipment_used" rows="2"></textarea>
 
     <label for="weather">Weather</label>
-    <input type="text" id="weather" name="weather">
+    <input type="text" id="weather" name="weather" placeholder="e.g., Sunny, 72°F">
+    <button type="button" onclick="fetchWeather()">Get Weather</button>
 
     <label for="images">Upload Job Site Photos</label>
-    <input type="file" id="images" name="images" accept="image/*" multiple required>
+    <input type="file" id="images" name="photos" accept="image/*" multiple required>
 
     <label for="logo">Optional Logo Upload</label>
     <input type="file" id="logo" name="logo" accept="image/*">
+
+    <label for="scope_file">Optional Scope of Work (PDF, DOC)</label>
+    <input type="file" id="scope_file" name="scope_file" accept=".pdf,.doc,.docx">
 
     <div class="checkbox-container">
       <input type="checkbox" id="run_ai" name="run_ai" checked>
@@ -74,13 +84,14 @@
 
   <script>
     const lastData = {{ last_data | tojson | safe }};
-    
+
     window.onload = () => {
       if (lastData) {
-        const fields = ['crew_notes', 'work_done', 'safety_notes', 'equipment_used', 'project_name'];
+        const fields = ['project_name', 'crew_notes', 'work_done', 'safety_notes', 'equipment_used'];
         fields.forEach(field => {
           if (lastData[field]) {
-            document.getElementById(field).value = lastData[field];
+            const el = document.getElementById(field);
+            if (el) el.value = lastData[field];
           }
         });
       }
@@ -90,6 +101,22 @@
       const inputs = document.querySelectorAll('input[type="text"], textarea');
       inputs.forEach(input => input.value = '');
       document.getElementById('run_ai').checked = true;
+    }
+
+    function fetchWeather() {
+      const location = document.getElementById('project_name').value;
+      if (!location) {
+        alert("Enter a Project Name (location) first.");
+        return;
+      }
+      fetch(`/get_weather?location=${location}`)
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById('weather').value = data.weather || "N/A";
+        })
+        .catch(err => {
+          alert("Weather fetch failed.");
+        });
     }
   </script>
 
