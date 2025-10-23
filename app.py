@@ -1,94 +1,100 @@
+from flask import Flask, render_template, request, jsonify
 import os
 import uuid
-from flask import Flask, request, render_template, send_from_directory, jsonify
 from werkzeug.utils import secure_filename
 from utils.pdf_generator import create_daily_log_pdf
-from utils.scope_utils import analyze_scope_progress, extract_scope_text
-from utils.ai_utils import analyze_images
-import requests
-import json
+from utils.ai_analysis import analyze_images, analyze_scope_progress
+from utils.weather import get_weather_icon_path
+from docx import Document
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.config['COMPRESSED_FOLDER'] = 'static/compressed'
 app.config['GENERATED_FOLDER'] = 'static/generated'
-app.config['AUTOFILL_FOLDER'] = 'static/autofill'
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(app.config['GENERATED_FOLDER'], exist_ok=True)
-os.makedirs(app.config['AUTOFILL_FOLDER'], exist_ok=True)
+app.config['SCOPE_FOLDER'] = 'static/scope_docs'
+app.config['LOGO_FOLDER'] = 'static/logos'
+
+# Ensure folders exist
+for folder in [
+    app.config['UPLOAD_FOLDER'], app.config['COMPRESSED_FOLDER'],
+    app.config['GENERATED_FOLDER'], app.config['SCOPE_FOLDER'], app.config['LOGO_FOLDER']
+]:
+    os.makedirs(folder, exist_ok=True)
 
 @app.route('/')
 def index():
-    return "Daily Log Generator is running!"
+    return 'Server is running'
 
-@app.route('/form', methods=['GET'])
+@app.route('/form')
 def form():
-    try:
-        with open(os.path.join(app.config['AUTOFILL_FOLDER'], 'last_data.json'), 'r') as f:
-            last_data = json.load(f)
-    except:
-        last_data = {}
-    return render_template('form.html', last_data=last_data)
+    return render_template('form.html')
 
-@app.route('/get_weather', methods=['GET'])
+@app.route('/get_weather', methods=['POST'])
 def get_weather():
-    location = request.args.get('location', '')
-    try:
-        res = requests.get(f'https://wttr.in/{location}?format=3')
-        return res.text
-    except:
-        return "Weather unavailable"
+    location = request.form['location']
+    weather = os.popen(f"curl -s 'https://wttr.in/{location}?format=3'").read().strip()
+    return jsonify({'weather': weather})
+
+@app.route('/generated/<filename>')
+def serve_file(filename):
+    return app.send_static_file(f'generated/{filename}')
 
 @app.route('/generate_form', methods=['POST'])
 def generate_form():
     data = request.form.to_dict()
     files = request.files
+
+    # Save job site photos
     image_paths = []
+    for file in request.files.getlist("images"):
+        if file.filename:
+            filename = secure_filename(file.filename)
+            path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(path)
+            image_paths.append(path)
 
-    # Handle job site images
-    for file_key in files:
-        if 'images' in file_key:
-            file = files[file_key]
-            if file.filename:
-                filename = f"{uuid.uuid4().hex}_{secure_filename(file.filename)}"
-                path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                file.save(path)
-                image_paths.append(path)
-
-    # Handle uploaded logo
+    # Save logo
+    logo_file = files.get('logo')
     logo_path = None
-    if 'logo' in files and files['logo'].filename:
-        logo_file = files['logo']
-        logo_filename = f"{uuid.uuid4().hex}_{secure_filename(logo_file.filename)}"
-        logo_path = os.path.join(app.config['UPLOAD_FOLDER'], logo_filename)
+    if logo_file and logo_file.filename:
+        logo_filename = secure_filename(logo_file.filename)
+        logo_path = os.path.join(app.config['LOGO_FOLDER'], logo_filename)
         logo_file.save(logo_path)
 
-    # Handle safety sheet upload
+    # Save safety sheet
+    safety_file = files.get('safety_sheet')
     safety_path = None
-    if 'safety_file' in files and files['safety_file'].filename:
-        safety_file = files['safety_file']
-        safety_filename = f"{uuid.uuid4().hex}_{secure_filename(safety_file.filename)}"
+    if safety_file and safety_file.filename:
+        safety_filename = secure_filename(safety_file.filename)
         safety_path = os.path.join(app.config['UPLOAD_FOLDER'], safety_filename)
         safety_file.save(safety_path)
 
-    # Save last form inputs (except files)
-    with open(os.path.join(app.config['AUTOFILL_FOLDER'], 'last_data.json'), 'w') as f:
-        json.dump(data, f)
-
-    # Extract & analyze scope document
+    # Save scope doc (if present) and convert to text
+    scope_file = files.get('scope_doc')
     scope_text = ""
-    if 'scope_doc' in files and files['scope_doc'].filename:
-        scope_file = files['scope_doc']
-        scope_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4().hex}_{secure_filename(scope_file.filename)}")
+    if scope_file and scope_file.filename:
+        scope_filename = secure_filename(scope_file.filename)
+        scope_path = os.path.join(app.config['SCOPE_FOLDER'], scope_filename)
         scope_file.save(scope_path)
-        scope_text = extract_scope_text(scope_path)
 
-      # Analyze AI
+        ext = os.path.splitext(scope_path)[1].lower()
+        if ext == ".docx":
+            doc = Document(scope_path)
+            scope_text = "\n".join([para.text for para in doc.paragraphs if para.text.strip()])
+        elif ext == ".txt":
+            with open(scope_path, "r") as f:
+                scope_text = f.read()
+
+    # Weather icon
+    weather_desc = data.get("weather", "")
+    weather_icon_path = get_weather_icon_path(weather_desc)
+
+    # AI Analysis
     ai_analysis = ""
     progress_report = ""
     if data.get('enable_ai') == 'on':
         ai_analysis = analyze_images(image_paths)
         if scope_text:
-            # Combine log notes for comparison
             log_text = " ".join([
                 data.get("crew_notes", ""),
                 data.get("work_done", ""),
@@ -106,10 +112,11 @@ def generate_form():
         ai_analysis=ai_analysis,
         scope_progress=progress_report,
         save_path=save_path,
-        safety_path=safety_path
+        weather_icon_path=weather_icon_path,
+        safety_sheet_path=safety_path
     )
 
     return jsonify({'pdf_url': f"/generated/{pdf_filename}"})
-@app.route('/generated/<filename>')
-def serve_pdf(filename):
-    return send_from_directory(app.config['GENERATED_FOLDER'], filename)
+
+if __name__ == '__main__':
+    app.run(debug=True)
