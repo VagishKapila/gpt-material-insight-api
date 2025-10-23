@@ -4,54 +4,60 @@ from reportlab.lib.utils import ImageReader
 from PIL import Image, ImageOps
 import os
 
-def create_daily_log_pdf(form_data, image_paths, output_path, logo_path=None):
+def create_daily_log_pdf(form_data, photo_paths, output_path, logo_path=None, weather=None, enable_ai_analysis=False):
     c = canvas.Canvas(output_path, pagesize=letter)
     width, height = letter
     margin = 50
-    temp_files = []  # To track temporary compressed images
+    temp_files = []
 
     def compress_and_correct_image(image_path):
         try:
             img = Image.open(image_path)
-
-            # ✅ Auto-correct orientation (replaces EXIF manual code)
             img = ImageOps.exif_transpose(img)
-
-            # ✅ Resize and compress
             img.thumbnail((1200, 1200))
             temp_path = os.path.splitext(image_path)[0] + "_compressed.jpg"
             img.convert('RGB').save(temp_path, "JPEG", quality=40)
             temp_files.append(temp_path)
             return temp_path
-
         except Exception as e:
             print(f"Error processing image {image_path}: {e}")
             return image_path
 
-    # ---------- HEADER ----------
+    # ------------------ PAGE 1: Daily Log Header ------------------
     c.setFont("Helvetica-Bold", 20)
     c.drawString(margin, height - margin, "DAILY LOG")
-    c.setFont("Helvetica", 12)
 
     if logo_path:
         try:
-            c.drawImage(ImageReader(logo_path), width - 120, height - 100,
-                        width=70, preserveAspectRatio=True, mask='auto')
+            c.drawImage(ImageReader(logo_path), width - 100, height - 100, width=70, preserveAspectRatio=True, mask='auto')
         except:
             pass
 
+    c.setFont("Helvetica", 12)
     y = height - 80
-    for key in ["project_name", "location", "date", "crew_notes",
-                "work_done", "safety_notes", "weather"]:
-        if key in form_data:
-            label = key.replace("_", " ").title()
-            c.drawString(margin, y, f"{label}: {form_data.get(key)}")
+    fields = [
+        "project_name", "client_name", "location", "job_number", "gc_name",
+        "crew_notes", "work_done", "safety_notes", "equipment_used"
+    ]
+
+    for field in fields:
+        value = form_data.get(field, "")
+        if value:
+            label = field.replace("_", " ").title()
+            c.drawString(margin, y, f"{label}: {value}")
             y -= 18
+            if y < margin:
+                c.showPage()
+                y = height - margin
+
+    if weather:
+        c.drawString(margin, y, f"Weather: {weather}")
+        y -= 18
 
     c.showPage()
 
-    # ---------- IMAGES ----------
-    c.setFont("Helvetica-Bold", 14)
+    # ------------------ PAGE 2: Job Site Photos ------------------
+    c.setFont("Helvetica-Bold", 16)
     c.drawString(margin, height - margin, "Job Site Photos")
 
     x = margin
@@ -60,8 +66,8 @@ def create_daily_log_pdf(form_data, image_paths, output_path, logo_path=None):
     photo_height = 180
     spacing = 20
 
-    for i, original_path in enumerate(image_paths):
-        compressed = compress_and_correct_image(original_path)
+    for i, path in enumerate(photo_paths):
+        compressed = compress_and_correct_image(path)
         try:
             c.drawImage(compressed, x, y, width=photo_width, height=photo_height, preserveAspectRatio=True)
             x += photo_width + spacing
@@ -72,14 +78,40 @@ def create_daily_log_pdf(form_data, image_paths, output_path, logo_path=None):
                     c.showPage()
                     y = height - margin
         except Exception as e:
-            print(f"Failed to draw image: {compressed}", e)
+            print(f"Error drawing photo {compressed}: {e}")
 
+    c.showPage()
+
+    # ------------------ PAGE 3: AI / Material Analysis ------------------
+    if enable_ai_analysis:
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(margin, height - margin, "AI / AR Analysis & Material Comparison")
+
+        c.setFont("Helvetica", 12)
+        y = height - 100
+
+        # Example placeholder data — this would later be replaced by GPT/AI output
+        c.drawString(margin, y, "🔍 Detected Material: Sheetrock (Drywall)")
+        y -= 20
+        c.drawString(margin, y, "💲 Lowe’s - $8/sheet")
+        y -= 20
+        c.drawString(margin, y, "💲 Home Depot - $8.75/sheet")
+        y -= 40
+        c.drawString(margin, y, "📐 Suggested Measurement Overlay: 12ft × 8ft wall section")
+        y -= 40
+        c.drawString(margin, y, "📌 Tip: Replace water-damaged panels within 48 hrs of exposure.")
+        y -= 20
+
+        if y < margin:
+            c.showPage()
+
+    # ------------------ SAVE & CLEANUP ------------------
+    c.setFont("Helvetica-Oblique", 9)
+    c.drawString(margin, 30, "Powered by Nails & Notes: Construction Daily Log AI")
     c.save()
 
-    # ✅ Cleanup temporary compressed images
-    for temp_file in temp_files:
+    for f in temp_files:
         try:
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
-        except Exception as e:
-            print(f"Cleanup failed for {temp_file}: {e}")
+            os.remove(f)
+        except:
+            pass
