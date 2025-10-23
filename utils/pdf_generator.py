@@ -1,84 +1,42 @@
-# ✅ UPDATED `pdf_generator.py`
-# Includes:
-# - Page 1: Daily Log
-# - Page 2: Photos (2-column layout)
-# - Page 3: AI Analysis + Scope Progress
-# - Uses user logo (optional)
-
 import os
+from datetime import datetime
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
-from reportlab.pdfgen import canvas
-from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Image, Table, TableStyle
-from datetime import datetime
-from PyPDF2 import PdfReader
-import docx
-import json
+from reportlab.platypus import (
+    Paragraph, SimpleDocTemplate, Spacer, Image as PlatypusImage
+)
+from reportlab.pdfgen import canvas
+from PyPDF2 import PdfMerger
 
 
-# Utility: Extract text from PDF/DOCX for Scope
+def create_daily_log_pdf(data, image_paths, logo_path=None, ai_analysis="", scope_progress="", save_path="daily_log.pdf"):
+    temp_log_pdf = "temp_log.pdf"
+    temp_photo_pdf = "temp_photos.pdf"
+    temp_analysis_pdf = "temp_analysis.pdf"
 
-def extract_text_from_scope(scope_path):
-    if scope_path.endswith(".pdf"):
-        with open(scope_path, "rb") as f:
-            reader = PdfReader(f)
-            return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
-    elif scope_path.endswith(".docx"):
-        doc = docx.Document(scope_path)
-        return "\n".join([para.text for para in doc.paragraphs])
-    else:
-        return ""
-
-
-def generate_scope_progress(scope_tasks, work_done):
-    completed, in_progress, not_started = [], [], []
-    work_text = work_done.lower()
-
-    for task in scope_tasks:
-        task_lower = task.lower()
-        if task_lower in work_text:
-            completed.append(task)
-        elif any(word in work_text for word in task_lower.split()[:3]):
-            in_progress.append(task)
-        else:
-            not_started.append(task)
-
-    return completed, in_progress, not_started
-
-
-def parse_scope_tasks(text):
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    bullets = [line[2:] if line[:2] in ("- ", "• ") else line for line in lines]
-    return bullets
-
-
-# Main PDF Generator
-
-def create_daily_log_pdf(data, photo_paths, logo_path=None, ai_analysis_text="", scope_progress_text="", output_path="daily_log.pdf"):
-    doc = SimpleDocTemplate(output_path, pagesize=A4)
     styles = getSampleStyleSheet()
     story = []
 
-    # Title
+    # 🛠️ PAGE 1: Daily Log
     story.append(Paragraph("<b>🛠️ DAILY LOG</b>", styles['Title']))
     story.append(Spacer(1, 12))
 
     if logo_path:
         try:
-            img = Image(logo_path, width=100, height=40)
-            story.append(img)
+            logo_img = PlatypusImage(logo_path, width=120, height=50)
+            story.append(logo_img)
+            story.append(Spacer(1, 12))
         except:
             pass
 
-    # Section 1: Metadata
+    # Meta info
     for field in ["project_name", "location", "date", "weather"]:
         label = field.replace("_", " ").title()
         story.append(Paragraph(f"<b>{label}:</b> {data.get(field, '')}", styles['Normal']))
     story.append(Spacer(1, 12))
 
-    # Section 2: Notes
+    # Notes
     for field in ["crew_notes", "work_done", "safety_notes"]:
         label = field.replace("_", " ").title()
         story.append(Paragraph(f"<b>{label}</b>", styles['Heading4']))
@@ -87,16 +45,20 @@ def create_daily_log_pdf(data, photo_paths, logo_path=None, ai_analysis_text="",
 
     story.append(Spacer(1, 20))
     story.append(Paragraph("<i>Powered by Nails & Notes</i>", styles['Normal']))
+
+    doc = SimpleDocTemplate(temp_log_pdf, pagesize=A4)
     doc.build(story)
 
-    # Page 2: Job Site Photos
-    c = canvas.Canvas(output_path, pagesize=A4)
-    c.showPage()
+    # 📸 PAGE 2: Photos
+    c = canvas.Canvas(temp_photo_pdf, pagesize=A4)
     c.setFont("Helvetica-Bold", 16)
     c.drawString(40, 800, "📸 Job Site Photos")
 
     x, y = 40, 750
-    for i, path in enumerate(photo_paths[:20]):
+    img_count = 0
+    page_num = 2
+
+    for path in image_paths[:20]:
         try:
             img = ImageReader(path)
             c.drawImage(img, x, y, width=240, height=180, preserveAspectRatio=True)
@@ -104,38 +66,79 @@ def create_daily_log_pdf(data, photo_paths, logo_path=None, ai_analysis_text="",
             if x > 500:
                 x = 40
                 y -= 200
-                if y < 100:
-                    c.showPage()
-                    c.setFont("Helvetica-Bold", 16)
-                    c.drawString(40, 800, "📸 Job Site Photos (Cont.)")
-                    y = 750
+            if y < 100:
+                c.setFont("Helvetica", 10)
+                c.drawRightString(580, 20, f"Page {page_num}")
+                c.showPage()
+                c.setFont("Helvetica-Bold", 16)
+                c.drawString(40, 800, "📸 Continued")
+                x, y = 40, 750
+                page_num += 1
+            img_count += 1
         except:
             continue
 
-    # Page 3: AI + Scope Progress
-    c.showPage()
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(40, 800, "🤖 AI/AR Analysis")
-    c.setFont("Helvetica", 12)
-    text_obj = c.beginText(40, 780)
-    for line in ai_analysis_text.splitlines():
-        text_obj.textLine(line)
-    c.drawText(text_obj)
+    if img_count:
+        c.setFont("Helvetica", 10)
+        c.drawRightString(580, 20, f"Page {page_num}")
+        c.save()
+    else:
+        open(temp_photo_pdf, 'w').close()  # create empty if no images
 
-    if scope_progress_text:
+    # 🤖 PAGE 3: AI/AR + Scope
+    include_analysis = ai_analysis.strip() or scope_progress.strip()
+    if include_analysis:
+        c = canvas.Canvas(temp_analysis_pdf, pagesize=A4)
+        page_num += 1
         c.setFont("Helvetica-Bold", 16)
-        c.drawString(40, 600, "📋 Scope Progress Tracker")
+        c.drawString(40, 800, "🤖 AI/AR Analysis")
         c.setFont("Helvetica", 12)
-        y = 580
-        for line in scope_progress_text.splitlines():
+
+        y = 780
+        for line in ai_analysis.splitlines():
+            c.drawString(40, y, line)
+            y -= 16
             if y < 60:
                 c.showPage()
                 y = 800
-            c.drawString(40, y, line)
-            y -= 16
 
-    c.setFont("Helvetica-Oblique", 10)
-    c.drawCentredString(A4[0]/2, 30, "Confidential – Do Not Duplicate without written consent from BAINS Dev Comm")
-    c.save()
+        if scope_progress.strip():
+            c.setFont("Helvetica-Bold", 16)
+            y -= 20
+            c.drawString(40, y, "📋 Scope Progress Tracker")
+            c.setFont("Helvetica", 12)
+            y -= 20
+            for line in scope_progress.splitlines():
+                if y < 60:
+                    c.showPage()
+                    y = 800
+                c.drawString(40, y, line)
+                y -= 16
 
-    return output_path
+        # Footer on last page
+        c.setFont("Helvetica-Oblique", 10)
+        c.drawCentredString(A4[0]/2, 30, "Confidential – Do Not Duplicate without written consent from BAINS Dev Comm")
+        c.setFont("Helvetica", 10)
+        c.drawRightString(580, 20, f"Page {page_num}")
+        c.save()
+    else:
+        open(temp_analysis_pdf, 'w').close()
+
+    # ✅ Merge all pages
+    merger = PdfMerger()
+    merger.append(temp_log_pdf)
+    if os.path.getsize(temp_photo_pdf) > 0:
+        merger.append(temp_photo_pdf)
+    if os.path.getsize(temp_analysis_pdf) > 0:
+        merger.append(temp_analysis_pdf)
+    merger.write(save_path)
+    merger.close()
+
+    # 🧹 Cleanup
+    for temp_file in [temp_log_pdf, temp_photo_pdf, temp_analysis_pdf]:
+        try:
+            os.remove(temp_file)
+        except:
+            pass
+
+    return save_path
