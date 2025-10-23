@@ -94,15 +94,14 @@ def generate_form():
         output_pdf_path = os.path.join(GENERATED_FOLDER, f"DailyLog_{timestamp}.pdf")
 
         # ✅ FIX: match pdf_generator.py function
-        create_daily_log_pdf(
-            form_data=form,
-            photo_paths=saved_photo_paths,
-            output_path=output_pdf_path,
-            logo_path=logo_path,
-            weather=weather,
-            enable_ai_analysis=enable_ai_analysis
-        )
-
+       create_daily_log_pdf(
+    form_data=form,
+    photo_paths=saved_photo_paths,   # ✅ correct name to match pdf_generator.py
+    output_path=output_pdf_path,
+    logo_path=logo_path,
+    weather=weather,
+    enable_ai_analysis=enable_ai_analysis
+)
         clean_temp_images()
 
         print(f"✅ PDF generated successfully: {output_pdf_path}")
