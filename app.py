@@ -1,128 +1,92 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, request, render_template, send_from_directory
 from werkzeug.utils import secure_filename
-from utils.pdf_generator import create_daily_log_pdf
 import os
-import datetime
 import uuid
-import requests
+from utils.pdf_generator import create_daily_log_pdf
+from ai_scope_tracking import extract_scope_text, extract_scope_tasks, save_project_scope, load_project_scope, compare_scope_to_daily_log, format_progress_report
+import datetime
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev_secret")
+app.config['UPLOAD_FOLDER'] = 'static/uploads'
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs('static/generated', exist_ok=True)
 
-# --- Directories ---
-UPLOAD_FOLDER = "static/uploads"
-GENERATED_FOLDER = "static/generated"
-SCOPE_FOLDER = "static/scope_docs"
+@app.route('/')
+def index():
+    return 'Nails & Notes Daily Log System is running'
 
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(GENERATED_FOLDER, exist_ok=True)
-os.makedirs(SCOPE_FOLDER, exist_ok=True)
-
-# --- Allowed file extensions ---
-ALLOWED_EXTENSIONS = {"pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "html", "htm", "csv", "txt", "png", "jpg", "jpeg"}
-
-# --- In-memory cache for per-project data ---
-PROJECT_CACHE = {}
-
-def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-
-def get_scope_path(project_id):
-    """Return previously saved scope file if exists"""
-    for ext in ALLOWED_EXTENSIONS:
-        candidate = os.path.join(SCOPE_FOLDER, f"{project_id}_scope.{ext}")
-        if os.path.exists(candidate):
-            return candidate
-    return None
-
-@app.route("/")
-def health():
-    return "✅ Nails & Notes: Daily Log AI is live and running."
-
-@app.route("/form")
+@app.route('/form', methods=['GET'])
 def form():
-    project_name = request.args.get("project_name", "").strip().lower().replace(" ", "_")
-    last_data = PROJECT_CACHE.get(project_name, {})
-    return render_template("form.html", last_data=last_data)
+    return render_template('form.html')
 
-@app.route("/get_weather")
+@app.route('/get_weather', methods=['GET'])
 def get_weather():
-    location = request.args.get("location", "")
-    if not location:
-        return "N/A"
+    import requests
     try:
-        response = requests.get(f"https://wttr.in/{location}?format=%l:+%t", timeout=4)
-        return response.text.strip()
+        res = requests.get('https://wttr.in?format=3')
+        return res.text
     except:
-        return "N/A"
+        return "Weather unavailable"
 
-@app.route("/generate_form", methods=["POST"])
+@app.route('/generate_form', methods=['POST'])
 def generate_form():
-    try:
-        form_data = request.form.to_dict()
-        project_id = form_data.get("project_name", "default_project").strip().lower().replace(" ", "_")
+    data = request.form.to_dict()
+    project_name = data.get('project_name', '').strip()
+    project_id = project_name.lower().replace(" ", "_")
+    work_done = data.get('work_done', '')
+    include_ai = data.get('include_ai') == 'on'
 
-        # Restore cached fields
-        if project_id in PROJECT_CACHE:
-            cached = PROJECT_CACHE[project_id]
-            for key, val in cached.items():
-                if not form_data.get(key):
-                    form_data[key] = val
+    # Handle image uploads
+    images = request.files.getlist('photos')
+    image_paths = []
+    for img in images:
+        if img.filename:
+            filename = f"{uuid.uuid4().hex}_{secure_filename(img.filename)}"
+            img_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            img.save(img_path)
+            image_paths.append(img_path)
 
-        # Save current fields for next session autofill
-        cache_fields = ["project_name", "location", "crew_notes", "work_done", "safety_notes", "weather"]
-        PROJECT_CACHE[project_id] = {key: form_data.get(key, "") for key in cache_fields}
+    # Handle logo
+    logo_path = None
+    if 'logo' in request.files and request.files['logo'].filename:
+        logo_file = request.files['logo']
+        logo_filename = f"{uuid.uuid4().hex}_{secure_filename(logo_file.filename)}"
+        logo_path = os.path.join(app.config['UPLOAD_FOLDER'], logo_filename)
+        logo_file.save(logo_path)
 
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Handle Scope Upload
+    scope_path = None
+    if 'scope_file' in request.files and request.files['scope_file'].filename:
+        scope_file = request.files['scope_file']
+        scope_filename = f"{uuid.uuid4().hex}_{secure_filename(scope_file.filename)}"
+        scope_path = os.path.join(app.config['UPLOAD_FOLDER'], scope_filename)
+        scope_file.save(scope_path)
 
-        # --- Save Photos ---
-        photo_paths = []
-        for file in request.files.getlist("images"):
-            if file and allowed_file(file.filename):
-                filename = secure_filename(f"{timestamp}_{uuid.uuid4().hex}_{file.filename}")
-                path = os.path.join(UPLOAD_FOLDER, filename)
-                file.save(path)
-                photo_paths.append(path)
+        # Extract and save tasks if first upload
+        scope_text = extract_scope_text(scope_path)
+        scope_tasks = extract_scope_tasks(scope_text)
+        save_project_scope(project_id, scope_tasks)
 
-        # --- Save Logo (optional) ---
-        logo_file = request.files.get("logo")
-        logo_path = None
-        if logo_file and allowed_file(logo_file.filename):
-            logo_filename = secure_filename(f"logo_{timestamp}_{logo_file.filename}")
-            logo_path = os.path.join(UPLOAD_FOLDER, logo_filename)
-            logo_file.save(logo_path)
+    # Load existing scope
+    scope_tasks = load_project_scope(project_id)
+    progress_report = ""
+    if scope_tasks:
+        progress_result = compare_scope_to_daily_log(scope_tasks, work_done)
+        progress_report = format_progress_report(progress_result)
 
-        # --- Scope of Work (one-time upload) ---
-        scope_file = request.files.get("scope_doc")
-        scope_path = get_scope_path(project_id)
-        if scope_file and allowed_file(scope_file.filename) and not scope_path:
-            ext = scope_file.filename.rsplit(".", 1)[1].lower()
-            scope_filename = secure_filename(f"{project_id}_scope.{ext}")
-            scope_path = os.path.join(SCOPE_FOLDER, scope_filename)
-            scope_file.save(scope_path)
+    # Generate filename and call PDF generator
+    filename = f"DailyLog_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    save_path = os.path.join("static/generated", filename)
 
-        # --- Generate PDF ---
-        output_pdf_path = os.path.join(GENERATED_FOLDER, f"DailyLog_{timestamp}.pdf")
+    create_daily_log_pdf(data=data,
+                         image_paths=image_paths,
+                         logo_path=logo_path,
+                         save_path=save_path,
+                         ai_analysis=include_ai,
+                         progress_report=progress_report)
 
-        create_daily_log_pdf(
-            data=form_data,
-            image_paths=photo_paths,
-            pdf_path=output_pdf_path,
-            logo_path=logo_path,
-            scope_path=scope_path,
-            enable_ai_analysis=form_data.get("enable_ai", "on").lower() in ["on", "true", "1"]
-        )
+    return {"pdf_url": f"/generated/{filename}"}
 
-        print(f"✅ PDF generated successfully: {output_pdf_path}")
-        return jsonify({"pdf_url": f"/generated/{os.path.basename(output_pdf_path)}"})
-
-    except Exception as e:
-        print("🔥 ERROR generating log:", e)
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/generated/<filename>")
-def serve_pdf(filename):
-    return send_from_directory(GENERATED_FOLDER, filename)
-
-if __name__ == "__main__":
-    app.run(debug=True)
+@app.route('/generated/<filename>')
+def serve_file(filename):
+    return send_from_directory('static/generated', filename)
