@@ -3,8 +3,12 @@ from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
 )
 from reportlab.lib.pagesizes import LETTER
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import inch
+from reportlab.lib.utils import ImageReader
 from PIL import Image as PILImage, ImageOps
+from PyPDF2 import PdfReader
 
 
 def compress_image(input_path, output_path, max_width=720, quality=60):
@@ -47,12 +51,25 @@ def create_daily_log_pdf(
     weather_icon_path=None,
     safety_sheet_path=None
 ):
-    doc = SimpleDocTemplate(save_path, pagesize=LETTER)
     styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name='Checklist', leading=18, fontSize=11))
     flowables = []
 
-    # --- PAGE 1: Header ---
-    flowables.append(Paragraph("<b>■ ■ DAILY LOG</b>", styles['Title']))
+    def footer(canvas_obj, doc):
+        canvas_obj.saveState()
+        canvas_obj.setFont('Helvetica', 9)
+        canvas_obj.drawRightString(7.5 * inch, 0.5 * inch,
+                                   f"Confidential – Do Not Duplicate without written consent from BAINS Dev Comm | Page {doc.page}")
+        canvas_obj.restoreState()
+
+    doc = SimpleDocTemplate(save_path, pagesize=LETTER)
+    doc.build_on = lambda *args, **kwargs: None  # prevent multi-page duplicate footer
+
+    # --- PAGE 1: Daily Log ---
+    if logo_path and os.path.exists(logo_path):
+        flowables.append(Image(logo_path, width=100, height=40))
+
+    flowables.append(Paragraph("<b>■ DAILY LOG</b>", styles['Title']))
     flowables.append(Spacer(1, 12))
 
     project_info = f"""
@@ -65,7 +82,7 @@ def create_daily_log_pdf(
     flowables.append(Spacer(1, 6))
 
     if weather_icon_path and os.path.exists(weather_icon_path):
-        flowables.append(Image(weather_icon_path, width=20, height=20))
+        flowables.append(Image(weather_icon_path, width=30, height=30))
         flowables.append(Spacer(1, 12))
 
     for note in ["crew_notes", "work_done", "safety_notes"]:
@@ -75,34 +92,50 @@ def create_daily_log_pdf(
 
     flowables.append(Spacer(1, 30))
     flowables.append(Paragraph("<i>Powered by Nails & Notes</i>", styles['Normal']))
-
     flowables.append(PageBreak())
 
-    # --- PAGE 2: Jobsite Photos ---
+    # --- PAGE 2: Job Site Photos ---
     if image_paths:
         flowables.append(Paragraph("<b>■ Job Site Photos</b>", styles['Heading3']))
+        row = []
+        count = 0
         for image_path in image_paths:
             compressed_path = image_path.replace("uploads/", "compressed/")
             os.makedirs(os.path.dirname(compressed_path), exist_ok=True)
             compress_image(image_path, compressed_path)
-            flowables.append(Image(compressed_path, width=320, height=240))
-            flowables.append(Spacer(1, 8))
-
+            img = Image(compressed_path, width=260, height=180)
+            row.append(img)
+            count += 1
+            if count % 2 == 0:
+                flowables.extend(row)
+                flowables.append(Spacer(1, 12))
+                row = []
+        if row:
+            flowables.extend(row)
         flowables.append(PageBreak())
 
-    # --- PAGE 3: AI Progress Report ---
+    # --- PAGE 3: AI Scope Checklist ---
     if ai_analysis and progress_report:
         flowables.append(Paragraph("<b>■ Scope Progress (AI Analyzed)</b>", styles['Heading3']))
         checklist = generate_progress_paragraph(progress_report)
-        flowables.append(Paragraph(checklist, styles['Normal']))
+        flowables.append(Paragraph(checklist, styles['Checklist']))
         flowables.append(PageBreak())
 
-    # --- PAGE 4: Safety Sheet Upload ---
+    # --- PAGE 4: Safety Sheet ---
     if safety_sheet_path and os.path.exists(safety_sheet_path):
         flowables.append(Paragraph("<b>■ Safety Sheet</b>", styles['Heading3']))
-        safety_ext = os.path.splitext(safety_sheet_path)[1].lower()
-        if safety_ext in ['.jpg', '.jpeg', '.png']:
-            flowables.append(Image(safety_sheet_path, width=400, height=300))
+        ext = os.path.splitext(safety_sheet_path)[1].lower()
+        if ext in ['.jpg', '.jpeg', '.png']:
+            flowables.append(Image(safety_sheet_path, width=480, height=360))
+        elif ext == '.pdf':
+            # Embed 1st page of PDF as image
+            reader = PdfReader(safety_sheet_path)
+            if len(reader.pages) > 0:
+                from pdf2image import convert_from_path
+                img = convert_from_path(safety_sheet_path, first_page=1, last_page=1)[0]
+                img_path = safety_sheet_path.replace(".pdf", "_safety_preview.jpg")
+                img.save(img_path, "JPEG")
+                flowables.append(Image(img_path, width=480, height=360))
 
-    doc.build(flowables)
+    doc.build(flowables, onFirstPage=footer, onLaterPages=footer)
     return save_path
