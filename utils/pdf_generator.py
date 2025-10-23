@@ -8,6 +8,27 @@ from reportlab.platypus import (
 )
 from reportlab.pdfgen import canvas
 from PyPDF2 import PdfMerger
+from PIL import Image, ExifTags
+
+
+def auto_rotate_image(path):
+    try:
+        img = Image.open(path)
+        for orientation in ExifTags.TAGS:
+            if ExifTags.TAGS[orientation] == 'Orientation':
+                break
+        exif = img._getexif()
+        if exif is not None:
+            orientation_value = exif.get(orientation)
+            if orientation_value == 3:
+                img = img.rotate(180, expand=True)
+            elif orientation_value == 6:
+                img = img.rotate(270, expand=True)
+            elif orientation_value == 8:
+                img = img.rotate(90, expand=True)
+            img.save(path)
+    except Exception:
+        pass
 
 
 def create_daily_log_pdf(data, image_paths, logo_path=None, ai_analysis="", scope_progress="", save_path="daily_log.pdf"):
@@ -30,13 +51,13 @@ def create_daily_log_pdf(data, image_paths, logo_path=None, ai_analysis="", scop
         except:
             pass
 
-    # Meta info
+    # Project Metadata
     for field in ["project_name", "location", "date", "weather"]:
         label = field.replace("_", " ").title()
         story.append(Paragraph(f"<b>{label}:</b> {data.get(field, '')}", styles['Normal']))
     story.append(Spacer(1, 12))
 
-    # Notes
+    # Notes Section
     for field in ["crew_notes", "work_done", "safety_notes"]:
         label = field.replace("_", " ").title()
         story.append(Paragraph(f"<b>{label}</b>", styles['Heading4']))
@@ -60,6 +81,7 @@ def create_daily_log_pdf(data, image_paths, logo_path=None, ai_analysis="", scop
 
     for path in image_paths[:20]:
         try:
+            auto_rotate_image(path)  # Fix orientation before drawing
             img = ImageReader(path)
             c.drawImage(img, x, y, width=240, height=180, preserveAspectRatio=True)
             x += 270
@@ -83,9 +105,9 @@ def create_daily_log_pdf(data, image_paths, logo_path=None, ai_analysis="", scop
         c.drawRightString(580, 20, f"Page {page_num}")
         c.save()
     else:
-        open(temp_photo_pdf, 'w').close()  # create empty if no images
+        open(temp_photo_pdf, 'w').close()
 
-    # 🤖 PAGE 3: AI/AR + Scope
+    # 🤖 PAGE 3: AI + Scope
     include_analysis = ai_analysis.strip() or scope_progress.strip()
     if include_analysis:
         c = canvas.Canvas(temp_analysis_pdf, pagesize=A4)
@@ -115,7 +137,7 @@ def create_daily_log_pdf(data, image_paths, logo_path=None, ai_analysis="", scop
                 c.drawString(40, y, line)
                 y -= 16
 
-        # Footer on last page
+        # Final footer
         c.setFont("Helvetica-Oblique", 10)
         c.drawCentredString(A4[0]/2, 30, "Confidential – Do Not Duplicate without written consent from BAINS Dev Comm")
         c.setFont("Helvetica", 10)
@@ -135,9 +157,9 @@ def create_daily_log_pdf(data, image_paths, logo_path=None, ai_analysis="", scop
     merger.close()
 
     # 🧹 Cleanup
-    for temp_file in [temp_log_pdf, temp_photo_pdf, temp_analysis_pdf]:
+    for f in [temp_log_pdf, temp_photo_pdf, temp_analysis_pdf]:
         try:
-            os.remove(temp_file)
+            os.remove(f)
         except:
             pass
 
