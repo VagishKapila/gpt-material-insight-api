@@ -4,7 +4,7 @@ from reportlab.lib.utils import ImageReader
 from PIL import Image, ImageOps
 import os
 
-def create_daily_log_pdf(form_data, photo_paths, output_path, logo_path=None, weather=None, enable_ai_analysis=False):
+def create_daily_log_pdf(form_data, photo_paths, output_path, logo_path=None, scope_path=None, weather=None, enable_ai_analysis=False):
     c = canvas.Canvas(output_path, pagesize=letter)
     width, height = letter
     margin = 50
@@ -23,7 +23,7 @@ def create_daily_log_pdf(form_data, photo_paths, output_path, logo_path=None, we
             print(f"Error processing image {image_path}: {e}")
             return image_path
 
-    # ------------------ PAGE 1: Daily Log Header ------------------
+    # ------------------ PAGE 1: Daily Log ------------------
     c.setFont("Helvetica-Bold", 20)
     c.drawString(margin, height - margin, "DAILY LOG")
 
@@ -34,10 +34,10 @@ def create_daily_log_pdf(form_data, photo_paths, output_path, logo_path=None, we
             pass
 
     c.setFont("Helvetica", 12)
-    y = height - 80
+    y = height - 100
     fields = [
-        "project_name", "client_name", "location", "job_number", "gc_name",
-        "crew_notes", "work_done", "safety_notes", "equipment_used"
+        "project_name", "client_name", "location", "job_number",
+        "crew_notes", "work_done", "safety_notes"
     ]
 
     for field in fields:
@@ -53,6 +53,10 @@ def create_daily_log_pdf(form_data, photo_paths, output_path, logo_path=None, we
     if weather:
         c.drawString(margin, y, f"Weather: {weather}")
         y -= 18
+
+    if scope_path:
+        c.setFont("Helvetica-Oblique", 11)
+        c.drawString(margin, y - 10, f"📄 Scope of Work Linked: {os.path.basename(scope_path)}")
 
     c.showPage()
 
@@ -82,34 +86,33 @@ def create_daily_log_pdf(form_data, photo_paths, output_path, logo_path=None, we
 
     c.showPage()
 
-    # ------------------ PAGE 3: AI / Material Analysis ------------------
+    # ------------------ PAGE 3: AI / AR Analysis ------------------
     if enable_ai_analysis:
         c.setFont("Helvetica-Bold", 16)
-        c.drawString(margin, height - margin, "AI / AR Analysis & Material Comparison")
+        c.drawString(margin, height - margin, "AI / AR Analysis & Work Progress")
 
         c.setFont("Helvetica", 12)
         y = height - 100
 
-        # Example placeholder data — this would later be replaced by GPT/AI output
-        c.drawString(margin, y, "🔍 Detected Material: Sheetrock (Drywall)")
+        c.drawString(margin, y, "📊 AI Review Summary:")
         y -= 20
-        c.drawString(margin, y, "💲 Lowe’s - $8/sheet")
+        c.drawString(margin, y, "• Detected progress based on visual site updates.")
         y -= 20
-        c.drawString(margin, y, "💲 Home Depot - $8.75/sheet")
-        y -= 40
-        c.drawString(margin, y, "📐 Suggested Measurement Overlay: 12ft × 8ft wall section")
-        y -= 40
-        c.drawString(margin, y, "📌 Tip: Replace water-damaged panels within 48 hrs of exposure.")
+        c.drawString(margin, y, "• Comparing current work vs Scope of Work file.")
         y -= 20
+        c.drawString(margin, y, "• Potential out-of-scope activities flagged for review (Change Orders).")
 
-        if y < margin:
-            c.showPage()
+        y -= 40
+        c.drawString(margin, y, "⚙️ Next Update:")
+        y -= 20
+        c.drawString(margin, y, "This section will evolve to show percentage completion from AI scope matching.")
 
-    # ------------------ SAVE & CLEANUP ------------------
+    # ------------------ FOOTER ------------------
     c.setFont("Helvetica-Oblique", 9)
-    c.drawString(margin, 30, "Powered by Nails & Notes: Construction Daily Log AI")
+    c.drawString(margin, 30, "Powered by Nails & Notes: Construction Daily Log AI © 2025")
     c.save()
 
+    # Cleanup
     for f in temp_files:
         try:
             os.remove(f)
