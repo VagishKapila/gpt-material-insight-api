@@ -79,13 +79,11 @@ def generate_form():
         # Final PDF output
         output_path = os.path.join(GENERATED_FOLDER, f"DailyLog_{timestamp}.pdf")
         create_daily_log_pdf(
-            form_data=form,
-            photo_paths=saved_photo_paths,
-            output_path=output_path,
-            logo_path=logo_path,
-            weather=form.get("weather", ""),
-            enable_ai_analysis=enable_ai
-        )
+    form_data=data,
+    image_paths=saved_photo_paths,
+    output_path=output_pdf_path,
+    logo_path=logo_path
+)
 
         clean_temp_images()
         return jsonify({"pdf_url": f"/generated/{os.path.basename(output_path)}"})
