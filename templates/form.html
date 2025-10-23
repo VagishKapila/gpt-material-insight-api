@@ -3,57 +3,95 @@
 <head>
   <meta charset="UTF-8">
   <title>Daily Log Submission</title>
-  <script>
-    function fetchWeather(location) {
-      if (location.length < 2) return;
-      fetch(`/get_weather?location=${encodeURIComponent(location)}`)
-        .then(response => response.json())
-        .then(data => {
-          if (data.weather) {
-            document.getElementById('weather_display').textContent = data.weather;
-            document.getElementById('weather').value = data.weather;
-          } else {
-            document.getElementById('weather_display').textContent = "Weather unavailable";
-          }
-        })
-        .catch(() => {
-          document.getElementById('weather_display').textContent = "Weather fetch error";
-        });
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
     }
-  </script>
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    input[type="text"], textarea {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+    }
+    .checkbox-container {
+      margin-top: 15px;
+    }
+    .button-group {
+      margin-top: 25px;
+    }
+    .button-group button {
+      margin-right: 10px;
+      padding: 10px 15px;
+    }
+  </style>
 </head>
 <body>
-  <h1>Daily Log Submission</h1>
-  <form id="dailyForm" enctype="multipart/form-data" method="post" action="/generate_form">
-    <label>Date: <input type="date" name="date" required></label><br>
-    <label>Project Name: <input type="text" name="project_name" required></label><br>
-    <label>Client Name: <input type="text" name="client_name"></label><br>
-    <label>Project Location:
-      <input type="text" id="location" name="location" oninput="fetchWeather(this.value)">
-    </label><br>
-    <label>General Contractor: <input type="text" name="general_contractor"></label><br>
-    <label>Crew Notes: <textarea name="crew_notes"></textarea></label><br>
-    <label>Work Done: <textarea name="work_done"></textarea></label><br>
-    <label>Equipment Used: <textarea name="equipment_used"></textarea></label><br>
-    <label>Safety Notes: <textarea name="safety_notes"></textarea></label><br>
-    <label>Material Summary: <textarea name="material_summary"></textarea></label><br>
-    <label>Hours Worked: <input type="text" name="hours_worked"></label><br>
 
-    <label>Weather:
-      <div id="weather_display">Waiting for location...</div>
-      <input type="hidden" id="weather" name="weather">
-    </label><br>
+  <h2>📝 Submit Your Daily Log</h2>
 
-    <label>Upload Scope of Work (.pdf, .docx, .xlsx): 
-      <input type="file" name="scope_file" accept=".pdf,.docx,.xlsx">
-    </label><br>
+  <form action="/generate_form" method="post" enctype="multipart/form-data">
+    
+    <label for="project_name">Project Name</label>
+    <input type="text" id="project_name" name="project_name" required>
 
-    <label>Upload Photos: <input type="file" name="photos" multiple accept="image/*"></label><br>
-    <label>Upload Logo: <input type="file" name="logo" accept="image/*"></label><br>
+    <label for="crew_notes">Crew Notes</label>
+    <textarea id="crew_notes" name="crew_notes" rows="3"></textarea>
 
-    <label><input type="checkbox" name="include_page_2"> Include Page 2 (AI/AR Analysis)</label><br>
+    <label for="work_done">Work Done</label>
+    <textarea id="work_done" name="work_done" rows="3"></textarea>
 
-    <button type="submit">Generate PDF</button>
+    <label for="safety_notes">Safety Notes</label>
+    <textarea id="safety_notes" name="safety_notes" rows="2"></textarea>
+
+    <label for="equipment_used">Equipment Used</label>
+    <textarea id="equipment_used" name="equipment_used" rows="2"></textarea>
+
+    <label for="weather">Weather</label>
+    <input type="text" id="weather" name="weather">
+
+    <label for="images">Upload Job Site Photos</label>
+    <input type="file" id="images" name="images" accept="image/*" multiple required>
+
+    <label for="logo">Optional Logo Upload</label>
+    <input type="file" id="logo" name="logo" accept="image/*">
+
+    <div class="checkbox-container">
+      <input type="checkbox" id="run_ai" name="run_ai" checked>
+      <label for="run_ai" style="display:inline;">Include AI/AR Page 3 (default ON)</label>
+    </div>
+
+    <div class="button-group">
+      <button type="submit">Generate PDF</button>
+      <button type="button" onclick="clearForm()">Clear All</button>
+    </div>
+
   </form>
+
+  <script>
+    const lastData = {{ last_data | tojson | safe }};
+    
+    window.onload = () => {
+      if (lastData) {
+        const fields = ['crew_notes', 'work_done', 'safety_notes', 'equipment_used', 'project_name'];
+        fields.forEach(field => {
+          if (lastData[field]) {
+            document.getElementById(field).value = lastData[field];
+          }
+        });
+      }
+    };
+
+    function clearForm() {
+      const inputs = document.querySelectorAll('input[type="text"], textarea');
+      inputs.forEach(input => input.value = '');
+      document.getElementById('run_ai').checked = true;
+    }
+  </script>
+
 </body>
 </html>
