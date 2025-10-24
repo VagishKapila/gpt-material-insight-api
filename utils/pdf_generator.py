@@ -40,23 +40,34 @@ def create_daily_log_pdf(data, image_paths, output_path, logo_path=None, ai_anal
         elements.append(Paragraph("Jobsite Photos", header_style))
         elements.append(Spacer(1, 0.2 * inch))
 
-        for i, img_path in enumerate(image_paths):
-            try:
-                pil_img = PILImage.open(img_path)
-                width, height = pil_img.size
-                if width > height:
-                    pil_img = pil_img.rotate(90, expand=True)
-                    pil_img.save(img_path)
+       for i, img_path in enumerate(image_paths):
+    try:
+        pil_img = PILImage.open(img_path)
 
-                img = Image(img_path, width=3.2 * inch, height=2.4 * inch)
-                img.hAlign = 'CENTER'
-                elements.append(img)
-                if i % 2 == 1:
-                    elements.append(PageBreak())
-                else:
-                    elements.append(Spacer(1, 0.2 * inch))
-            except Exception as e:
-                print(f"Error loading image {img_path}:", e)
+        # Rotate if landscape
+        if pil_img.width > pil_img.height:
+            pil_img = pil_img.rotate(90, expand=True)
+
+        # Resize to max width of 1600px (keep aspect ratio)
+        if pil_img.width > 1600:
+            ratio = 1600 / pil_img.width
+            new_height = int(pil_img.height * ratio)
+            pil_img = pil_img.resize((1600, new_height), PILImage.Resampling.LANCZOS)
+
+        pil_img.save(img_path)
+
+        # Now use resized image in ReportLab
+        img = Image(img_path, width=3.2 * inch, height=2.4 * inch)
+        img.hAlign = 'CENTER'
+        elements.append(img)
+
+        if i % 2 == 1:
+            elements.append(PageBreak())
+        else:
+            elements.append(Spacer(1, 0.2 * inch))
+
+    except Exception as e:
+        print(f"Error loading image {img_path}:", e)
 
     # AI/AR Analysis Page
     if ai_analysis:
