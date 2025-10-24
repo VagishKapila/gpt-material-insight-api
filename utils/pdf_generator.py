@@ -1,123 +1,113 @@
-from flask import Flask, render_template, request, jsonify
+# pdf_generator.py — Full, Clean Version with Debug Comments
+
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.platypus import Image as PlatypusImage, Paragraph, SimpleDocTemplate, Spacer, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.units import inch
+from reportlab.lib import colors
+from PyPDF2 import PdfMerger
+from PIL import Image
 import os
-import uuid
-from werkzeug.utils import secure_filename
-from utils.pdf_generator import create_daily_log_pdf
-from utils.ai_utils import analyze_images
-from utils.scope_utils import analyze_scope_progress
-from utils.weather import get_weather_icon_path
-from docx import Document
+import io
 
-app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
-app.config['COMPRESSED_FOLDER'] = 'static/compressed'
-app.config['GENERATED_FOLDER'] = 'static/generated'
-app.config['SCOPE_FOLDER'] = 'static/scope_docs'
-app.config['LOGO_FOLDER'] = 'static/logos'
+def create_daily_log_pdf(data, image_paths, logo_path=None, ai_analysis=None, progress_report=None, save_path='output.pdf', weather_icon_path=None, safety_sheet_path=None):
+    print("[DEBUG] Starting PDF generation")
 
-# Ensure folders exist
-for folder in [
-    app.config['UPLOAD_FOLDER'], app.config['COMPRESSED_FOLDER'],
-    app.config['GENERATED_FOLDER'], app.config['SCOPE_FOLDER'], app.config['LOGO_FOLDER']
-]:
-    os.makedirs(folder, exist_ok=True)
+    styles = getSampleStyleSheet()
+    centered = ParagraphStyle(name='centered', parent=styles['Heading2'], alignment=TA_CENTER)
+    story = []
 
-@app.route('/')
-def index():
-    return 'Server is running'
+    # Page 1 – Header
+    print("[DEBUG] Creating Page 1")
+    doc = SimpleDocTemplate(save_path, pagesize=letter)
+    if logo_path and os.path.exists(logo_path):
+        story.append(PlatypusImage(logo_path, width=150, height=60))
+    story.append(Paragraph("DAILY LOG", centered))
+    story.append(Spacer(1, 12))
 
-@app.route('/form')
-def form():
-    return render_template('form.html')
+    fields = [
+        ("Project Name", data.get("project_name", "")),
+        ("Location", data.get("location", "")),
+        ("Date", data.get("date", "")),
+        ("Crew Notes", data.get("crew_notes", "")),
+        ("Work Done", data.get("work_done", "")),
+        ("Safety Notes", data.get("safety_notes", "")),
+    ]
 
-@app.route('/get_weather', methods=['POST'])
-def get_weather():
-    location = request.form['location']
-    weather = os.popen(f"curl -s 'https://wttr.in/{location}?format=3'").read().strip()
-    return jsonify({'weather': weather})
+    for title, val in fields:
+        story.append(Paragraph(f"<b>{title}:</b> {val}", styles["Normal"]))
+        story.append(Spacer(1, 6))
 
-@app.route('/generated/<filename>')
-def serve_file(filename):
-    return app.send_static_file(f'generated/{filename}')
+    if weather_icon_path and os.path.exists(weather_icon_path):
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("<b>Weather:</b>", styles["Normal"]))
+        story.append(PlatypusImage(weather_icon_path, width=50, height=50))
 
-@app.route('/generate_form', methods=['POST'])
-def generate_form():
-    data = request.form.to_dict()
-    files = request.files
+    story.append(PageBreak())
 
-    # Save job site photos
-    image_paths = []
-    for file in request.files.getlist("images"):
-        if file.filename:
-            filename = secure_filename(file.filename)
-            path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(path)
-            image_paths.append(path)
+    # Page 2 – Images
+    print("[DEBUG] Adding job site images")
+    for img_path in image_paths:
+        try:
+            img = Image.open(img_path)
+            if img.width > img.height:
+                img = img.rotate(90, expand=True)
+            img.thumbnail((500, 500))
+            buffer = io.BytesIO()
+            img.save(buffer, format='PNG')
+            buffer.seek(0)
+            story.append(PlatypusImage(buffer, width=img.width * 0.75, height=img.height * 0.75))
+            story.append(Spacer(1, 12))
+        except Exception as e:
+            print(f"[ERROR] Failed to embed image {img_path}: {e}")
 
-    # Save logo
-    logo_file = files.get('logo')
-    logo_path = None
-    if logo_file and logo_file.filename:
-        logo_filename = secure_filename(logo_file.filename)
-        logo_path = os.path.join(app.config['LOGO_FOLDER'], logo_filename)
-        logo_file.save(logo_path)
+    story.append(PageBreak())
 
-    # Save safety sheet
-    safety_file = files.get('safety_sheet')
-    safety_path = None
-    if safety_file and safety_file.filename:
-        safety_filename = secure_filename(safety_file.filename)
-        safety_path = os.path.join(app.config['UPLOAD_FOLDER'], safety_filename)
-        safety_file.save(safety_path)
+    # Page 3 – AI/Scope Analysis
+    if ai_analysis or progress_report:
+        print("[DEBUG] Adding AI/AR analysis page")
+        story.append(Paragraph("<b>AI/AR Analysis</b>", styles["Heading2"]))
+        story.append(Spacer(1, 12))
+        if ai_analysis:
+            story.append(Paragraph(f"<b>AI Notes:</b><br/>{ai_analysis}", styles["Normal"]))
+            story.append(Spacer(1, 12))
+        if progress_report:
+            story.append(Paragraph(f"<b>Scope Progress:</b><br/>{progress_report}", styles["Normal"]))
+            story.append(Spacer(1, 12))
+        story.append(PageBreak())
 
-    # Save scope doc (if present) and convert to text
-    scope_file = files.get('scope_doc')
-    scope_text = ""
-    if scope_file and scope_file.filename:
-        scope_filename = secure_filename(scope_file.filename)
-        scope_path = os.path.join(app.config['SCOPE_FOLDER'], scope_filename)
-        scope_file.save(scope_path)
+    # Page 4 – Safety Sheet
+    if safety_sheet_path and os.path.exists(safety_sheet_path):
+        ext = os.path.splitext(safety_sheet_path)[1].lower()
+        print("[DEBUG] Adding safety sheet")
+        if ext in ['.jpg', '.jpeg', '.png']:
+            try:
+                img = Image.open(safety_sheet_path)
+                img.thumbnail((500, 700))
+                buffer = io.BytesIO()
+                img.save(buffer, format='PNG')
+                buffer.seek(0)
+                story.append(Paragraph("<b>Safety Sheet</b>", styles["Heading2"]))
+                story.append(Spacer(1, 12))
+                story.append(PlatypusImage(buffer, width=img.width * 0.75, height=img.height * 0.75))
+            except Exception as e:
+                print(f"[ERROR] Failed to render safety image: {e}")
+        elif ext == '.pdf':
+            try:
+                doc.build(story)
+                merger = PdfMerger()
+                merger.append(save_path)
+                merger.append(safety_sheet_path)
+                merger.write(save_path)
+                merger.close()
+                print("[DEBUG] PDF with attached safety PDF created")
+                return
+            except Exception as e:
+                print(f"[ERROR] Failed to append safety PDF: {e}")
+        else:
+            print("[WARN] Unsupported safety sheet file format")
 
-        ext = os.path.splitext(scope_path)[1].lower()
-        if ext == ".docx":
-            doc = Document(scope_path)
-            scope_text = "\n".join([para.text for para in doc.paragraphs if para.text.strip()])
-        elif ext == ".txt":
-            with open(scope_path, "r") as f:
-                scope_text = f.read()
-
-    # Weather icon
-    weather_desc = data.get("weather", "")
-    weather_icon_path = get_weather_icon_path(weather_desc)
-
-    # AI Analysis
-    ai_analysis = ""
-    progress_report = ""
-    if data.get('enable_ai') == 'on':
-        ai_analysis = analyze_images(image_paths)
-        if scope_text:
-            log_text = " ".join([
-                data.get("crew_notes", ""),
-                data.get("work_done", ""),
-                data.get("safety_notes", "")
-            ])
-            progress_report = analyze_scope_progress(scope_text, log_text)
-
-    # Generate PDF
-    pdf_filename = f"Log_{uuid.uuid4().hex}.pdf"
-    save_path = os.path.join(app.config['GENERATED_FOLDER'], pdf_filename)
-    create_daily_log_pdf(
-        data,
-        image_paths,
-        logo_path=logo_path,
-        ai_analysis=ai_analysis,
-        progress_report=progress_report,
-        save_path=save_path,
-        weather_icon_path=weather_icon_path,
-        safety_sheet_path=safety_path
-    )
-
-    return jsonify({'pdf_url': f"/generated/{pdf_filename}"})
-
-if __name__ == '__main__':
-    app.run(debug=True)
+    print("[DEBUG] Finalizing PDF")
+    doc.build(story)
