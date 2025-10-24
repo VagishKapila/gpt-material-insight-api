@@ -1,171 +1,112 @@
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
-from reportlab.pdfgen import canvas
-from reportlab.platypus import Image as RLImage, Paragraph, SimpleDocTemplate, Spacer
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
-from PyPDF2 import PdfMerger
-from PIL import Image, ImageOps
+from PyPDF2 import PdfReader, PdfWriter
+from PIL import Image as PILImage, ExifTags
 import os
+import io
 
-def create_daily_log_pdf(data, image_paths, logo_path=None, ai_analysis=None,
-                         progress_report=None, save_path="daily_log.pdf",
-                         weather_icon_path=None, safety_sheet_path=None):
-    temp_files = []
+def fix_image_orientation(path):
+    try:
+        image = PILImage.open(path)
+        for orientation in ExifTags.TAGS.keys():
+            if ExifTags.TAGS[orientation] == 'Orientation':
+                break
+        exif = image._getexif()
+        if exif is not None:
+            orientation_value = exif.get(orientation, None)
+            if orientation_value == 3:
+                image = image.rotate(180, expand=True)
+            elif orientation_value == 6:
+                image = image.rotate(270, expand=True)
+            elif orientation_value == 8:
+                image = image.rotate(90, expand=True)
+        return image
+    except Exception:
+        return PILImage.open(path)  # fallback
 
-    # --- Page 1: Daily Log Metadata ---
-    page1_path = save_path.replace(".pdf", "_page1.pdf")
-    c = canvas.Canvas(page1_path, pagesize=letter)
-    width, height = letter
+def create_temp_image(image: PILImage.Image) -> str:
+    temp_path = f"temp_{os.getpid()}.jpg"
+    image.save(temp_path, format="JPEG")
+    return temp_path
 
-    # Logo
-    if logo_path and os.path.exists(logo_path):
-        try:
-            logo_img = Image.open(logo_path)
-            logo_img = ImageOps.exif_transpose(logo_img)
-            logo_img.thumbnail((120, 120))
-            logo_img.save("temp_logo.png")
-            c.drawImage("temp_logo.png", inch, height - 1.5 * inch, width=1.5 * inch, preserveAspectRatio=True)
-            temp_files.append("temp_logo.png")
-        except Exception as e:
-            print(f"⚠️ Error embedding logo: {e}")
+def add_footer(canvas, doc):
+    footer_text = "Confidential – Do Not Duplicate without written consent from BAINS Dev Comm"
+    canvas.saveState()
+    canvas.setFont("Helvetica", 8)
+    canvas.drawString(inch, 0.5 * inch, footer_text)
+    canvas.drawRightString(7.5 * inch, 0.5 * inch, f"Page {doc.page}")
+    canvas.restoreState()
 
-    # Header
-    c.setFont("Helvetica-Bold", 20)
-    c.drawCentredString(width / 2, height - inch, "DAILY LOG")
-
-    # Project Metadata
-    c.setFont("Helvetica", 12)
-    y = height - 2 * inch
-    for key in ["project_name", "location", "date"]:
-        if key in data:
-            c.drawString(inch, y, f"{key.replace('_', ' ').title()}: {data[key]}")
-            y -= 0.3 * inch
-
-    # Weather
-    if weather_icon_path and os.path.exists(weather_icon_path):
-        try:
-            c.drawImage(weather_icon_path, width - 1.5 * inch, height - 1.5 * inch, width=1 * inch, preserveAspectRatio=True)
-        except Exception as e:
-            print(f"⚠️ Error embedding weather icon: {e}")
-
-    # Notes
-    y -= 0.2 * inch
-    for label in ["crew_notes", "work_done", "safety_notes"]:
-        if data.get(label):
-            c.setFont("Helvetica-Bold", 12)
-            c.drawString(inch, y, label.replace("_", " ").title() + ":")
-            y -= 0.2 * inch
-            c.setFont("Helvetica", 11)
-            text = c.beginText(inch, y)
-            text.setLeading(14)
-            for line in data[label].split('\n'):
-                text.textLine(line.strip())
-            c.drawText(text)
-            y = text.getY() - 0.3 * inch
-
-    c.setFont("Helvetica-Oblique", 8)
-    c.drawCentredString(width / 2, 0.5 * inch, "Confidential – Do Not Duplicate without written consent from BAINS Dev Comm")
-    c.showPage()
-    c.save()
-
-    # --- Page 2: Images ---
-    page2_path = save_path.replace(".pdf", "_page2.pdf")
-    c = canvas.Canvas(page2_path, pagesize=letter)
-    x, y = inch, height - inch
-    max_w = 3.5 * inch
-    max_h = 3.5 * inch
-
-    for idx, img_path in enumerate(image_paths):
-        try:
-            img = Image.open(img_path)
-            img = ImageOps.exif_transpose(img)
-            img.thumbnail((max_w, max_h))
-            safe_path = f"temp_img_{idx}.jpg"
-            img.save(safe_path)
-            temp_files.append(safe_path)
-
-            c.drawImage(safe_path, x, y - img.height, width=img.width, height=img.height)
-
-            x += max_w + 0.5 * inch
-            if x + max_w > width:
-                x = inch
-                y -= max_h + inch
-                if y < inch:
-                    c.showPage()
-                    x, y = inch, height - inch
-        except Exception as e:
-            print(f"⚠️ Failed to embed image {img_path}: {e}")
-            continue
-
-    c.setFont("Helvetica-Oblique", 8)
-    c.drawCentredString(width / 2, 0.5 * inch, "Confidential – Do Not Duplicate without written consent from BAINS Dev Comm")
-    c.showPage()
-    c.save()
-
-    # --- Page 3: AI Analysis / Scope Progress ---
-    page3_path = save_path.replace(".pdf", "_page3.pdf")
-    doc = SimpleDocTemplate(page3_path, pagesize=letter)
+def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_report, save_path, weather_icon_path, safety_sheet_path):
+    doc = SimpleDocTemplate(save_path, pagesize=letter)
     styles = getSampleStyleSheet()
-    story = []
+    elements = []
 
-    story.append(Paragraph("<b>AI & Scope Notes</b>", styles["Title"]))
-    story.append(Spacer(1, 0.25 * inch))
+    # Page 1 – Daily Log
+    elements.append(Paragraph("DAILY LOG", styles['Title']))
+    if logo_path:
+        elements.append(Image(logo_path, width=100, height=50))
+    elements.append(Spacer(1, 0.2 * inch))
+    for key in ['project_name', 'client_name', 'location', 'date', 'weather']:
+        if key in data:
+            elements.append(Paragraph(f"<b>{key.replace('_', ' ').title()}:</b> {data[key]}", styles['Normal']))
+    if weather_icon_path:
+        elements.append(Image(weather_icon_path, width=40, height=40))
+    elements.append(Spacer(1, 0.2 * inch))
+    for section in ['crew_notes', 'work_done', 'safety_notes']:
+        if section in data:
+            elements.append(Paragraph(f"<b>{section.replace('_', ' ').title()}:</b>", styles['Heading3']))
+            elements.append(Paragraph(data[section], styles['Normal']))
+            elements.append(Spacer(1, 0.15 * inch))
+    elements.append(PageBreak())
 
-    if ai_analysis:
-        story.append(Paragraph("<b>AI Image Summary:</b><br/>" + ai_analysis, styles["Normal"]))
-        story.append(Spacer(1, 0.2 * inch))
+    # Page 2 – Photos
+    elements.append(Paragraph("JOB SITE PHOTOS", styles['Title']))
+    for i, img_path in enumerate(image_paths):
+        pil_image = fix_image_orientation(img_path)
+        temp_img = create_temp_image(pil_image)
+        elements.append(Image(temp_img, width=5*inch, height=3*inch))
+        elements.append(Spacer(1, 0.1 * inch))
+    elements.append(PageBreak())
 
-    if progress_report:
-        story.append(Paragraph("<b>Scope Completion Progress:</b><br/>" + progress_report, styles["Normal"]))
-        story.append(Spacer(1, 0.2 * inch))
+    # Page 3 – AI / AR Analysis
+    if ai_analysis or progress_report:
+        elements.append(Paragraph("AI / AR COMPARISON", styles['Title']))
+        if ai_analysis:
+            elements.append(Paragraph("<b>AI Analysis:</b>", styles['Heading3']))
+            elements.append(Paragraph(ai_analysis, styles['Normal']))
+        if progress_report:
+            elements.append(Spacer(1, 0.2 * inch))
+            elements.append(Paragraph("<b>Scope Progress:</b>", styles['Heading3']))
+            elements.append(Paragraph(progress_report, styles['Normal']))
+        elements.append(PageBreak())
 
-    doc.build(story)
-
-    # --- Page 4: Safety Sheet ---
-    safety_path = save_path.replace(".pdf", "_page4.pdf")
-    c = canvas.Canvas(safety_path, pagesize=letter)
+    # Page 4 – Safety Sheet
     if safety_sheet_path and os.path.exists(safety_sheet_path):
-        try:
-            ext = os.path.splitext(safety_sheet_path)[1].lower()
-            if ext in [".jpg", ".jpeg", ".png"]:
-                img = Image.open(safety_sheet_path)
-                img = ImageOps.exif_transpose(img)
-                img.thumbnail((width - 2 * inch, height - 2 * inch))
-                temp_safe = "temp_safety.jpg"
-                img.save(temp_safe)
-                temp_files.append(temp_safe)
-                c.drawImage(temp_safe, inch, inch, width=img.width, height=img.height)
-            else:
-                c.setFont("Helvetica", 12)
-                c.drawString(inch, height - inch, "🛠️ Safety file format not supported for preview (e.g., .pdf, .docx)")
-        except Exception as e:
-            print(f"❌ Error rendering safety sheet: {e}")
-            c.setFont("Helvetica", 12)
-            c.drawString(inch, height - inch, f"⚠️ Error loading safety sheet: {e}")
-    else:
-        c.setFont("Helvetica", 12)
-        c.drawString(inch, height - inch, "❌ No safety sheet uploaded")
+        elements.append(Paragraph("DAILY SAFETY SHEET", styles['Title']))
+        if safety_sheet_path.lower().endswith((".jpg", ".jpeg", ".png")):
+            pil_image = fix_image_orientation(safety_sheet_path)
+            temp_img = create_temp_image(pil_image)
+            elements.append(Image(temp_img, width=6.5*inch, height=9*inch))
+        elif safety_sheet_path.lower().endswith(".pdf"):
+            try:
+                with open(safety_sheet_path, 'rb') as f:
+                    reader = PdfReader(f)
+                    writer = PdfWriter()
+                    for page in reader.pages:
+                        writer.add_page(page)
+                    with open("temp_safety.pdf", "wb") as out_f:
+                        writer.write(out_f)
+                elements.append(Paragraph("See attached PDF", styles['Normal']))
+            except Exception as e:
+                elements.append(Paragraph(f"Failed to include PDF: {str(e)}", styles['Normal']))
+        elements.append(PageBreak())
 
-    c.setFont("Helvetica-Oblique", 8)
-    c.drawCentredString(width / 2, 0.5 * inch, "Confidential – Do Not Duplicate without written consent from BAINS Dev Comm")
-    c.showPage()
-    c.save()
+    doc.build(elements, onFirstPage=add_footer, onLaterPages=add_footer)
 
-    # --- Merge All Pages ---
-    merger = PdfMerger()
-    for path in [page1_path, page2_path, page3_path, safety_path]:
-        merger.append(path)
-        temp_files.append(path)
-
-    merger.write(save_path)
-    merger.close()
-
-    # Cleanup
-    for f in temp_files:
-        try:
+    # Clean up temporary files
+    for f in os.listdir():
+        if f.startswith("temp_") and f.endswith(".jpg"):
             os.remove(f)
-        except Exception:
-            pass
-
-    print(f"✅ PDF generated at: {save_path}")
