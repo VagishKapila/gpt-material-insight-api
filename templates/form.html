@@ -23,7 +23,9 @@
       margin-top: 15px;
       font-weight: bold;
     }
-    input[type="text"], input[type="date"], textarea {
+    input[type="text"],
+    input[type="date"],
+    textarea {
       width: 100%;
       padding: 10px;
       margin-top: 5px;
@@ -64,50 +66,40 @@
     async function autofillWeather() {
       const location = document.getElementById('location').value;
       if (location.length > 2) {
-        try {
-          const res = await fetch('/get_weather', {
-            method: 'POST',
-            body: new URLSearchParams({ location }),
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded'
-            }
-          });
-          const json = await res.json();
-          document.getElementById('weather').value = json.weather;
-        } catch (err) {
-          alert("Failed to fetch weather info. Try again later.");
-          console.error(err);
-        }
+        const res = await fetch('/get_weather', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `location=${encodeURIComponent(location)}`
+        });
+        const data = await res.json();
+        document.getElementById('weather').value = data.weather || "";
       }
     }
 
     function clearForm() {
-      const inputs = document.querySelectorAll("input, textarea");
-      inputs.forEach(input => {
-        if (input.type !== "file") input.value = "";
-      });
+      const form = document.getElementById("dailyLogForm");
+      form.reset();
       document.getElementById("enable_ai").checked = true;
     }
 
     async function handleSubmit(e) {
       e.preventDefault();
-      const form = document.getElementById("dailyLogForm");
-      const formData = new FormData(form);
+
+      const formData = new FormData(document.getElementById("dailyLogForm"));
       try {
         const res = await fetch("/generate_form", {
           method: "POST",
-          body: formData
+          body: formData,
         });
         const data = await res.json();
         if (data.pdf_url) {
-          window.open(data.pdf_url, '_blank');
+          window.open(data.pdf_url, "_blank");
         } else {
-          alert("Error generating PDF.");
-          console.error("PDF URL not found in response.", data);
+          alert("Error generating PDF");
         }
       } catch (err) {
-        alert("Submission failed. Check console for error.");
-        console.error(err);
+        console.error("Submission error:", err);
+        alert("Submission failed. Check console for details.");
       }
     }
   </script>
@@ -134,23 +126,23 @@
       <label>Safety Notes</label>
       <textarea name="safety_notes"></textarea>
 
-      <label>Upload Safety Sheet (PDF/PNG/JPG)</label>
-      <input type="file" name="safety_sheet" accept=".pdf,.jpg,.jpeg,.png" />
+      <label>Upload Safety Sheet (JPG, PNG, PDF)</label>
+      <input type="file" name="safety_sheet" id="safety_sheet" accept=".jpg,.jpeg,.png,.pdf" />
 
       <label>Weather</label>
       <input type="text" name="weather" id="weather" placeholder="Auto-filled if location entered" />
 
       <label>Upload Job Site Photos (Max 20)</label>
-      <input type="file" name="images" multiple accept="image/*" />
+      <input type="file" name="images" id="images" multiple accept="image/*" />
 
-      <label>Upload Logo (Optional)</label>
-      <input type="file" name="logo" accept="image/*" />
+      <label>Upload Your Logo (Optional)</label>
+      <input type="file" name="logo" id="logo" accept="image/*" />
 
-      <label>Scope of Work Upload (Once Per Project)</label>
-      <input type="file" name="scope_doc" accept=".docx,.txt" />
+      <label>Scope of Work Upload (One-Time Only)</label>
+      <input type="file" name="scope_doc" id="scope_doc" accept=".pdf,.doc,.docx,.txt" />
 
       <div class="checkbox">
-        <label><input type="checkbox" name="enable_ai" id="enable_ai" checked /> Run AI/AR Analysis</label>
+        <label><input type="checkbox" name="enable_ai" id="enable_ai" checked /> Run AI/AR Comparison Analysis</label>
       </div>
 
       <button type="submit">Generate PDF</button>
@@ -159,7 +151,7 @@
   </div>
 
   <footer>
-    Powered by <strong>Nails & Notes: Construction Daily Log AI</strong> — © 2025
+    Powered by <strong>Nails & Notes: Construction Daily Log AI</strong> © 2025 — Created by Vagish Kapila
   </footer>
 </body>
 </html>
