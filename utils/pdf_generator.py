@@ -79,22 +79,23 @@ def create_daily_log_pdf(data, image_paths, logo_path=None, ai_analysis="", prog
 
     elements.append(PageBreak())
 
-    # ---- Page 3: AI/AR Analysis ----
-    elements.append(Paragraph("AI/AR Analysis", header_style))
-    elements.append(Spacer(1, 12))
-    if ai_analysis:
-        elements.append(Paragraph(f"<b>Image Insights:</b><br/>{ai_analysis.replace('\n', '<br/>')}", subheader_style))
-    else:
-        elements.append(Paragraph("No AI insights available.", subheader_style))
+   # ---- Page 3: AI/AR Analysis ----
+elements.append(Paragraph("AI/AR Analysis", header_style))
+elements.append(Spacer(1, 12))
 
-    elements.append(Spacer(1, 12))
+if ai_analysis:
+    formatted_ai = ai_analysis.replace('\n', '<br/>')
+    elements.append(Paragraph(f"<b>Image Insights:</b><br/>{formatted_ai}", subheader_style))
+else:
+    elements.append(Paragraph("No AI insights available.", subheader_style))
 
-    if progress_report:
-        elements.append(Paragraph(f"<b>Scope Progress:</b><br/>{progress_report.replace('\n', '<br/>')}", subheader_style))
-    else:
-        elements.append(Paragraph("No scope progress report.", subheader_style))
+elements.append(Spacer(1, 12))
 
-    elements.append(PageBreak())
+if progress_report:
+    formatted_progress = progress_report.replace('\n', '<br/>')
+    elements.append(Paragraph(f"<b>Scope Progress:</b><br/>{formatted_progress}", subheader_style))
+else:
+    elements.append(Paragraph("No scope progress report.", subheader_style))
 
     # ---- Page 4: Safety Sheet ----
     elements.append(Paragraph("Safety Sheet Upload", header_style))
