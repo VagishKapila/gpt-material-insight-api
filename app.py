@@ -67,14 +67,14 @@ def generate_form():
         # ---- Generate the PDF ----
         print("⚙️ Generating PDF...")
         create_daily_log_pdf(
-            data=data,
-            image_paths=image_paths,
-            output_path=output_path,
-            logo_path=logo_path,
-            ai_analysis=ai_analysis,
-            progress_report=progress_report,
-            safety_path=safety_path
-        )
+        data,
+        image_paths,
+        output_path=save_path,
+        logo_path=logo_path,
+        ai_analysis=ai_analysis,
+        progress_report=progress_report,
+        safety_path=safety_path
+    )
         print(f"✅ PDF generated successfully: {output_path}")
 
         return jsonify({"pdf_url": f"/generated/{pdf_filename}"})
