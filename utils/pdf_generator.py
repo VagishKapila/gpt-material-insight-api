@@ -1,116 +1,91 @@
+from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
-from reportlab.lib import colors
 from PyPDF2 import PdfMerger
 from PIL import Image as PILImage
 import os
 
-def create_daily_log_pdf(data, image_paths, logo_path=None, ai_analysis="", progress_report="", save_path="", weather_icon_path=None, safety_sheet_path=None):
-    temp_path = save_path.replace(".pdf", "_temp.pdf")
-    doc = SimpleDocTemplate(temp_path, pagesize=letter)
+def create_daily_log_pdf(data, image_paths, output_path, logo_path=None, ai_analysis=None, progress_report=None, safety_path=None):
+    temp_output_path = "temp_output.pdf"
+
+    doc = SimpleDocTemplate(temp_output_path, pagesize=A4)
     styles = getSampleStyleSheet()
     elements = []
 
-    header_style = ParagraphStyle(name='HeaderStyle', parent=styles['Heading2'], fontSize=16, spaceAfter=12, textColor=colors.darkblue)
-    subheader_style = ParagraphStyle(name='SubheaderStyle', parent=styles['Normal'], fontSize=11, spaceAfter=8, textColor=colors.black)
+    # Custom styles
+    header_style = ParagraphStyle(name='HeaderStyle', fontSize=16, leading=20, spaceAfter=12, alignment=1)
+    subheader_style = ParagraphStyle(name='SubHeaderStyle', fontSize=12, leading=15, spaceAfter=10)
+    footer_style = ParagraphStyle(name='FooterStyle', fontSize=8, alignment=1, spaceBefore=12)
 
-    # ---- Logo ----
+    # Title Page
     if logo_path and os.path.exists(logo_path):
-        elements.append(Image(logo_path, width=2*inch, height=1*inch))
-        elements.append(Spacer(1, 12))
+        try:
+            logo = Image(logo_path, width=2.5 * inch, height=2.5 * inch)
+            logo.hAlign = 'CENTER'
+            elements.append(logo)
+        except Exception as e:
+            print("Logo error:", e)
 
-    # ---- Title ----
+    elements.append(Spacer(1, 0.3 * inch))
     elements.append(Paragraph("DAILY LOG", header_style))
-    elements.append(Spacer(1, 6))
+    elements.append(Spacer(1, 0.1 * inch))
 
-    # ---- Basic Info ----
-    info_fields = [
-        ("Project Name", data.get("project_name", "")),
-        ("Location", data.get("location", "")),
-        ("Date", data.get("date", "")),
-        ("Weather", data.get("weather", ""))
-    ]
-    for label, val in info_fields:
-        elements.append(Paragraph(f"<b>{label}:</b> {val}", subheader_style))
-
-    if weather_icon_path and os.path.exists(weather_icon_path):
-        elements.append(Image(weather_icon_path, width=0.5*inch, height=0.5*inch))
-
-    elements.append(Spacer(1, 12))
-
-    # ---- Notes ----
-    notes_sections = [
-        ("Crew Notes", data.get("crew_notes", "")),
-        ("Work Done", data.get("work_done", "")),
-        ("Safety Notes", data.get("safety_notes", ""))
-    ]
-    for title, text in notes_sections:
-        elements.append(Paragraph(f"<b>{title}</b>", header_style))
-        elements.append(Paragraph(text.replace("\n", "<br />"), subheader_style))
-        elements.append(Spacer(1, 12))
-
+    for key, value in data.items():
+        elements.append(Paragraph(f"<b>{key}:</b> {value}", subheader_style))
     elements.append(PageBreak())
 
-    # ---- Page 2: Job Site Images ----
-    elements.append(Paragraph("Job Site Photos", header_style))
-    elements.append(Spacer(1, 12))
-    img_width = 3.5 * inch
-    img_height = 2.5 * inch
-    count = 0
-    for path in image_paths:
-        if os.path.exists(path):
+    # Jobsite Photos Page
+    if image_paths:
+        elements.append(Paragraph("Jobsite Photos", header_style))
+        elements.append(Spacer(1, 0.2 * inch))
+
+        for i, img_path in enumerate(image_paths):
             try:
-                im = PILImage.open(path)
-                if im.width > im.height:
-                    im = im.rotate(270, expand=True)
-                    im.save(path)
-                elements.append(Image(path, width=img_width, height=img_height))
-                elements.append(Spacer(1, 6))
-                count += 1
-                if count % 2 == 0:
+                pil_img = PILImage.open(img_path)
+                width, height = pil_img.size
+                if width > height:
+                    pil_img = pil_img.rotate(90, expand=True)
+                    pil_img.save(img_path)
+
+                img = Image(img_path, width=3.2 * inch, height=2.4 * inch)
+                img.hAlign = 'CENTER'
+                elements.append(img)
+                if i % 2 == 1:
                     elements.append(PageBreak())
+                else:
+                    elements.append(Spacer(1, 0.2 * inch))
             except Exception as e:
-                print(f"[Error with image {path}]: {e}")
+                print(f"Error loading image {img_path}:", e)
 
-    if count == 0:
-        elements.append(Paragraph("No job site photos uploaded.", subheader_style))
+    # AI/AR Analysis Page
+    if ai_analysis:
+        elements.append(PageBreak())
+        elements.append(Paragraph("AI/AR Analysis", header_style))
+        ai_formatted = ai_analysis.replace('\n', '<br/>')
+        elements.append(Paragraph(f"<b>Image Insights:</b><br/>{ai_formatted}", subheader_style))
 
+    # Scope Progress Page
+    if progress_report:
+        elements.append(PageBreak())
+        elements.append(Paragraph("Scope Progress Tracker", header_style))
+        progress_formatted = progress_report.replace('\n', '<br/>')
+        elements.append(Paragraph(f"<b>Progress Summary:</b><br/>{progress_formatted}", subheader_style))
+
+    # Finalize Daily Log
     elements.append(PageBreak())
-
-   # ---- Page 3: AI/AR Analysis ----
-elements.append(Paragraph("AI/AR Analysis", header_style))
-elements.append(Spacer(1, 12))
-
-if ai_analysis:
-    formatted_ai = ai_analysis.replace('\n', '<br/>')
-    elements.append(Paragraph(f"<b>Image Insights:</b><br/>{formatted_ai}", subheader_style))
-else:
-    elements.append(Paragraph("No AI insights available.", subheader_style))
-
-elements.append(Spacer(1, 12))
-
-if progress_report:
-    formatted_progress = progress_report.replace('\n', '<br/>')
-    elements.append(Paragraph(f"<b>Scope Progress:</b><br/>{formatted_progress}", subheader_style))
-else:
-    elements.append(Paragraph("No scope progress report.", subheader_style))
-
-    # ---- Page 4: Safety Sheet ----
-    elements.append(Paragraph("Safety Sheet Upload", header_style))
-    elements.append(Spacer(1, 12))
-    if safety_sheet_path and os.path.exists(safety_sheet_path):
-        elements.append(Image(safety_sheet_path, width=5.5 * inch, height=7 * inch))
-    else:
-        elements.append(Paragraph("No safety sheet uploaded.", subheader_style))
+    elements.append(Spacer(1, 0.4 * inch))
+    elements.append(Paragraph("Confidential – Do Not Duplicate without written consent from BAINS Dev Comm", footer_style))
 
     doc.build(elements)
 
-    # ---- Final PDF with Footer and Page Numbers ----
-    merger = PdfMerger()
-    merger.append(temp_path)
-    merger.write(save_path)
-    merger.close()
-    os.remove(temp_path)
-    print(f"✅ PDF created: {save_path}")
+    # Merge with safety sheet (if provided)
+    if safety_path and os.path.exists(safety_path):
+        merger = PdfMerger()
+        merger.append(temp_output_path)
+        merger.append(safety_path)
+        merger.write(output_path)
+        merger.close()
+        os.remove(temp_output_path)
+    else:
+        os.rename(temp_output_path, output_path)
