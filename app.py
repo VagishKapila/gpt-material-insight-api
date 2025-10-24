@@ -1,91 +1,84 @@
-from flask import Flask, request, render_template, send_from_directory, jsonify
+# app.py
+from flask import Flask, request, jsonify, send_from_directory, render_template
 from werkzeug.utils import secure_filename
 import os
-import datetime
-from utils.pdf_generator import create_daily_log_pdf
+import uuid
+from image_utils import preprocess_images
+from pdf_generator import create_daily_log_pdf
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
-app.config['GENERATED_FOLDER'] = 'static/generated'
 
-# Ensure necessary folders exist
-for folder in [app.config['UPLOAD_FOLDER'], app.config['GENERATED_FOLDER']]:
-    os.makedirs(folder, exist_ok=True)
+UPLOAD_FOLDER = 'static/uploads'
+GENERATED_FOLDER = 'static/generated'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(GENERATED_FOLDER, exist_ok=True)
 
-@app.route("/")
+@app.route('/')
 def health_check():
-    return "✅ Nails & Notes API is running and ready!"
+    return "✅ Daily Log AI is running."
 
-@app.route("/form", methods=["GET"])
+@app.route('/form')
 def form():
-    return render_template("form.html")
+    return render_template('form.html')
 
-@app.route("/generate_form", methods=["POST"])
+@app.route('/generate_form', methods=['POST'])
 def generate_form():
     try:
-        data = request.form.to_dict()
-        print("📝 Received form data:", data)
+        # Collect data
+        data = {key: request.form.get(key, '') for key in request.form}
 
-        # ---- Save uploaded images ----
-        image_paths = []
-        for img in request.files.getlist("images"):
-            if img and img.filename:
-                filename = secure_filename(img.filename)
-                img_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                img.save(img_path)
-                image_paths.append(img_path)
-                print(f"📸 Saved image: {img_path}")
+        # Handle uploads
+        image_files = request.files.getlist('images')
+        logo_file = request.files.get('logo')
+        safety_file = request.files.get('safety_sheet')
 
-        # ---- Save logo ----
-        logo_path = None
-        logo = request.files.get("logo")
-        if logo and logo.filename:
-            logo_filename = secure_filename(logo.filename)
-            logo_path = os.path.join(app.config['UPLOAD_FOLDER'], logo_filename)
-            logo.save(logo_path)
-            print(f"🏗️ Saved logo: {logo_path}")
+        image_paths, logo_path, safety_path = [], None, None
 
-        # ---- Save safety sheet ----
-        safety_path = None
-        safety = request.files.get("safety_sheet")
-        if safety and safety.filename:
-            safety_filename = secure_filename(safety.filename)
-            safety_path = os.path.join(app.config['UPLOAD_FOLDER'], safety_filename)
-            safety.save(safety_path)
-            print(f"🦺 Saved safety sheet: {safety_path}")
+        for img in image_files:
+            filename = secure_filename(img.filename)
+            path = os.path.join(UPLOAD_FOLDER, filename)
+            img.save(path)
+            image_paths.append(path)
 
-        # ---- Optional AI & progress data ----
-        ai_analysis = data.get("ai_analysis", "")
-        progress_report = data.get("progress_report", "")
+        if logo_file:
+            logo_filename = secure_filename(logo_file.filename)
+            logo_path = os.path.join(UPLOAD_FOLDER, logo_filename)
+            logo_file.save(logo_path)
 
-        # ---- Generate unique filename ----
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        pdf_filename = f"DailyLog_{timestamp}.pdf"
-        output_path = os.path.join(app.config['GENERATED_FOLDER'], pdf_filename)
-        print(f"📄 PDF will be saved at: {output_path}")
+        if safety_file:
+            safety_filename = secure_filename(safety_file.filename)
+            safety_path = os.path.join(UPLOAD_FOLDER, safety_filename)
+            safety_file.save(safety_path)
 
-        # ---- Generate the PDF ----
-        print("⚙️ Generating PDF...")
+        # Preprocess image uploads
+        image_paths = preprocess_images(image_paths)
+        if logo_path:
+            logo_path = preprocess_images([logo_path])[0]
+        if safety_path and safety_path.endswith(('.jpg', '.jpeg', '.png')):
+            safety_path = preprocess_images([safety_path])[0]
+
+        # Generate PDF
+        pdf_filename = f"log_{uuid.uuid4().hex}.pdf"
+        output_path = os.path.join(GENERATED_FOLDER, pdf_filename)
+
         create_daily_log_pdf(
-            data,
-            image_paths,
-            output_path=output_path,       # ✅ CORRECT PARAM NAME
+            data=data,
+            image_paths=image_paths,
+            output_path=output_path,
             logo_path=logo_path,
-            ai_analysis=ai_analysis,
-            progress_report=progress_report,
+            ai_analysis=data.get('ai_analysis'),
+            progress_report=data.get('progress_report'),
             safety_path=safety_path
         )
-        print(f"✅ PDF generated successfully: {output_path}")
 
         return jsonify({"pdf_url": f"/generated/{pdf_filename}"})
 
     except Exception as e:
-        print("❌ Error during PDF generation:", str(e))
         return jsonify({"error": str(e)}), 500
 
-@app.route("/generated/<filename>")
-def serve_generated_pdf(filename):
-    return send_from_directory(app.config['GENERATED_FOLDER'], filename)
+@app.route('/generated/<filename>')
+def serve_pdf(filename):
+    return send_from_directory(GENERATED_FOLDER, filename)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     app.run(debug=True)
