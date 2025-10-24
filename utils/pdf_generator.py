@@ -3,12 +3,33 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Page
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from PyPDF2 import PdfMerger
-from PIL import Image as PILImage
+from PIL import Image as PILImage, ExifTags
 import os
+
+# Handle backward compatibility for image resampling
+try:
+    resample_method = PILImage.Resampling.LANCZOS
+except AttributeError:
+    resample_method = PILImage.ANTIALIAS
+
+def correct_image_orientation(pil_img):
+    try:
+        for orientation in ExifTags.TAGS.keys():
+            if ExifTags.TAGS[orientation] == 'Orientation':
+                break
+        exif = dict(pil_img._getexif().items())
+        if exif.get(orientation) == 3:
+            pil_img = pil_img.rotate(180, expand=True)
+        elif exif.get(orientation) == 6:
+            pil_img = pil_img.rotate(270, expand=True)
+        elif exif.get(orientation) == 8:
+            pil_img = pil_img.rotate(90, expand=True)
+    except Exception:
+        pass  # EXIF data not available or unreadable
+    return pil_img
 
 def create_daily_log_pdf(data, image_paths, output_path, logo_path=None, ai_analysis=None, progress_report=None, safety_path=None):
     temp_output_path = "temp_output.pdf"
-
     doc = SimpleDocTemplate(temp_output_path, pagesize=A4)
     styles = getSampleStyleSheet()
     elements = []
@@ -40,34 +61,35 @@ def create_daily_log_pdf(data, image_paths, output_path, logo_path=None, ai_anal
         elements.append(Paragraph("Jobsite Photos", header_style))
         elements.append(Spacer(1, 0.2 * inch))
 
-       for i, img_path in enumerate(image_paths):
-    try:
-        pil_img = PILImage.open(img_path)
+        for i, img_path in enumerate(image_paths):
+            try:
+                pil_img = PILImage.open(img_path)
+                pil_img = correct_image_orientation(pil_img)
 
-        # Rotate if landscape
-        if pil_img.width > pil_img.height:
-            pil_img = pil_img.rotate(90, expand=True)
+                # Rotate landscape manually if needed
+                if pil_img.width > pil_img.height:
+                    pil_img = pil_img.rotate(90, expand=True)
 
-        # Resize to max width of 1600px (keep aspect ratio)
-        if pil_img.width > 1600:
-            ratio = 1600 / pil_img.width
-            new_height = int(pil_img.height * ratio)
-            pil_img = pil_img.resize((1600, new_height), PILImage.Resampling.LANCZOS)
+                # Resize if too large
+                if pil_img.width > 1600:
+                    ratio = 1600 / pil_img.width
+                    new_height = int(pil_img.height * ratio)
+                    pil_img = pil_img.resize((1600, new_height), resample_method)
 
-        pil_img.save(img_path)
+                pil_img.save(img_path)
 
-        # Now use resized image in ReportLab
-        img = Image(img_path, width=3.2 * inch, height=2.4 * inch)
-        img.hAlign = 'CENTER'
-        elements.append(img)
+                # Add to PDF
+                img = Image(img_path, width=3.2 * inch, height=2.4 * inch)
+                img.hAlign = 'CENTER'
+                elements.append(img)
 
-        if i % 2 == 1:
-            elements.append(PageBreak())
-        else:
-            elements.append(Spacer(1, 0.2 * inch))
+                if i % 2 == 1:
+                    elements.append(PageBreak())
+                else:
+                    elements.append(Spacer(1, 0.2 * inch))
 
-    except Exception as e:
-        print(f"Error loading image {img_path}:", e)
+            except Exception as e:
+                print(f"Error loading image {img_path}:", e)
 
     # AI/AR Analysis Page
     if ai_analysis:
