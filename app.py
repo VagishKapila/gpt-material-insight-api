@@ -42,8 +42,8 @@ def get_weather():
         return jsonify({'temp': 'N/A', 'icon_url': ''})
 
 
-@app.route('/generate_form', methods=['POST'])
-def generate_form():
+@app.route('/get_weather', methods=['GET', 'POST'])
+def get_weather():
     data = request.form.to_dict()
     ai_analysis = 'enable_ai' in data
     project_id = data.get('project_name', 'default_project').replace(" ", "_")
