@@ -76,17 +76,26 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
             elements.append(Spacer(1, 0.1 * inch))
     elements.append(PageBreak())
 
-    # Page 3 – AI / AR
-    if ai_analysis or progress_report:
-        elements.append(Paragraph("AI / AR COMPARISON", styles['Title']))
-        if ai_analysis:
-            elements.append(Paragraph("<b>AI Analysis:</b>", styles['Heading3']))
-            elements.append(Paragraph(ai_analysis, styles['Normal']))
-        if progress_report:
-            elements.append(Spacer(1, 0.2 * inch))
-            elements.append(Paragraph("<b>Scope Progress:</b>", styles['Heading3']))
-            elements.append(Paragraph(progress_report, styles['Normal']))
-        elements.append(PageBreak())
+  # Page 3 – AI / AR
+if ai_analysis or progress_report:
+    elements.append(Paragraph("AI / AR COMPARISON", styles['Title']))
+    elements.append(Spacer(1, 0.2 * inch))
+
+    # Safely convert boolean to string for AI Analysis
+    if isinstance(ai_analysis, bool):
+        ai_text = "Enabled" if ai_analysis else "Disabled"
+    else:
+        ai_text = str(ai_analysis)
+
+    elements.append(Paragraph("<b>AI Analysis:</b>", styles['Heading3']))
+    elements.append(Paragraph(ai_text, styles['Normal']))
+
+    if progress_report:
+        elements.append(Spacer(1, 0.2 * inch))
+        elements.append(Paragraph("<b>Scope Progress:</b>", styles['Heading3']))
+        elements.append(Paragraph(progress_report, styles['Normal']))
+
+    elements.append(PageBreak())
 
     # Page 4 – Safety Sheet
     if safety_sheet_path and os.path.exists(safety_sheet_path):
