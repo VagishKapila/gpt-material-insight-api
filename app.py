@@ -1,5 +1,5 @@
 from flask import Flask, request, render_template, send_from_directory, jsonify
-from utils.pdf_generator import create_daily_log_pdf
+from utils.pdf_generator import create_daily_log_pdf  # ✅ Corrected import
 import os
 import uuid
 import requests
@@ -12,17 +12,21 @@ app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['GENERATED_FOLDER'] = 'static/generated'
 app.config['AUTOFILL_FOLDER'] = 'static/autofill'
 
+# Ensure folders exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['GENERATED_FOLDER'], exist_ok=True)
 os.makedirs(app.config['AUTOFILL_FOLDER'], exist_ok=True)
+
 
 @app.route('/')
 def index():
     return 'Nails & Notes API is running.'
 
+
 @app.route('/form', methods=['GET'])
 def form():
     return render_template('form.html')
+
 
 @app.route('/get_weather', methods=['GET'])
 def get_weather():
@@ -37,55 +41,50 @@ def get_weather():
     except Exception as e:
         return jsonify({'temp': 'N/A', 'icon_url': ''})
 
+
 @app.route('/generate_form', methods=['POST'])
 def generate_form():
     data = request.form.to_dict()
     ai_analysis = 'enable_ai' in data
     project_id = data.get('project_name', 'default_project').replace(" ", "_")
 
-    # Save image uploads
+    # Save uploaded images
     image_paths = []
     for uploaded_file in request.files.getlist("images"):
-        if uploaded_file.filename != "":
+        if uploaded_file.filename:
             filename = secure_filename(str(uuid.uuid4()) + "_" + uploaded_file.filename)
             path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             uploaded_file.save(path)
             image_paths.append(path)
 
-    # Save safety sheet if uploaded
+    # Save safety sheet
     safety_sheet_path = None
     safety_file = request.files.get("safety_sheet")
-    if safety_file and safety_file.filename != "":
+    if safety_file and safety_file.filename:
         filename = secure_filename(str(uuid.uuid4()) + "_" + safety_file.filename)
         safety_sheet_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         safety_file.save(safety_sheet_path)
 
-    # Save project scope if uploaded
+    # Save scope document (and track it for reuse)
     scope_doc_path = None
     scope_file = request.files.get("scope_doc")
-    if scope_file and scope_file.filename != "":
+    if scope_file and scope_file.filename:
         filename = secure_filename(str(uuid.uuid4()) + "_" + scope_file.filename)
         scope_doc_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         scope_file.save(scope_doc_path)
-        # Save path for future auto-fill
         with open(f"{app.config['AUTOFILL_FOLDER']}/{project_id}_scope_path.json", 'w') as f:
             json.dump({'scope_doc_path': scope_doc_path}, f)
     else:
-        # Load existing scope path
         try:
             with open(f"{app.config['AUTOFILL_FOLDER']}/{project_id}_scope_path.json", 'r') as f:
                 scope_doc_path = json.load(f).get('scope_doc_path')
         except:
             scope_doc_path = None
 
-    # Save project autofill data
-    with open(f"{app.config['AUTOFILL_FOLDER']}/{project_id}_last_data.json", 'w') as f:
-        json.dump(data, f)
-
     # Save logo
     logo_path = None
     logo_file = request.files.get("logo")
-    if logo_file and logo_file.filename != "":
+    if logo_file and logo_file.filename:
         filename = secure_filename(str(uuid.uuid4()) + "_" + logo_file.filename)
         logo_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         logo_file.save(logo_path)
@@ -104,7 +103,11 @@ def generate_form():
         except:
             pass
 
-    # Save PDF
+    # Save autofill data
+    with open(f"{app.config['AUTOFILL_FOLDER']}/{project_id}_last_data.json", 'w') as f:
+        json.dump(data, f)
+
+    # Final PDF path
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     filename = f"Daily_Log_{project_id}_{timestamp}.pdf"
     save_path = os.path.join(app.config['GENERATED_FOLDER'], filename)
@@ -122,6 +125,7 @@ def generate_form():
     )
 
     return jsonify({'pdf_url': f'/generated/{filename}'})
+
 
 @app.route('/generated/<filename>', methods=['GET'])
 def serve_pdf(filename):
