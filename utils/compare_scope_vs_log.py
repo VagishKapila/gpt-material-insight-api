@@ -1,73 +1,85 @@
 # compare_scope_vs_log.py
-import re
+
+import os
+import json
 from difflib import SequenceMatcher
+from typing import List, Dict, Tuple
 
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-def normalize(text):
-    return re.sub(r"[^a-z0-9 ]", "", text.lower())
+# ---------- CONFIG ----------
+SCOPE_CACHE_FOLDER = "scope_cache"
+SIMILARITY_THRESHOLD = 0.5  # Cosine similarity threshold
 
+# ---------- HELPERS ----------
+def similar(a: str, b: str) -> float:
+    return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
-def fuzzy_match(a, b):
-    return SequenceMatcher(None, normalize(a), normalize(b)).ratio()
+def load_scope_for_project(project_id: str) -> List[str]:
+    path = os.path.join(SCOPE_CACHE_FOLDER, f"{project_id}.json")
+    if not os.path.exists(path):
+        return []
+    with open(path, "r") as f:
+        return json.load(f)
 
+def save_scope_for_project(project_id: str, scope_items: List[str]):
+    os.makedirs(SCOPE_CACHE_FOLDER, exist_ok=True)
+    path = os.path.join(SCOPE_CACHE_FOLDER, f"{project_id}.json")
+    with open(path, "w") as f:
+        json.dump(scope_items, f, indent=2)
 
-def compare_scope_vs_log(scope_items, work_done, threshold=0.45):
+def extract_scope_items(raw_text: str) -> List[str]:
+    # For now, split by lines and keep non-empty meaningful lines
+    lines = [line.strip() for line in raw_text.split("\n") if len(line.strip()) > 15]
+    return lines
+
+# ---------- MAIN COMPARISON ----------
+def match_scope_vs_log(scope_items: List[str], daily_work: str) -> Dict:
+    vectorizer = TfidfVectorizer().fit(scope_items + [daily_work])
+    scope_vecs = vectorizer.transform(scope_items)
+    log_vec = vectorizer.transform([daily_work])
+
     matched = []
-    missing = []
+    pending = []
     out_of_scope = []
 
-    for item in scope_items:
-        if fuzzy_match(item, work_done) > threshold:
-            matched.append(item)
+    for i, scope in enumerate(scope_items):
+        score = cosine_similarity(scope_vecs[i], log_vec)[0][0]
+        if score >= SIMILARITY_THRESHOLD:
+            matched.append(scope)
         else:
-            missing.append(item)
+            pending.append(scope)
 
-    work_items = [line.strip() for line in work_done.split("\n") if line.strip()]
-    for line in work_items:
-        if not any(fuzzy_match(line, scope_item) > threshold for scope_item in scope_items):
-            out_of_scope.append(line)
+    # Naive logic for out-of-scope:
+    extra_items = []
+    for word in daily_work.split("\n"):
+        if not any(similar(word, s) > 0.5 for s in scope_items):
+            extra_items.append(word.strip())
 
-    percent_complete = int((len(matched) / max(len(scope_items), 1)) * 100)
+    progress = round(100 * len(matched) / max(1, len(scope_items)))
 
     return {
-        "matched": matched,
-        "missing": missing,
-        "out_of_scope": out_of_scope,
-        "percent_complete": percent_complete,
+        "progress": progress,
+        "matched_items": matched,
+        "pending_items": pending,
+        "extra_items": extra_items[:10],
     }
 
+# ---------- USAGE EXAMPLE ----------
+if __name__ == "__main__":
+    # For testing
+    from pathlib import Path
 
-def generate_scope_summary(data):
-    scope_items = data.get("scope_items", [])
-    work_done = data.get("work_done", "")
+    raw_scope_text = Path("/mnt/data/Demo, Grade, Trench 98 Upperoaks San Rafael1A.txt").read_text()
+    scope_items = extract_scope_items(raw_scope_text)
+    save_scope_for_project("project_1", scope_items)
 
-    if not scope_items:
-        return "Scope file not uploaded or empty.", 0
-
-    result = compare_scope_vs_log(scope_items, work_done)
-
-    summary = ["AI / SCOPE ANALYSIS", ""]
-    summary.append(f"Matched: {len(result['matched'])}")
-    summary.append(f"Missing: {len(result['missing'])}")
-    summary.append(f"Out of Scope: {len(result['out_of_scope'])}")
-    summary.append(f"Completion: {result['percent_complete']}%")
-    summary.append("")
-
-    if result['matched']:
-        summary.append("✔️ Matched:")
-        for item in result['matched']:
-            summary.append(f"- {item}")
-        summary.append("")
-
-    if result['missing']:
-        summary.append("❗ Missing (Not Done Yet):")
-        for item in result['missing']:
-            summary.append(f"- {item}")
-        summary.append("")
-
-    if result['out_of_scope']:
-        summary.append("⚠️ Out of Scope (Potential Change Order):")
-        for item in result['out_of_scope']:
-            summary.append(f"- {item}")
-
-    return "\n".join(summary), result['percent_complete']
+    fake_log = """
+    Dug trench 2ft wide
+    Installed 1 inch gas line
+    Rebar placed at 12in spacing
+    Safety cones placed near entry
+    """
+    result = match_scope_vs_log(scope_items, fake_log)
+    print(json.dumps(result, indent=2))
