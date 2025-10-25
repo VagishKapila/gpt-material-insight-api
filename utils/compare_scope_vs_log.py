@@ -3,7 +3,7 @@
 import os
 import json
 from difflib import SequenceMatcher
-from typing import List, Dict, Tuple
+from typing import List, Dict
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -30,56 +30,48 @@ def save_scope_for_project(project_id: str, scope_items: List[str]):
         json.dump(scope_items, f, indent=2)
 
 def extract_scope_items(raw_text: str) -> List[str]:
-    # For now, split by lines and keep non-empty meaningful lines
     lines = [line.strip() for line in raw_text.split("\n") if len(line.strip()) > 15]
     return lines
 
 # ---------- MAIN COMPARISON ----------
-def match_scope_vs_log(scope_items: List[str], daily_work: str) -> Dict:
-    vectorizer = TfidfVectorizer().fit(scope_items + [daily_work])
+def analyze_scope_vs_log(scope_items: List[str], work_done: str, crew_notes: str, safety_notes: str) -> Dict:
+    full_log = "\n".join([work_done, crew_notes, safety_notes]).strip()
+    if not scope_items or not full_log:
+        return {
+            "completion": 0,
+            "matched": [],
+            "unmatched": scope_items,
+            "out_of_scope": [],
+            "change_order_suggestions": ["Scope or daily log is empty. No valid comparison made."]
+        }
+
+    vectorizer = TfidfVectorizer().fit(scope_items + [full_log])
     scope_vecs = vectorizer.transform(scope_items)
-    log_vec = vectorizer.transform([daily_work])
+    log_vec = vectorizer.transform([full_log])
 
     matched = []
-    pending = []
-    out_of_scope = []
+    unmatched = []
 
     for i, scope in enumerate(scope_items):
         score = cosine_similarity(scope_vecs[i], log_vec)[0][0]
         if score >= SIMILARITY_THRESHOLD:
             matched.append(scope)
         else:
-            pending.append(scope)
+            unmatched.append(scope)
 
-    # Naive logic for out-of-scope:
-    extra_items = []
-    for word in daily_work.split("\n"):
-        if not any(similar(word, s) > 0.5 for s in scope_items):
-            extra_items.append(word.strip())
+    out_of_scope = []
+    for line in full_log.split("\n"):
+        if not any(similar(line, s) > 0.5 for s in scope_items):
+            out_of_scope.append(line.strip())
 
-    progress = round(100 * len(matched) / max(1, len(scope_items)))
+    completion = round(100 * len(matched) / max(1, len(scope_items)))
 
     return {
-        "progress": progress,
-        "matched_items": matched,
-        "pending_items": pending,
-        "extra_items": extra_items[:10],
+        "completion": completion,
+        "matched": matched,
+        "unmatched": unmatched,
+        "out_of_scope": out_of_scope[:10],
+        "change_order_suggestions": [
+            f"Suggest review of {len(out_of_scope)} possible out-of-scope items."
+        ] if out_of_scope else []
     }
-
-# ---------- USAGE EXAMPLE ----------
-if __name__ == "__main__":
-    # For testing
-    from pathlib import Path
-
-    raw_scope_text = Path("/mnt/data/Demo, Grade, Trench 98 Upperoaks San Rafael1A.txt").read_text()
-    scope_items = extract_scope_items(raw_scope_text)
-    save_scope_for_project("project_1", scope_items)
-
-    fake_log = """
-    Dug trench 2ft wide
-    Installed 1 inch gas line
-    Rebar placed at 12in spacing
-    Safety cones placed near entry
-    """
-    result = match_scope_vs_log(scope_items, fake_log)
-    print(json.dumps(result, indent=2))
