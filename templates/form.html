@@ -1,70 +1,28 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Daily Log Form – Nails & Notes</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    label { font-weight: bold; margin-top: 10px; display: block; }
-    input, textarea, select { width: 100%; padding: 6px; margin-top: 4px; }
-    .section { margin-bottom: 20px; }
-    button { padding: 10px 20px; margin-top: 10px; background-color: #333; color: #fff; border: none; cursor: pointer; }
-    button:hover { background-color: #555; }
-  </style>
-</head>
-<body>
-  <h1>Nails & Notes – Daily Log</h1>
+<form method="POST" action="/generate_form" enctype="multipart/form-data">
+  <h2>Daily Log Form</h2>
 
-  <form id="logForm" enctype="multipart/form-data" method="POST" action="/generate_form">
+  <!-- Basic Info -->
+  <label>Project Name:</label><br>
+  <input type="text" name="project_name" required><br><br>
 
-    <div class="section">
-      <label for="project_name">Project Name:</label>
-      <input type="text" name="project_name" required />
+  <label>Client Name:</label><br>
+  <input type="text" name="client_name"><br><br>
 
-      <label for="client_name">Client Name:</label>
-      <input type="text" name="client_name" />
+  <label>Location:</label><br>
+  <input type="text" name="location" required><br><br>
 
-      <label for="location">Location:</label>
-      <input type="text" name="location" required />
+  <!-- Scope of Work Upload -->
+  <label>Upload Scope of Work (PDF):</label><br>
+  <input type="file" name="scope_file" accept=".pdf"><br><br>
 
-      <label for="date">Date:</label>
-      <input type="date" name="date" required />
+  <!-- Daily Work -->
+  <label>Work Performed Today:</label><br>
+  <textarea name="work_done" rows="6" cols="60" required></textarea><br><br>
 
-      <label for="weather">Weather:</label>
-      <input type="text" name="weather" placeholder="Sunny 78°F" />
-    </div>
+  <!-- Safety Notes -->
+  <label>Any Safety Observations:</label><br>
+  <textarea name="safety_notes" rows="4" cols="60"></textarea><br><br>
 
-    <div class="section">
-      <label for="crew_notes">Crew Notes:</label>
-      <textarea name="crew_notes" rows="4"></textarea>
-
-      <label for="work_done">Work Done:</label>
-      <textarea name="work_done" rows="4"></textarea>
-
-      <label for="safety_notes">Safety Notes:</label>
-      <textarea name="safety_notes" rows="4"></textarea>
-    </div>
-
-    <div class="section">
-      <label for="images">Job Site Photos (multiple):</label>
-      <input type="file" name="images" multiple accept="image/*" />
-
-      <label for="logo">Company Logo:</label>
-      <input type="file" name="logo" accept="image/*" />
-
-      <label for="safety_sheet">Safety Sheet (image/pdf):</label>
-      <input type="file" name="safety_sheet" accept="image/*,.pdf" />
-
-      <label for="scope_doc">Scope of Work (doc/pdf/txt):</label>
-      <input type="file" name="scope_doc" accept=".pdf,.doc,.docx,.txt" />
-    </div>
-
-    <div class="section">
-      <label><input type="checkbox" name="enable_ai" checked /> Enable AI Scope Analysis</label>
-    </div>
-
-    <button type="submit">Generate PDF</button>
-  </form>
-</body>
-</html>
+  <!-- Submit -->
+  <button type="submit">Generate PDF</button>
+</form>
