@@ -2,6 +2,9 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
+from reportlab.graphics.shapes import Drawing, Rect, String
+from reportlab.graphics.charts.barcharts import HorizontalBarChart
 from PIL import Image as PILImage, ExifTags
 import os, uuid
 
@@ -38,8 +41,27 @@ def add_footer(canvas, doc):
     canvas.drawRightString(7.5 * inch, 0.5 * inch, f"Page {doc.page}")
     canvas.restoreState()
 
+def draw_progress_bar(percentage):
+    drawing = Drawing(400, 50)
+    width = 300
+    filled_width = width * (percentage / 100.0)
+
+    # Determine color based on completion
+    if percentage >= 80:
+        color = colors.green
+    elif percentage >= 50:
+        color = colors.orange
+    else:
+        color = colors.red
+
+    drawing.add(Rect(0, 20, width, 20, fillColor=colors.lightgrey, strokeColor=None))
+    drawing.add(Rect(0, 20, filled_width, 20, fillColor=color, strokeColor=None))
+    drawing.add(String(0, 0, f"Completion: {percentage}%", fontSize=12))
+    return drawing
+
 def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_report,
-                         save_path, weather_icon_path, safety_sheet_path):
+                         save_path, weather_icon_path, safety_sheet_path,
+                         scope_result=None):
     styles = getSampleStyleSheet()
     doc = SimpleDocTemplate(save_path, pagesize=letter)
     elements = []
@@ -72,14 +94,29 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
             elements.append(Paragraph(f"Error loading image: {e}", styles["Normal"]))
     elements.append(PageBreak())
 
-    # === Page 3 – AI / AR ===
+    # === Page 3 – AI / AR Scope ===
     if ai_analysis or progress_report:
         elements.append(Paragraph("AI / AR COMPARISON", styles["Title"]))
         ai_text = "Enabled" if ai_analysis else "Disabled"
         elements.append(Paragraph("<b>AI Analysis:</b>", styles["Heading3"]))
         elements.append(Paragraph(ai_text, styles["Normal"]))
-        if progress_report:
-            elements.append(Paragraph("<b>Scope Progress:</b>", styles["Heading3"]))
+        if scope_result:
+            elements.append(Paragraph("<b>Scope Completion:</b>", styles["Heading3"]))
+            if "matched" in scope_result:
+                elements.append(Paragraph("✅ Matched Items:", styles["Heading4"]))
+                for item in scope_result["matched"]:
+                    elements.append(Paragraph(f"- {item}", styles["Normal"]))
+            if "flagged_missing" in scope_result:
+                elements.append(Paragraph("❌ Missing Items:", styles["Heading4"]))
+                for item in scope_result["flagged_missing"]:
+                    elements.append(Paragraph(f"- {item}", styles["Normal"]))
+            if "out_of_scope" in scope_result:
+                elements.append(Paragraph("🚫 Out-of-Scope Items:", styles["Heading4"]))
+                for item in scope_result["out_of_scope"]:
+                    elements.append(Paragraph(f"- {item}", styles["Normal"]))
+            if "percent_complete" in scope_result:
+                elements.append(draw_progress_bar(scope_result["percent_complete"]))
+        elif progress_report:
             elements.append(Paragraph(str(progress_report), styles["Normal"]))
         elements.append(PageBreak())
 
