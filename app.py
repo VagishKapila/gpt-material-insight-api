@@ -1,125 +1,123 @@
-from flask import Flask, render_template, request, send_from_directory, jsonify
-import os, uuid, requests, json
+# daily_log/app.py
+
+import os
+import uuid
+from flask import Flask, request, jsonify, render_template, send_from_directory
 from utils.pdf_generator import create_daily_log_pdf
-from utils.scope_parser import parse_scope_file
-from utils.compare_scope_vs_log import compare_scope_vs_log
-from PIL import Image, ExifTags
+from utils.compare_scope_vs_log import compare_scope_with_log
+from werkzeug.utils import secure_filename
+from PyPDF2 import PdfReader
+import docx
 
 app = Flask(__name__)
-
-UPLOAD_FOLDER = 'static/uploads'
-GENERATED_FOLDER = 'static/generated'
+UPLOAD_FOLDER = "static/uploads"
+GENERATED_FOLDER = "static/generated"
+SCOPE_FOLDER = "static/scope"
+AUTOFILL_FOLDER = "static/autofill"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(GENERATED_FOLDER, exist_ok=True)
+os.makedirs(SCOPE_FOLDER, exist_ok=True)
+os.makedirs(AUTOFILL_FOLDER, exist_ok=True)
 
-def fix_image_orientation(path):
-    """Rotate images correctly based on EXIF data."""
-    try:
-        image = Image.open(path)
-        for orientation in ExifTags.TAGS.keys():
-            if ExifTags.TAGS[orientation] == 'Orientation':
-                break
-        exif = image._getexif()
-        if exif:
-            orientation_value = exif.get(orientation)
-            if orientation_value == 3:
-                image = image.rotate(180, expand=True)
-            elif orientation_value == 6:
-                image = image.rotate(270, expand=True)
-            elif orientation_value == 8:
-                image = image.rotate(90, expand=True)
-        image.save(path)
-    except Exception as e:
-        print(f"Orientation fix failed for {path}: {e}")
+@app.route("/")
+def index():
+    return "Nails & Notes App is running."
 
-@app.route('/')
-def home():
-    return "✅ Nails & Notes API is running."
-
-@app.route('/form')
+@app.route("/form")
 def form():
-    return render_template('form.html')
+    return render_template("form.html")
 
-@app.route('/generate_form', methods=['POST'])
+@app.route("/get_weather", methods=["POST"])
+def get_weather():
+    location = request.form.get("location")
+    # Call wttr.in or other service here (mock for now)
+    return jsonify({"weather": f"Mocked Weather for {location}"})
+
+@app.route("/generate_form", methods=["POST"])
 def generate_form():
     form_data = request.form.to_dict()
-    enable_ai = form_data.get('enable_ai', 'on') == 'on'
+    files = request.files
 
-    # Handle uploads
-    def save_file(file, prefix):
-        if not file or file.filename == '':
-            return None
-        filename = f"{prefix}_{uuid.uuid4()}_{file.filename}"
-        path = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(path)
-        return path
-
+    # Save uploaded images
     image_paths = []
-    for file in request.files.getlist('images'):
-        path = save_file(file, 'img')
-        if path:
-            fix_image_orientation(path)
+    if "images" in files:
+        for f in request.files.getlist("images"):
+            filename = secure_filename(f.filename)
+            path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4().hex}_{filename}")
+            f.save(path)
             image_paths.append(path)
 
-    logo_path = save_file(request.files.get('logo'), 'logo')
-    safety_sheet_path = save_file(request.files.get('safety_sheet'), 'safety')
-    scope_doc_path = save_file(request.files.get('scope_doc'), 'scope')
+    # Save logo
+    logo_path = None
+    if "logo" in files:
+        f = files["logo"]
+        if f.filename:
+            logo_path = os.path.join(UPLOAD_FOLDER, f"logo_{uuid.uuid4().hex}_{secure_filename(f.filename)}")
+            f.save(logo_path)
 
-    # Weather icon (optional)
-    weather_icon_path = None
-    try:
-        weather = form_data.get("weather", "")
-        if weather:
-            url = f"https://wttr.in/{weather}?format=j1"
-            res = requests.get(url, timeout=5)
-            if res.status_code == 200:
-                icon_url = res.json()["current_condition"][0]["weatherIconUrl"][0]["value"]
-                icon_img = requests.get(icon_url).content
-                weather_icon_path = os.path.join(UPLOAD_FOLDER, f"weather_{uuid.uuid4()}.png")
-                with open(weather_icon_path, "wb") as f:
-                    f.write(icon_img)
-    except Exception as e:
-        print(f"Weather icon fetch failed: {e}")
+    # Save weather icon (mocked for now)
+    weather_icon_path = None  # Skipping for now
 
-    # === AI Scope Comparison Logic ===
-    progress_summary = None
-    if enable_ai and scope_doc_path:
-        try:
-            parsed_scope = parse_scope_file(scope_doc_path)
-            parsed_scope_path = os.path.join(UPLOAD_FOLDER, f"parsed_scope_{uuid.uuid4()}.json")
-            with open(parsed_scope_path, "w") as f:
-                json.dump(parsed_scope, f)
+    # Save safety sheet
+    safety_sheet_path = None
+    if "safety_sheet" in files:
+        f = files["safety_sheet"]
+        if f.filename:
+            safety_sheet_path = os.path.join(UPLOAD_FOLDER, f"safety_{uuid.uuid4().hex}_{secure_filename(f.filename)}")
+            f.save(safety_sheet_path)
 
-            image_captions = []  # Placeholder: Add image captioning AI later
-            progress_summary = compare_scope_vs_log(
-                scope_json_path=parsed_scope_path,
-                crew_notes=form_data.get("crew_notes", ""),
-                work_done=form_data.get("work_done", ""),
-                image_captions=image_captions
-            )
-        except Exception as e:
-            print(f"⚠️ Scope comparison failed: {e}")
+    # Save scope of work document (if first time)
+    scope_result = None
+    scope_path = os.path.join(SCOPE_FOLDER, f"{form_data['project_name'].replace(' ', '_')}_scope.txt")
+    if os.path.exists(scope_path):
+        with open(scope_path, "r") as f:
+            scope_text = f.read()
+    elif "scope_doc" in files:
+        f = files["scope_doc"]
+        if f.filename:
+            ext = os.path.splitext(f.filename)[1].lower()
+            new_path = os.path.join(SCOPE_FOLDER, secure_filename(f.filename))
+            f.save(new_path)
+            scope_text = extract_text_from_file(new_path)
+            with open(scope_path, "w") as f:
+                f.write(scope_text)
+    else:
+        scope_text = None
 
-    # === PDF Generation ===
-    pdf_name = f"DailyLog_{uuid.uuid4()}.pdf"
-    save_path = os.path.join(GENERATED_FOLDER, pdf_name)
+    # Run scope comparison
+    if form_data.get("enable_ai") == "on" and scope_text:
+        scope_result = compare_scope_with_log(scope_text, form_data.get("work_done", ""))
 
+    # Save PDF
+    filename = f"DailyLog_{uuid.uuid4().hex[:6]}.pdf"
+    save_path = os.path.join(GENERATED_FOLDER, filename)
     create_daily_log_pdf(
-        data=form_data,
-        image_paths=image_paths,
-        logo_path=logo_path,
-        ai_analysis=enable_ai,
-        progress_report=progress_summary,
-        save_path=save_path,
-        weather_icon_path=weather_icon_path,
-        safety_sheet_path=safety_sheet_path
+        form_data, image_paths, logo_path, ai_analysis=True, progress_report=None,
+        save_path=save_path, weather_icon_path=weather_icon_path,
+        safety_sheet_path=safety_sheet_path, scope_result=scope_result
     )
+    return jsonify({"pdf_url": f"/generated/{filename}"})
 
-    return jsonify({"pdf_url": f"/generated/{pdf_name}"})
-
-@app.route('/generated/<filename>')
-def serve_generated(filename):
+@app.route("/generated/<path:filename>")
+def serve_pdf(filename):
     return send_from_directory(GENERATED_FOLDER, filename)
 
-if __name__ == '__main__':
+def extract_text_from_file(filepath):
+    ext = os.path.splitext(filepath)[1].lower()
+    if ext == ".pdf":
+        text = ""
+        with open(filepath, "rb") as f:
+            reader = PdfReader(f)
+            for page in reader.pages:
+                text += page.extract_text() + "\n"
+        return text
+    elif ext in [".doc", ".docx"]:
+        doc = docx.Document(filepath)
+        return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    elif ext in [".txt"]:
+        with open(filepath, "r") as f:
+            return f.read()
+    return ""
+
+if __name__ == "__main__":
     app.run(debug=True)
