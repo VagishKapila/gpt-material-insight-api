@@ -8,17 +8,22 @@ from utils.compare_scope_vs_log import compare_scope_with_log
 from werkzeug.utils import secure_filename
 from PyPDF2 import PdfReader
 import docx
+import requests
 
 app = Flask(__name__)
+
+# === Folders ===
 UPLOAD_FOLDER = "static/uploads"
 GENERATED_FOLDER = "static/generated"
 SCOPE_FOLDER = "static/scope"
 AUTOFILL_FOLDER = "static/autofill"
+
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(GENERATED_FOLDER, exist_ok=True)
 os.makedirs(SCOPE_FOLDER, exist_ok=True)
 os.makedirs(AUTOFILL_FOLDER, exist_ok=True)
 
+# === ROUTES ===
 @app.route("/")
 def index():
     return "Nails & Notes App is running."
@@ -27,27 +32,36 @@ def index():
 def form():
     return render_template("form.html")
 
+# === WEATHER (Live via wttr.in) ===
 @app.route("/get_weather", methods=["POST"])
 def get_weather():
     location = request.form.get("location")
-    # Call wttr.in or other service here (mock for now)
-    return jsonify({"weather": f"Mocked Weather for {location}"})
+    try:
+        res = requests.get(f"https://wttr.in/{location}?format=%C+%t", timeout=5)
+        weather = res.text.strip()
+        return jsonify({"weather": weather})
+    except Exception as e:
+        print(f"Weather fetch failed: {e}")
+        return jsonify({"weather": "Unavailable"})
 
+# === MAIN FORM HANDLER ===
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
     form_data = request.form.to_dict()
     files = request.files
 
-    # Save uploaded images
+    # === IMAGES ===
     image_paths = []
     if "images" in files:
         for f in request.files.getlist("images"):
             filename = secure_filename(f.filename)
+            if not filename:
+                continue
             path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4().hex}_{filename}")
             f.save(path)
             image_paths.append(path)
 
-    # Save logo
+    # === LOGO ===
     logo_path = None
     if "logo" in files:
         f = files["logo"]
@@ -55,10 +69,7 @@ def generate_form():
             logo_path = os.path.join(UPLOAD_FOLDER, f"logo_{uuid.uuid4().hex}_{secure_filename(f.filename)}")
             f.save(logo_path)
 
-    # Save weather icon (mocked for now)
-    weather_icon_path = None  # Skipping for now
-
-    # Save safety sheet
+    # === SAFETY SHEET ===
     safety_sheet_path = None
     if "safety_sheet" in files:
         f = files["safety_sheet"]
@@ -66,9 +77,15 @@ def generate_form():
             safety_sheet_path = os.path.join(UPLOAD_FOLDER, f"safety_{uuid.uuid4().hex}_{secure_filename(f.filename)}")
             f.save(safety_sheet_path)
 
-    # Save scope of work document (if first time)
+    # === WEATHER ICON (optional placeholder) ===
+    weather_icon_path = None
+
+    # === SCOPE OF WORK ===
     scope_result = None
-    scope_path = os.path.join(SCOPE_FOLDER, f"{form_data['project_name'].replace(' ', '_')}_scope.txt")
+    project_name = form_data.get("project_name", "default_project").replace(" ", "_")
+    scope_path = os.path.join(SCOPE_FOLDER, f"{project_name}_scope.txt")
+    scope_text = None
+
     if os.path.exists(scope_path):
         with open(scope_path, "r") as f:
             scope_text = f.read()
@@ -81,43 +98,54 @@ def generate_form():
             scope_text = extract_text_from_file(new_path)
             with open(scope_path, "w") as f:
                 f.write(scope_text)
-    else:
-        scope_text = None
 
-    # Run scope comparison
-    if form_data.get("enable_ai") == "on" and scope_text:
-        scope_result = compare_scope_with_log(scope_text, form_data.get("work_done", ""))
+    # === AI/AR SCOPE COMPARISON ===
+    if form_data.get("enable_ai") == "on" and os.path.exists(scope_path):
+        scope_result = compare_scope_with_log(scope_path, form_data.get("work_done", ""))
 
-    # Save PDF
+    # === GENERATE PDF ===
     filename = f"DailyLog_{uuid.uuid4().hex[:6]}.pdf"
     save_path = os.path.join(GENERATED_FOLDER, filename)
     create_daily_log_pdf(
-        form_data, image_paths, logo_path, ai_analysis=True, progress_report=None,
-        save_path=save_path, weather_icon_path=weather_icon_path,
-        safety_sheet_path=safety_sheet_path, scope_result=scope_result
+        form_data,
+        image_paths,
+        logo_path,
+        ai_analysis=True,
+        progress_report=None,
+        save_path=save_path,
+        weather_icon_path=weather_icon_path,
+        safety_sheet_path=safety_sheet_path,
+        scope_result=scope_result
     )
+
     return jsonify({"pdf_url": f"/generated/{filename}"})
 
+# === SERVE GENERATED FILE ===
 @app.route("/generated/<path:filename>")
 def serve_pdf(filename):
     return send_from_directory(GENERATED_FOLDER, filename)
 
+# === EXTRACT TEXT FROM DOCS ===
 def extract_text_from_file(filepath):
     ext = os.path.splitext(filepath)[1].lower()
-    if ext == ".pdf":
-        text = ""
-        with open(filepath, "rb") as f:
-            reader = PdfReader(f)
-            for page in reader.pages:
-                text += page.extract_text() + "\n"
-        return text
-    elif ext in [".doc", ".docx"]:
-        doc = docx.Document(filepath)
-        return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
-    elif ext in [".txt"]:
-        with open(filepath, "r") as f:
-            return f.read()
+    try:
+        if ext == ".pdf":
+            text = ""
+            with open(filepath, "rb") as f:
+                reader = PdfReader(f)
+                for page in reader.pages:
+                    text += page.extract_text() + "\n"
+            return text
+        elif ext in [".doc", ".docx"]:
+            doc = docx.Document(filepath)
+            return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+        elif ext == ".txt":
+            with open(filepath, "r") as f:
+                return f.read()
+    except Exception as e:
+        print(f"File extraction failed: {e}")
     return ""
 
+# === MAIN ENTRY ===
 if __name__ == "__main__":
     app.run(debug=True)
