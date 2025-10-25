@@ -2,16 +2,14 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet
-from PyPDF2 import PdfReader, PdfWriter
 from PIL import Image as PILImage, ExifTags
-import os
-import io
+import os, uuid
 
 def fix_image_orientation(path):
     try:
         image = PILImage.open(path)
         for orientation in ExifTags.TAGS.keys():
-            if ExifTags.TAGS[orientation] == 'Orientation':
+            if ExifTags.TAGS[orientation] == "Orientation":
                 break
         exif = image._getexif()
         if exif:
@@ -40,89 +38,72 @@ def add_footer(canvas, doc):
     canvas.drawRightString(7.5 * inch, 0.5 * inch, f"Page {doc.page}")
     canvas.restoreState()
 
-def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_report, save_path, weather_icon_path, safety_sheet_path):
+def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_report,
+                         save_path, weather_icon_path, safety_sheet_path):
     styles = getSampleStyleSheet()
     doc = SimpleDocTemplate(save_path, pagesize=letter)
     elements = []
 
-    # Page 1 – Daily Log
-    elements.append(Paragraph("DAILY LOG", styles['Title']))
+    # === Page 1 ===
+    elements.append(Paragraph("DAILY LOG", styles["Title"]))
     if logo_path and os.path.exists(logo_path):
         elements.append(Image(logo_path, width=100, height=50))
-    elements.append(Spacer(1, 0.2 * inch))
-    for key in ['project_name', 'client_name', 'location', 'date', 'weather']:
-        if key in data:
-            elements.append(Paragraph(f"<b>{key.replace('_', ' ').title()}:</b> {data[key]}", styles['Normal']))
     if weather_icon_path and os.path.exists(weather_icon_path):
         elements.append(Image(weather_icon_path, width=40, height=40))
     elements.append(Spacer(1, 0.2 * inch))
-    for section in ['crew_notes', 'work_done', 'safety_notes']:
+
+    for key in ["project_name", "client_name", "location", "date", "weather"]:
+        if key in data:
+            elements.append(Paragraph(f"<b>{key.title()}:</b> {data[key]}", styles["Normal"]))
+    for section in ["crew_notes", "work_done", "safety_notes"]:
         if section in data:
-            elements.append(Paragraph(f"<b>{section.replace('_', ' ').title()}:</b>", styles['Heading3']))
-            elements.append(Paragraph(data[section], styles['Normal']))
-            elements.append(Spacer(1, 0.15 * inch))
+            elements.append(Paragraph(f"<b>{section.replace('_', ' ').title()}:</b>", styles["Heading3"]))
+            elements.append(Paragraph(data[section], styles["Normal"]))
     elements.append(PageBreak())
 
-    # Page 2 – Job Site Photos
-    elements.append(Paragraph("JOB SITE PHOTOS", styles['Title']))
+    # === Page 2 – Photos ===
+    elements.append(Paragraph("JOB SITE PHOTOS", styles["Title"]))
     for path in image_paths:
         try:
             pil_image = fix_image_orientation(path)
             temp_img = create_temp_image(pil_image)
             elements.append(Image(temp_img, width=5.5 * inch, height=3.5 * inch))
-            elements.append(Spacer(1, 0.1 * inch))
         except Exception as e:
-            elements.append(Paragraph(f"Could not load image: {path}", styles["Normal"]))
-            elements.append(Spacer(1, 0.1 * inch))
+            elements.append(Paragraph(f"Error loading image: {e}", styles["Normal"]))
     elements.append(PageBreak())
 
-  # Page 3 – AI / AR
-if ai_analysis or progress_report:
-    elements.append(Paragraph("AI / AR COMPARISON", styles['Title']))
-    elements.append(Spacer(1, 0.2 * inch))
-
-    # Safely convert boolean to string for AI Analysis
-    if isinstance(ai_analysis, bool):
+    # === Page 3 – AI / AR ===
+    if ai_analysis or progress_report:
+        elements.append(Paragraph("AI / AR COMPARISON", styles["Title"]))
         ai_text = "Enabled" if ai_analysis else "Disabled"
-    else:
-        ai_text = str(ai_analysis)
+        elements.append(Paragraph("<b>AI Analysis:</b>", styles["Heading3"]))
+        elements.append(Paragraph(ai_text, styles["Normal"]))
+        if progress_report:
+            elements.append(Paragraph("<b>Scope Progress:</b>", styles["Heading3"]))
+            elements.append(Paragraph(str(progress_report), styles["Normal"]))
+        elements.append(PageBreak())
 
-    elements.append(Paragraph("<b>AI Analysis:</b>", styles['Heading3']))
-    elements.append(Paragraph(ai_text, styles['Normal']))
-
-    if progress_report:
-        elements.append(Spacer(1, 0.2 * inch))
-        elements.append(Paragraph("<b>Scope Progress:</b>", styles['Heading3']))
-        elements.append(Paragraph(progress_report, styles['Normal']))
-
-    elements.append(PageBreak())
-
-    # Page 4 – Safety Sheet
+    # === Page 4 – Safety Sheet ===
     if safety_sheet_path and os.path.exists(safety_sheet_path):
-        elements.append(Paragraph("DAILY SAFETY SHEET", styles['Title']))
+        elements.append(Paragraph("DAILY SAFETY SHEET", styles["Title"]))
         ext = os.path.splitext(safety_sheet_path)[1].lower()
         if ext in [".jpg", ".jpeg", ".png"]:
-            try:
-                pil_image = fix_image_orientation(safety_sheet_path)
-                temp_img = create_temp_image(pil_image)
-                elements.append(Image(temp_img, width=6.5 * inch, height=9 * inch))
-            except Exception as e:
-                elements.append(Paragraph(f"Error loading image: {str(e)}", styles["Normal"]))
+            pil_image = fix_image_orientation(safety_sheet_path)
+            temp_img = create_temp_image(pil_image)
+            elements.append(Image(temp_img, width=6.5 * inch, height=9 * inch))
         elif ext == ".pdf":
             elements.append(Paragraph("Safety sheet PDF attached separately.", styles["Normal"]))
         elif ext in [".doc", ".docx", ".xls", ".xlsx"]:
-            elements.append(Paragraph("Uploaded safety sheet file (Word/Excel) included in records.", styles["Normal"]))
+            elements.append(Paragraph("Uploaded Word/Excel file saved in project records.", styles["Normal"]))
         else:
             elements.append(Paragraph("Unsupported safety file type.", styles["Normal"]))
         elements.append(PageBreak())
 
-    # Build
+    # === Build ===
     doc.build(elements, onFirstPage=add_footer, onLaterPages=add_footer)
 
-    # Cleanup temp files
+    # === Cleanup ===
     for f in os.listdir():
         if f.startswith("temp_") and f.endswith(".jpg"):
-            try:
-                os.remove(f)
-            except:
-                pass
+            try: os.remove(f)
+            except: pass
