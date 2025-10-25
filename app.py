@@ -1,20 +1,38 @@
-# app.py
-from flask import Flask, render_template, request, send_from_directory
-import os
-import uuid
-from utils.pdf_generator import create_daily_log_pdf  # ✅ Still using utils folder
-from utils.helpers import get_weather_icon, fix_image_orientation
+from flask import Flask, render_template, request, send_from_directory, jsonify
+import os, uuid, requests
+from utils.pdf_generator import create_daily_log_pdf
+from PIL import Image, ExifTags
 
 app = Flask(__name__)
+
 UPLOAD_FOLDER = 'static/uploads'
 GENERATED_FOLDER = 'static/generated'
-
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(GENERATED_FOLDER, exist_ok=True)
 
+def fix_image_orientation(path):
+    """Rotate images correctly based on EXIF data."""
+    try:
+        image = Image.open(path)
+        for orientation in ExifTags.TAGS.keys():
+            if ExifTags.TAGS[orientation] == 'Orientation':
+                break
+        exif = image._getexif()
+        if exif:
+            orientation_value = exif.get(orientation)
+            if orientation_value == 3:
+                image = image.rotate(180, expand=True)
+            elif orientation_value == 6:
+                image = image.rotate(270, expand=True)
+            elif orientation_value == 8:
+                image = image.rotate(90, expand=True)
+        image.save(path)
+    except Exception as e:
+        print(f"Orientation fix failed for {path}: {e}")
+
 @app.route('/')
 def home():
-    return "Nails & Notes API is live."
+    return "✅ Nails & Notes API is running."
 
 @app.route('/form')
 def form():
@@ -23,118 +41,64 @@ def form():
 @app.route('/generate_form', methods=['POST'])
 def generate_form():
     form_data = request.form.to_dict()
-
-    images = request.files.getlist('images')
-    logo = request.files.get('logo')
-    scope_doc = request.files.get('scope_doc')
-    safety_sheet = request.files.get('safety_sheet')
-
     enable_ai = form_data.get('enable_ai', 'on') == 'on'
-    weather_icon_path = get_weather_icon(form_data.get("weather", ""))
 
+    # Handle uploads
+    def save_file(file, prefix):
+        if not file or file.filename == '':
+            return None
+        filename = f"{prefix}_{uuid.uuid4()}_{file.filename}"
+        path = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(path)
+        return path
+
+    # Job photos
     image_paths = []
-    for img in images:
-        if img:
-            filename = f"{uuid.uuid4()}.jpg"
-            path = os.path.join(UPLOAD_FOLDER, filename)
-            img.save(path)
+    for file in request.files.getlist('images'):
+        path = save_file(file, 'img')
+        if path:
             fix_image_orientation(path)
             image_paths.append(path)
 
-    logo_path = None
-    if logo:
-        filename = f"logo_{uuid.uuid4()}.png"
-        logo_path = os.path.join(UPLOAD_FOLDER, filename)
-        logo.save(logo_path)
+    logo_path = save_file(request.files.get('logo'), 'logo')
+    safety_sheet_path = save_file(request.files.get('safety_sheet'), 'safety')
+    scope_doc_path = save_file(request.files.get('scope_doc'), 'scope')
 
-    safety_path = None
-    if safety_sheet:
-        filename = f"safety_{uuid.uuid4()}_{safety_sheet.filename}"
-        safety_path = os.path.join(UPLOAD_FOLDER, filename)
-        safety_sheet.save(safety_path)
+    # Weather icon from wttr.in (optional)
+    weather_icon_path = None
+    try:
+        weather = form_data.get("weather", "")
+        if weather:
+            url = f"https://wttr.in/{weather}?format=j1"
+            res = requests.get(url, timeout=5)
+            if res.status_code == 200:
+                icon_url = res.json()["current_condition"][0]["weatherIconUrl"][0]["value"]
+                icon_img = requests.get(icon_url).content
+                weather_icon_path = os.path.join(UPLOAD_FOLDER, f"weather_{uuid.uuid4()}.png")
+                with open(weather_icon_path, "wb") as f:
+                    f.write(icon_img)
+    except Exception as e:
+        print(f"Weather icon fetch failed: {e}")
 
-    save_filename = f"log_{uuid.uuid4()}.pdf"
-    save_path = os.path.join(GENERATED_FOLDER, save_filename)
-
+    # Generate PDF
+    pdf_name = f"DailyLog_{uuid.uuid4()}.pdf"
+    save_path = os.path.join(GENERATED_FOLDER, pdf_name)
     create_daily_log_pdf(
         data=form_data,
         image_paths=image_paths,
         logo_path=logo_path,
         ai_analysis=enable_ai,
-        progress_report=form_data.get("progress_report", ""),
+        progress_report=scope_doc_path,
         save_path=save_path,
         weather_icon_path=weather_icon_path,
-        safety_sheet_path=safety_path
+        safety_sheet_path=safety_sheet_path
     )
 
-    return {"pdf_url": f"/generated/{save_filename}"}
+    return jsonify({"pdf_url": f"/generated/{pdf_name}"})
 
 @app.route('/generated/<filename>')
 def serve_generated(filename):
     return send_from_directory(GENERATED_FOLDER, filename)
 
-# utils/pdf_generator.py
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import inch
-
-
-def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_report, save_path, weather_icon_path, safety_sheet_path):
-    doc = SimpleDocTemplate(save_path, pagesize=letter)
-    styles = getSampleStyleSheet()
-    elements = []
-
-    # Logo
-    if logo_path:
-        elements.append(Image(logo_path, width=100, height=50))
-        elements.append(Spacer(1, 0.2 * inch))
-
-    elements.append(Paragraph("DAILY LOG", styles['Title']))
-    elements.append(Spacer(1, 0.2 * inch))
-
-    # Weather
-    if weather_icon_path:
-        elements.append(Image(weather_icon_path, width=50, height=50))
-        elements.append(Spacer(1, 0.2 * inch))
-
-    # Daily Log Metadata
-    for k, v in data.items():
-        if k not in ["enable_ai", "progress_report"]:
-            elements.append(Paragraph(f"<b>{k}:</b> {v}", styles['Normal']))
-
-    elements.append(PageBreak())
-
-    # Page 2 – Job Site Photos
-    for path in image_paths:
-        elements.append(Image(path, width=5*inch, height=3*inch))
-        elements.append(Spacer(1, 0.2 * inch))
-    elements.append(PageBreak())
-
-    # Page 3 – AI / AR
-    if ai_analysis or progress_report:
-        elements.append(Paragraph("AI / AR COMPARISON", styles['Title']))
-        elements.append(Spacer(1, 0.2 * inch))
-
-        if isinstance(ai_analysis, bool):
-            ai_text = "Enabled" if ai_analysis else "Disabled"
-        else:
-            ai_text = str(ai_analysis)
-
-        elements.append(Paragraph("<b>AI Analysis:</b>", styles['Heading3']))
-        elements.append(Paragraph(ai_text, styles['Normal']))
-
-        if progress_report:
-            elements.append(Spacer(1, 0.2 * inch))
-            elements.append(Paragraph("<b>Scope Progress:</b>", styles['Heading3']))
-            elements.append(Paragraph(progress_report, styles['Normal']))
-
-        elements.append(PageBreak())
-
-    # Page 4 – Safety Sheet
-    if safety_sheet_path:
-        elements.append(Paragraph("Safety Sheet", styles['Title']))
-        elements.append(Spacer(1, 0.2 * inch))
-        elements.append(Image(safety_sheet_path, width=5*inch, height=3*inch))
-
-    doc.build(elements)
+if __name__ == '__main__':
+    app.run(debug=True)
