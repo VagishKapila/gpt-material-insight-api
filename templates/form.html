@@ -1,157 +1,70 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>🛠️ Nails & Notes: Daily Log Submission</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily Log Form – Nails & Notes</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f2f2f2;
-      margin: 0;
-      padding: 20px;
-    }
-    .form-container {
-      max-width: 700px;
-      background: white;
-      padding: 30px;
-      border-radius: 10px;
-      margin: auto;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    }
-    label {
-      display: block;
-      margin-top: 15px;
-      font-weight: bold;
-    }
-    input[type="text"],
-    input[type="date"],
-    textarea {
-      width: 100%;
-      padding: 10px;
-      margin-top: 5px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
-    input[type="file"] {
-      margin-top: 5px;
-    }
-    .checkbox {
-      margin-top: 10px;
-    }
-    button {
-      margin-top: 20px;
-      padding: 12px 20px;
-      border: none;
-      border-radius: 5px;
-      background-color: #28a745;
-      color: white;
-      font-weight: bold;
-      cursor: pointer;
-    }
-    button:hover {
-      background-color: #218838;
-    }
-    .clear-btn {
-      background-color: #6c757d;
-      margin-left: 10px;
-    }
-    footer {
-      text-align: center;
-      margin-top: 40px;
-      font-size: 0.9em;
-      color: #777;
-    }
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    label { font-weight: bold; margin-top: 10px; display: block; }
+    input, textarea, select { width: 100%; padding: 6px; margin-top: 4px; }
+    .section { margin-bottom: 20px; }
+    button { padding: 10px 20px; margin-top: 10px; background-color: #333; color: #fff; border: none; cursor: pointer; }
+    button:hover { background-color: #555; }
   </style>
-  <script>
-    async function autofillWeather() {
-      const location = document.getElementById('location').value;
-      if (location.length > 2) {
-        const res = await fetch('/get_weather', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `location=${encodeURIComponent(location)}`
-        });
-        const data = await res.json();
-        document.getElementById('weather').value = data.weather || "";
-      }
-    }
-
-    function clearForm() {
-      const form = document.getElementById("dailyLogForm");
-      form.reset();
-      document.getElementById("enable_ai").checked = true;
-    }
-
-    async function handleSubmit(e) {
-      e.preventDefault();
-
-      const formData = new FormData(document.getElementById("dailyLogForm"));
-      try {
-        const res = await fetch("/generate_form", {
-          method: "POST",
-          body: formData,
-        });
-        const data = await res.json();
-        if (data.pdf_url) {
-          window.open(data.pdf_url, "_blank");
-        } else {
-          alert("Error generating PDF");
-        }
-      } catch (err) {
-        console.error("Submission error:", err);
-        alert("Submission failed. Check console for details.");
-      }
-    }
-  </script>
 </head>
 <body>
-  <div class="form-container">
-    <h2>🛠️ Nails & Notes: Daily Log Submission</h2>
-    <form id="dailyLogForm" onsubmit="handleSubmit(event)">
-      <label>Project Name</label>
+  <h1>Nails & Notes – Daily Log</h1>
+
+  <form id="logForm" enctype="multipart/form-data" method="POST" action="/generate_form">
+
+    <div class="section">
+      <label for="project_name">Project Name:</label>
       <input type="text" name="project_name" required />
 
-      <label>Location</label>
-      <input type="text" name="location" id="location" required onblur="autofillWeather()" />
+      <label for="client_name">Client Name:</label>
+      <input type="text" name="client_name" />
 
-      <label>Date</label>
+      <label for="location">Location:</label>
+      <input type="text" name="location" required />
+
+      <label for="date">Date:</label>
       <input type="date" name="date" required />
 
-      <label>Crew Notes</label>
-      <textarea name="crew_notes"></textarea>
+      <label for="weather">Weather:</label>
+      <input type="text" name="weather" placeholder="Sunny 78°F" />
+    </div>
 
-      <label>Work Done</label>
-      <textarea name="work_done"></textarea>
+    <div class="section">
+      <label for="crew_notes">Crew Notes:</label>
+      <textarea name="crew_notes" rows="4"></textarea>
 
-      <label>Safety Notes</label>
-      <textarea name="safety_notes"></textarea>
+      <label for="work_done">Work Done:</label>
+      <textarea name="work_done" rows="4"></textarea>
 
-      <label>Upload Safety Sheet (JPG, PNG, PDF)</label>
-      <input type="file" name="safety_sheet" id="safety_sheet" accept=".jpg,.jpeg,.png,.pdf" />
+      <label for="safety_notes">Safety Notes:</label>
+      <textarea name="safety_notes" rows="4"></textarea>
+    </div>
 
-      <label>Weather</label>
-      <input type="text" name="weather" id="weather" placeholder="Auto-filled if location entered" />
+    <div class="section">
+      <label for="images">Job Site Photos (multiple):</label>
+      <input type="file" name="images" multiple accept="image/*" />
 
-      <label>Upload Job Site Photos (Max 20)</label>
-      <input type="file" name="images" id="images" multiple accept="image/*" />
+      <label for="logo">Company Logo:</label>
+      <input type="file" name="logo" accept="image/*" />
 
-      <label>Upload Your Logo (Optional)</label>
-      <input type="file" name="logo" id="logo" accept="image/*" />
+      <label for="safety_sheet">Safety Sheet (image/pdf):</label>
+      <input type="file" name="safety_sheet" accept="image/*,.pdf" />
 
-      <label>Scope of Work Upload (One-Time Only)</label>
-      <input type="file" name="scope_doc" id="scope_doc" accept=".pdf,.doc,.docx,.txt" />
+      <label for="scope_doc">Scope of Work (doc/pdf/txt):</label>
+      <input type="file" name="scope_doc" accept=".pdf,.doc,.docx,.txt" />
+    </div>
 
-      <div class="checkbox">
-        <label><input type="checkbox" name="enable_ai" id="enable_ai" checked /> Run AI/AR Comparison Analysis</label>
-      </div>
+    <div class="section">
+      <label><input type="checkbox" name="enable_ai" checked /> Enable AI Scope Analysis</label>
+    </div>
 
-      <button type="submit">Generate PDF</button>
-      <button type="button" class="clear-btn" onclick="clearForm()">Clear Form</button>
-    </form>
-  </div>
-
-  <footer>
-    Powered by <strong>Nails & Notes: Construction Daily Log AI</strong> © 2025 — Created by Vagish Kapila
-  </footer>
+    <button type="submit">Generate PDF</button>
+  </form>
 </body>
 </html>
