@@ -1,28 +1,45 @@
-<form method="POST" action="/generate_form" enctype="multipart/form-data">
-  <h2>Daily Log Form</h2>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Daily Log Submission</title>
+</head>
+<body>
+    <h1>Daily Log Submission Form</h1>
+    <form action="/generate_form" method="post" enctype="multipart/form-data">
+        <label>Project Name:</label><br>
+        <input type="text" name="project_name" required><br><br>
 
-  <!-- Basic Info -->
-  <label>Project Name:</label><br>
-  <input type="text" name="project_name" required><br><br>
+        <label>Client Name:</label><br>
+        <input type="text" name="client_name" required><br><br>
 
-  <label>Client Name:</label><br>
-  <input type="text" name="client_name"><br><br>
+        <label>Location:</label><br>
+        <input type="text" name="location" required><br><br>
 
-  <label>Location:</label><br>
-  <input type="text" name="location" required><br><br>
+        <label>Date:</label><br>
+        <input type="date" name="date" required><br><br>
 
-  <!-- Scope of Work Upload -->
-  <label>Upload Scope of Work (PDF):</label><br>
-  <input type="file" name="scope_file" accept=".pdf"><br><br>
+        <label>Weather:</label><br>
+        <input type="text" name="weather"><br><br>
 
-  <!-- Daily Work -->
-  <label>Work Performed Today:</label><br>
-  <textarea name="work_done" rows="6" cols="60" required></textarea><br><br>
+        <label>Work Done:</label><br>
+        <textarea name="work_done" rows="6" cols="60" required></textarea><br><br>
 
-  <!-- Safety Notes -->
-  <label>Any Safety Observations:</label><br>
-  <textarea name="safety_notes" rows="4" cols="60"></textarea><br><br>
+        <label>Safety Notes:</label><br>
+        <textarea name="safety_notes" rows="4" cols="60"></textarea><br><br>
 
-  <!-- Submit -->
-  <button type="submit">Generate PDF</button>
-</form>
+        <label>Upload Scope of Work (PDF):</label><br>
+        <input type="file" name="scope_file" accept=".pdf"><br><br>
+
+        <label>Upload Logo (Optional):</label><br>
+        <input type="file" name="logo_file" accept=".png, .jpg, .jpeg"><br><br>
+
+        <label>Upload Site Photos (Multiple allowed):</label><br>
+        <input type="file" name="images" multiple accept=".png, .jpg, .jpeg"><br><br>
+
+        <label>Enable AI Analysis:</label>
+        <input type="checkbox" name="enable_ai" checked><br><br>
+
+        <input type="submit" value="Generate PDF">
+    </form>
+</body>
+</html>
