@@ -1,4 +1,4 @@
-# daily_log/app.py
+# FULL app.py integrated with updated PDF generator
 
 import os
 import uuid
@@ -32,7 +32,7 @@ def index():
 def form():
     return render_template("form.html")
 
-# === WEATHER (Live via wttr.in) ===
+# === WEATHER ===
 @app.route("/get_weather", methods=["POST"])
 def get_weather():
     location = request.form.get("location")
@@ -44,13 +44,12 @@ def get_weather():
         print(f"Weather fetch failed: {e}")
         return jsonify({"weather": "Unavailable"})
 
-# === MAIN FORM HANDLER ===
+# === FORM SUBMISSION ===
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
     form_data = request.form.to_dict()
     files = request.files
 
-    # === IMAGES ===
     image_paths = []
     if "images" in files:
         for f in request.files.getlist("images"):
@@ -61,7 +60,6 @@ def generate_form():
             f.save(path)
             image_paths.append(path)
 
-    # === LOGO ===
     logo_path = None
     if "logo" in files:
         f = files["logo"]
@@ -69,7 +67,6 @@ def generate_form():
             logo_path = os.path.join(UPLOAD_FOLDER, f"logo_{uuid.uuid4().hex}_{secure_filename(f.filename)}")
             f.save(logo_path)
 
-    # === SAFETY SHEET ===
     safety_sheet_path = None
     if "safety_sheet" in files:
         f = files["safety_sheet"]
@@ -77,10 +74,8 @@ def generate_form():
             safety_sheet_path = os.path.join(UPLOAD_FOLDER, f"safety_{uuid.uuid4().hex}_{secure_filename(f.filename)}")
             f.save(safety_sheet_path)
 
-    # === WEATHER ICON (optional placeholder) ===
     weather_icon_path = None
 
-    # === SCOPE OF WORK ===
     scope_result = None
     project_name = form_data.get("project_name", "default_project").replace(" ", "_")
     scope_path = os.path.join(SCOPE_FOLDER, f"{project_name}_scope.txt")
@@ -99,11 +94,9 @@ def generate_form():
             with open(scope_path, "w") as f:
                 f.write(scope_text)
 
-    # === AI/AR SCOPE COMPARISON ===
-    if form_data.get("enable_ai") == "on" and os.path.exists(scope_path):
+    if form_data.get("enable_ai") == "on" and scope_text:
         scope_result = compare_scope_with_log(scope_path, form_data.get("work_done", ""))
 
-    # === GENERATE PDF ===
     filename = f"DailyLog_{uuid.uuid4().hex[:6]}.pdf"
     save_path = os.path.join(GENERATED_FOLDER, filename)
     create_daily_log_pdf(
@@ -111,21 +104,18 @@ def generate_form():
         image_paths,
         logo_path,
         ai_analysis=True,
-        progress_report=None,
+        progress_report=scope_result,
         save_path=save_path,
         weather_icon_path=weather_icon_path,
-        safety_sheet_path=safety_sheet_path,
-        scope_result=scope_result
+        safety_sheet_path=safety_sheet_path
     )
 
     return jsonify({"pdf_url": f"/generated/{filename}"})
 
-# === SERVE GENERATED FILE ===
 @app.route("/generated/<path:filename>")
 def serve_pdf(filename):
     return send_from_directory(GENERATED_FOLDER, filename)
 
-# === EXTRACT TEXT FROM DOCS ===
 def extract_text_from_file(filepath):
     ext = os.path.splitext(filepath)[1].lower()
     try:
@@ -146,6 +136,5 @@ def extract_text_from_file(filepath):
         print(f"File extraction failed: {e}")
     return ""
 
-# === MAIN ENTRY ===
 if __name__ == "__main__":
     app.run(debug=True)
