@@ -1,61 +1,73 @@
-import json
-import os
-import difflib
-from datetime import datetime
+# compare_scope_vs_log.py
+import re
+from difflib import SequenceMatcher
 
-def compare_scope_with_log(scope_json_path, daily_log_text, debug_save=True):
-    try:
-        with open(scope_json_path, 'r') as f:
-            scope_items = json.load(f)
-    except Exception as e:
-        return {"error": f"Failed to load scope: {e}"}
 
+def normalize(text):
+    return re.sub(r"[^a-z0-9 ]", "", text.lower())
+
+
+def fuzzy_match(a, b):
+    return SequenceMatcher(None, normalize(a), normalize(b)).ratio()
+
+
+def compare_scope_vs_log(scope_items, work_done, threshold=0.45):
     matched = []
-    flagged_missing = []
+    missing = []
     out_of_scope = []
 
-    log_lines = [line.strip().lower() for line in daily_log_text.splitlines() if line.strip()]
-
     for item in scope_items:
-        item_lower = item.lower()
-        match_found = any(
-            difflib.SequenceMatcher(None, item_lower, line).ratio() > 0.75 for line in log_lines
-        )
-        if match_found:
+        if fuzzy_match(item, work_done) > threshold:
             matched.append(item)
         else:
-            flagged_missing.append(item)
+            missing.append(item)
 
-    for line in log_lines:
-        if not any(item.lower() in line for item in scope_items):
+    work_items = [line.strip() for line in work_done.split("\n") if line.strip()]
+    for line in work_items:
+        if not any(fuzzy_match(line, scope_item) > threshold for scope_item in scope_items):
             out_of_scope.append(line)
 
-    percent_complete = round((len(matched) / len(scope_items)) * 100) if scope_items else 0
+    percent_complete = int((len(matched) / max(len(scope_items), 1)) * 100)
 
-    result = {
+    return {
         "matched": matched,
-        "flagged_missing": flagged_missing,
+        "missing": missing,
         "out_of_scope": out_of_scope,
-        "percent_complete": percent_complete
+        "percent_complete": percent_complete,
     }
 
-    if debug_save:
-        os.makedirs("debug_output", exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        debug_path = os.path.join("debug_output", f"compare_{timestamp}.json")
-        with open(debug_path, 'w') as f:
-            json.dump(result, f, indent=2)
 
-    return result
+def generate_scope_summary(data):
+    scope_items = data.get("scope_items", [])
+    work_done = data.get("work_done", "")
 
-# Example test run (remove or comment out in production)
-if __name__ == "__main__":
-    test_scope_path = "utils/scope_data/test_scope.json"
-    test_log_path = "utils/scope_data/test_log.txt"
-    try:
-        with open(test_log_path, 'r') as f:
-            test_log_text = f.read()
-        output = compare_scope_with_log(test_scope_path, test_log_text)
-        print(json.dumps(output, indent=2))
-    except Exception as e:
-        print(f"Test run failed: {e}")
+    if not scope_items:
+        return "Scope file not uploaded or empty.", 0
+
+    result = compare_scope_vs_log(scope_items, work_done)
+
+    summary = ["AI / SCOPE ANALYSIS", ""]
+    summary.append(f"Matched: {len(result['matched'])}")
+    summary.append(f"Missing: {len(result['missing'])}")
+    summary.append(f"Out of Scope: {len(result['out_of_scope'])}")
+    summary.append(f"Completion: {result['percent_complete']}%")
+    summary.append("")
+
+    if result['matched']:
+        summary.append("✔️ Matched:")
+        for item in result['matched']:
+            summary.append(f"- {item}")
+        summary.append("")
+
+    if result['missing']:
+        summary.append("❗ Missing (Not Done Yet):")
+        for item in result['missing']:
+            summary.append(f"- {item}")
+        summary.append("")
+
+    if result['out_of_scope']:
+        summary.append("⚠️ Out of Scope (Potential Change Order):")
+        for item in result['out_of_scope']:
+            summary.append(f"- {item}")
+
+    return "\n".join(summary), result['percent_complete']
