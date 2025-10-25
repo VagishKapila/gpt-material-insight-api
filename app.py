@@ -1,125 +1,120 @@
-from flask import Flask, render_template, request, send_from_directory
+from flask import Flask, request, render_template, send_from_directory, jsonify
 from werkzeug.utils import secure_filename
 import os
-import datetime
+import uuid
 from utils.pdf_generator import create_daily_log_pdf
-from utils.compare_scope_vs_log import compare_scope_with_log
+from utils.compare_scope_vs_log import analyze_scope_vs_log
+from utils.scope_parser import parse_scope_file
+from utils.image_utils import fix_image_orientation
+from utils.weather import fetch_weather_icon
+from datetime import datetime
 
 app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.config['GENERATED_FOLDER'] = 'static/generated'
+app.config['SCOPE_FOLDER'] = 'static/scopes'
 
-# Configure paths
-UPLOAD_FOLDER = 'static/uploads'
-GENERATED_FOLDER = 'static/generated'
-SCOPE_FOLDER = 'static/scopes'
-DEBUG_FOLDER = 'static/debug_output'
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs(app.config['GENERATED_FOLDER'], exist_ok=True)
+os.makedirs(app.config['SCOPE_FOLDER'], exist_ok=True)
 
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['GENERATED_FOLDER'] = GENERATED_FOLDER
-app.config['SCOPE_FOLDER'] = SCOPE_FOLDER
-
-# Ensure folders exist
-for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER, DEBUG_FOLDER]:
-    os.makedirs(folder, exist_ok=True)
 
 @app.route('/')
-def home():
-    return 'Nails & Notes Daily Log API is running.'
+def index():
+    return 'Daily Log AI – Server Running'
+
 
 @app.route('/form')
 def form():
     return render_template('form.html')
 
+
+@app.route('/get_weather', methods=['POST'])
+def get_weather():
+    location = request.json.get('location')
+    icon_path = fetch_weather_icon(location)
+    if icon_path:
+        return jsonify({'icon_url': '/' + icon_path})
+    else:
+        return jsonify({'error': 'Weather not found'}), 404
+
+
+@app.route('/generated/<filename>')
+def download_file(filename):
+    return send_from_directory(app.config['GENERATED_FOLDER'], filename)
+
+
 @app.route('/generate_form', methods=['POST'])
 def generate_form():
-    try:
-        # Get form fields
-        project_name = request.form.get('project_name')
-        client_name = request.form.get('client_name')
-        location = request.form.get('location')
-        date = request.form.get('date') or str(datetime.date.today())
-        weather = request.form.get('weather')
-        crew_notes = request.form.get('crew_notes')
-        work_done = request.form.get('work_done')
-        safety_notes = request.form.get('safety_notes')
-        enable_ai = 'enable_ai' in request.form
+    form_data = request.form.to_dict()
+    uploaded_files = request.files
+    images = request.files.getlist('images')
+    logo_file = request.files.get('logo')
+    safety_file = request.files.get('safety_sheet')
+    scope_file = request.files.get('scope_file')
+    ai_analysis = form_data.get('enable_ai') == 'on'
 
-        # Save uploaded files
-        def save_file(field, subfolder):
-            file = request.files.get(field)
-            if file and file.filename:
-                filename = secure_filename(file.filename)
-                path = os.path.join(app.config['UPLOAD_FOLDER'], subfolder)
-                os.makedirs(path, exist_ok=True)
-                full_path = os.path.join(path, filename)
-                file.save(full_path)
-                return full_path
-            return None
+    # Save logo
+    logo_path = None
+    if logo_file and logo_file.filename:
+        logo_filename = secure_filename(logo_file.filename)
+        logo_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4()}_{logo_filename}")
+        logo_file.save(logo_path)
 
-        logo_path = save_file('logo', 'logos')
-        safety_sheet_path = save_file('safety_sheet', 'safety')
-        scope_path = save_file('scope_doc', 'scopes')
+    # Save safety file
+    safety_sheet_path = None
+    if safety_file and safety_file.filename:
+        safety_filename = secure_filename(safety_file.filename)
+        safety_sheet_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4()}_{safety_filename}")
+        safety_file.save(safety_sheet_path)
 
-        # Save multiple images
-        image_paths = []
-        images = request.files.getlist('images')
-        for img in images:
-            if img.filename:
-                img_filename = secure_filename(img.filename)
-                img_path = os.path.join(app.config['UPLOAD_FOLDER'], 'photos', img_filename)
-                os.makedirs(os.path.dirname(img_path), exist_ok=True)
-                img.save(img_path)
-                image_paths.append(img_path)
+    # Save job site images
+    image_paths = []
+    for img in images:
+        if img and img.filename:
+            filename = secure_filename(img.filename)
+            save_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4()}_{filename}")
+            img.save(save_path)
+            fixed_path = fix_image_orientation(save_path)
+            image_paths.append(fixed_path)
 
-        # Build data dict
-        data = {
-            'project_name': project_name,
-            'client_name': client_name,
-            'location': location,
-            'date': date,
-            'weather': weather,
-            'crew_notes': crew_notes,
-            'work_done': work_done,
-            'safety_notes': safety_notes,
-        }
+    # Scope Analysis Logic
+    progress_report = None
+    if ai_analysis and scope_file and scope_file.filename:
+        scope_filename = secure_filename(scope_file.filename)
+        scope_path = os.path.join(app.config['SCOPE_FOLDER'], f"{uuid.uuid4()}_{scope_filename}")
+        scope_file.save(scope_path)
 
-        # AI scope analysis
-        progress_report = None
-        if enable_ai and scope_path:
-            try:
-                scope_json_path = scope_path.replace('.txt', '.json')
-                with open(scope_path, 'r') as f:
-                    scope_items = [line.strip() for line in f.readlines() if line.strip()]
-                with open(scope_json_path, 'w') as f:
-                    import json
-                    json.dump(scope_items, f, indent=2)
-                daily_log_text = f"{crew_notes}\n{work_done}\n{safety_notes}"
-                progress_report = compare_scope_with_log(scope_json_path, daily_log_text)
-            except Exception as e:
-                print(f"Error in AI scope analysis: {e}")
+        try:
+            scope_items = parse_scope_file(scope_path)
+            work_text = form_data.get("work_done", "")
+            progress_report = analyze_scope_vs_log(scope_items, work_text)
+        except Exception as e:
+            progress_report = {
+                "error": f"Scope comparison failed: {str(e)}"
+            }
 
-        # Create PDF
-        filename = f"DailyLog_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-        save_path = os.path.join(app.config['GENERATED_FOLDER'], filename)
+    # Weather
+    location = form_data.get("location", "")
+    weather_icon_path = fetch_weather_icon(location)
 
-        create_daily_log_pdf(
-            data=data,
-            image_paths=image_paths,
-            logo_path=logo_path,
-            ai_analysis=enable_ai,
-            progress_report=progress_report,
-            save_path=save_path,
-            weather_icon_path=None,
-            safety_sheet_path=safety_sheet_path
-        )
+    # PDF generation
+    unique_filename = f"DailyLog_{uuid.uuid4().hex[:6]}.pdf"
+    save_path = os.path.join(app.config['GENERATED_FOLDER'], unique_filename)
 
-        return f"PDF generated: <a href='/generated/{filename}' target='_blank'>{filename}</a>"
+    create_daily_log_pdf(
+        data=form_data,
+        image_paths=image_paths,
+        logo_path=logo_path,
+        ai_analysis=ai_analysis,
+        progress_report=progress_report,
+        save_path=save_path,
+        weather_icon_path=weather_icon_path,
+        safety_sheet_path=safety_sheet_path
+    )
 
-    except Exception as e:
-        return f"❌ Error: {e}"
+    return jsonify({'pdf_url': f'/generated/{unique_filename}'})
 
-@app.route('/generated/<path:filename>')
-def serve_pdf(filename):
-    return send_from_directory(app.config['GENERATED_FOLDER'], filename)
 
 if __name__ == '__main__':
     app.run(debug=True)
