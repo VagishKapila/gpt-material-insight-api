@@ -1,6 +1,7 @@
 import os
 import json
 import uuid
+import glob
 from flask import Flask, request, render_template, send_from_directory
 from werkzeug.utils import secure_filename
 from utils.pdf_generator import create_daily_log_pdf
@@ -14,6 +15,11 @@ SCOPE_FOLDER = 'static/scope'
 
 for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER]:
     os.makedirs(folder, exist_ok=True)
+
+# Optional: clean uploaded files from last session
+def clear_folder(folder_path):
+    for f in glob.glob(f"{folder_path}/*"):
+        os.remove(f)
 
 @app.route('/')
 def home():
@@ -35,6 +41,9 @@ def extract_scope_from_pdf(path):
 def generate_form():
     data = dict(request.form)
     project_id = data.get("project_name", "default_project").strip().replace(" ", "_").lower()
+
+    # Clear folders from last session
+    clear_folder(UPLOAD_FOLDER)
 
     # Save Scope of Work PDF if uploaded (only once per project)
     scope_file = request.files.get("scope_doc")
@@ -58,13 +67,39 @@ def generate_form():
     safety_notes = data.get("safety_notes", "")
     crew_notes = data.get("crew_notes", "")
 
-    # Run comparison AI
-    comparison_result = analyze_scope_vs_log(saved_scope, work_done, crew_notes, safety_notes)
+    # AI Analysis
+    raw_analysis = analyze_scope_vs_log(saved_scope, work_done, crew_notes, safety_notes)
+    comparison_result = {
+        "completion": raw_analysis.get("progress", 0),
+        "matched": raw_analysis.get("matched_items", []),
+        "unmatched": raw_analysis.get("pending_items", []),
+        "out_of_scope": raw_analysis.get("extra_items", []),
+        "change_order_suggestions": []
+    }
 
-    # Save daily log as PDF
+    # Handle uploaded job photos
+    image_paths = []
+    if 'images' in request.files:
+        for img in request.files.getlist('images'):
+            if img.filename:
+                filename = secure_filename(img.filename)
+                path = os.path.join(UPLOAD_FOLDER, filename)
+                img.save(path)
+                image_paths.append(path)
+
+    # Handle logo upload
+    logo_path = None
+    if 'logo' in request.files:
+        logo = request.files['logo']
+        if logo and logo.filename:
+            logo_filename = secure_filename(logo.filename)
+            logo_path = os.path.join(UPLOAD_FOLDER, logo_filename)
+            logo.save(logo_path)
+
+    # Save final PDF
     filename = f"daily_log_{uuid.uuid4().hex[:8]}.pdf"
     save_path = os.path.join(GENERATED_FOLDER, filename)
-    create_daily_log_pdf(data, [], None, True, comparison_result, save_path)
+    create_daily_log_pdf(data, image_paths, logo_path, True, comparison_result, save_path)
 
     return f"Generated: <a href='/generated/{filename}'>{filename}</a>"
 
