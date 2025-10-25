@@ -1,6 +1,8 @@
 from flask import Flask, render_template, request, send_from_directory, jsonify
-import os, uuid, requests
+import os, uuid, requests, json
 from utils.pdf_generator import create_daily_log_pdf
+from utils.scope_parser import parse_scope_file
+from utils.compare_scope_vs_log import compare_scope_vs_log
 from PIL import Image, ExifTags
 
 app = Flask(__name__)
@@ -52,7 +54,6 @@ def generate_form():
         file.save(path)
         return path
 
-    # Job photos
     image_paths = []
     for file in request.files.getlist('images'):
         path = save_file(file, 'img')
@@ -64,7 +65,7 @@ def generate_form():
     safety_sheet_path = save_file(request.files.get('safety_sheet'), 'safety')
     scope_doc_path = save_file(request.files.get('scope_doc'), 'scope')
 
-    # Weather icon from wttr.in (optional)
+    # Weather icon (optional)
     weather_icon_path = None
     try:
         weather = form_data.get("weather", "")
@@ -80,15 +81,35 @@ def generate_form():
     except Exception as e:
         print(f"Weather icon fetch failed: {e}")
 
-    # Generate PDF
+    # === AI Scope Comparison Logic ===
+    progress_summary = None
+    if enable_ai and scope_doc_path:
+        try:
+            parsed_scope = parse_scope_file(scope_doc_path)
+            parsed_scope_path = os.path.join(UPLOAD_FOLDER, f"parsed_scope_{uuid.uuid4()}.json")
+            with open(parsed_scope_path, "w") as f:
+                json.dump(parsed_scope, f)
+
+            image_captions = []  # Placeholder: Add image captioning AI later
+            progress_summary = compare_scope_vs_log(
+                scope_json_path=parsed_scope_path,
+                crew_notes=form_data.get("crew_notes", ""),
+                work_done=form_data.get("work_done", ""),
+                image_captions=image_captions
+            )
+        except Exception as e:
+            print(f"⚠️ Scope comparison failed: {e}")
+
+    # === PDF Generation ===
     pdf_name = f"DailyLog_{uuid.uuid4()}.pdf"
     save_path = os.path.join(GENERATED_FOLDER, pdf_name)
+
     create_daily_log_pdf(
         data=form_data,
         image_paths=image_paths,
         logo_path=logo_path,
         ai_analysis=enable_ai,
-        progress_report=scope_doc_path,
+        progress_report=progress_summary,
         save_path=save_path,
         weather_icon_path=weather_icon_path,
         safety_sheet_path=safety_sheet_path
