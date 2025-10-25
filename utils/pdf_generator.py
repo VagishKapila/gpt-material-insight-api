@@ -107,3 +107,6 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
         if f.startswith("temp_") and f.endswith(".jpg"):
             try: os.remove(f)
             except: pass
+
+if __name__ == "__main__":
+    print("This module is not intended to be run directly.")
