@@ -1,7 +1,6 @@
 from flask import Flask, request, render_template, send_from_directory
 import os
 import uuid
-from utils.pdf_generator import create_daily_log_pdf
 from utils.compare_scope_vs_log import analyze_scope_vs_log, load_scope_for_project
 from werkzeug.utils import secure_filename
 
