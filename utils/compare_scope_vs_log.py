@@ -1,98 +1,60 @@
-# utils/compare_scope_vs_log.py
-import os
-import json
-from difflib import SequenceMatcher
-from typing import List, Dict
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from fuzzywuzzy import fuzz
 
-# ---------- CONFIG ----------
-SCOPE_CACHE_FOLDER = "scope_cache"
-SIMILARITY_THRESHOLD = 0.5   # can tune later
-
-# ---------- HELPERS ----------
-def similar(a: str, b: str) -> float:
-    """Basic fuzzy string ratio."""
-    return SequenceMatcher(None, a.lower(), b.lower()).ratio()
-
-def load_scope_for_project(project_id: str) -> List[str]:
-    path = os.path.join(SCOPE_CACHE_FOLDER, f"{project_id}.json")
-    if not os.path.exists(path):
-        return []
-    with open(path, "r") as f:
-        return json.load(f)
-
-def save_scope_for_project(project_id: str, scope_items: List[str]):
-    os.makedirs(SCOPE_CACHE_FOLDER, exist_ok=True)
-    path = os.path.join(SCOPE_CACHE_FOLDER, f"{project_id}.json")
-    with open(path, "w") as f:
-        json.dump(scope_items, f, indent=2)
-
-def extract_scope_items(raw_text: str) -> List[str]:
-    """Split scope text into meaningful lines (ignore very short ones)."""
-    return [line.strip() for line in raw_text.split("\n") if len(line.strip()) > 15]
-
-# ---------- MAIN COMPARISON ----------
-def analyze_scope_vs_log(scope_items: List[str],
-                         work_done: str,
-                         crew_notes: str,
-                         safety_notes: str) -> Dict:
-    """
-    Compare scope items with daily log entries and return detailed confidence data.
-    """
-    full_log = "\n".join([work_done, crew_notes, safety_notes]).strip()
-    if not scope_items or not full_log:
+def analyze_scope_vs_log(scope_items, work_done, crew_notes, safety_notes):
+    if not scope_items:
         return {
             "completion": 0,
             "scored_items": [],
-            "matched": [],
-            "unmatched": scope_items,
-            "out_of_scope": [],
-            "change_order_suggestions": ["Scope or daily log is empty. No valid comparison made."]
+            "out_of_scope": ["⚠️ No scope items loaded for project."]
         }
 
-    # TF‑IDF vectorization for similarity
+    full_log = f"{work_done}\n{crew_notes}\n{safety_notes}".strip()
+    if not full_log:
+        return {
+            "completion": 0,
+            "scored_items": [],
+            "out_of_scope": ["⚠️ No log data provided."]
+        }
+
     vectorizer = TfidfVectorizer().fit(scope_items + [full_log])
-    scope_vecs = vectorizer.transform(scope_items)
     log_vec = vectorizer.transform([full_log])
 
+    matched = []
+    unmatched = []
     scored_items = []
-    matched, unmatched = [], []
 
-    for i, scope in enumerate(scope_items):
-        score = cosine_similarity(scope_vecs[i], log_vec)[0][0]
-        fuzzy = similar(scope, full_log)
-        confidence = round((score * 0.8 + fuzzy * 0.2), 3)  # blended confidence
+    for item in scope_items:
+        scope_vec = vectorizer.transform([item])
+        tfidf_score = cosine_similarity(scope_vec, log_vec)[0][0]
+        fuzzy_score = fuzz.partial_ratio(item.lower(), full_log.lower()) / 100
 
-        match = confidence >= SIMILARITY_THRESHOLD
+        final_score = max(tfidf_score, fuzzy_score)
+
+        match = final_score >= 0.65
         scored_items.append({
-            "scope": scope,
-            "confidence": confidence,
+            "scope": item,
+            "confidence": round(final_score, 2),
             "match": match
         })
+
         if match:
-            matched.append(scope)
+            matched.append(item)
         else:
-            unmatched.append(scope)
+            unmatched.append(item)
 
-    # Out‑of‑scope lines
+    # Out-of-scope detection (basic line scan)
+    log_lines = [line.strip() for line in full_log.split('\n') if line.strip()]
     out_of_scope = []
-    for line in full_log.split("\n"):
-        if not any(similar(line, s) > 0.5 for s in scope_items):
-            out_of_scope.append(line.strip())
+    for line in log_lines:
+        if all(fuzz.partial_ratio(line.lower(), item.lower()) < 60 for item in scope_items):
+            out_of_scope.append(line)
 
-    # Compute weighted completion %
-    completion = round(
-        100 * sum(1 for s in scored_items if s["match"]) / max(1, len(scored_items))
-    )
+    percent_complete = int((len(matched) / len(scope_items)) * 100)
 
     return {
-        "completion": completion,
+        "completion": percent_complete,
         "scored_items": scored_items,
-        "matched": matched,
-        "unmatched": unmatched,
-        "out_of_scope": out_of_scope[:10],
-        "change_order_suggestions": [
-            f"Review {len(out_of_scope)} possible out‑of‑scope items."
-        ] if out_of_scope else []
+        "out_of_scope": out_of_scope[:10]  # limit output
     }
