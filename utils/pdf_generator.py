@@ -1,11 +1,11 @@
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.units import inch
+from reportlab.lib import colors
 from PyPDF2 import PdfReader, PdfWriter
 import os
-
 
 def create_daily_log_pdf(
     data,
@@ -17,19 +17,10 @@ def create_daily_log_pdf(
     weather_icon_path=None,
     safety_sheet_path=None
 ):
-    """
-    Generate a multi-page Daily Log PDF with:
-    - Page 1: Project details, weather, notes
-    - Page 2: Job site photos
-    - Page 3: AI scope comparison (if available)
-    - Page 4: Safety sheet (if any)
-    """
-
     doc = SimpleDocTemplate(save_path, pagesize=A4)
     elements = []
     styles = getSampleStyleSheet()
 
-    # ---- Styles ----
     title_style = ParagraphStyle(name="Title", fontSize=18, alignment=TA_CENTER, spaceAfter=20)
     header_style = ParagraphStyle(name="Header", fontSize=14, spaceBefore=10, spaceAfter=6)
     normal = styles["Normal"]
@@ -48,16 +39,10 @@ def create_daily_log_pdf(
     elements.append(Paragraph("DAILY LOG", title_style))
 
     # ---- Page 1: Basic Info ----
-    if "project_name" in data:
-        elements.append(Paragraph(f"<b>Project Name:</b> {data['project_name']}", normal))
-    if "client_name" in data:
-        elements.append(Paragraph(f"<b>Client Name:</b> {data['client_name']}", normal))
-    if "location" in data:
-        elements.append(Paragraph(f"<b>Location:</b> {data['location']}", normal))
-    if "date" in data:
-        elements.append(Paragraph(f"<b>Date:</b> {data['date']}", normal))
-    if "supervisor" in data and data["supervisor"].strip():
-        elements.append(Paragraph(f"<b>Supervisor:</b> {data['supervisor']}", normal))
+    for field in ["project_name", "client_name", "location", "date", "supervisor"]:
+        if field in data and data[field].strip():
+            label = field.replace("_", " ").title()
+            elements.append(Paragraph(f"<b>{label}:</b> {data[field]}", normal))
 
     # ---- Weather ----
     if "weather" in data and data["weather"].strip():
@@ -103,22 +88,38 @@ def create_daily_log_pdf(
         except (ValueError, TypeError):
             completion = 0
 
+        # Draw progress bar
         progress_bar = f"[{'█' * (completion // 10)}{'░' * (10 - (completion // 10))}]"
         elements.append(Paragraph(f"Completion: <b>{completion}%</b> {progress_bar}", normal))
+        elements.append(Spacer(1, 6))
 
-        def render_list(title, items):
-            if items:
-                elements.append(Paragraph(title, header_style))
-                for item in items:
-                    elements.append(Paragraph(f"- {item}", normal))
+        def render_confidence_table(title, item_list):
+            if not item_list:
+                return
+            elements.append(Paragraph(title, header_style))
+            data = [["Item", "Confidence"]]
+            for item in item_list:
+                if isinstance(item, dict):
+                    text = item.get("text", "")
+                    conf = round(item.get("confidence", 0) * 100)
+                    data.append([text, f"{conf}%"])
+                else:
+                    data.append([str(item), "–"])
+            t = Table(data, colWidths=[400, 100])
+            t.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
+            ]))
+            elements.append(t)
+            elements.append(Spacer(1, 12))
 
-        render_list("Matched Items", ai_analysis.get("matched", ai_analysis.get("matched_items", [])))
-        render_list("Pending / Unmatched Items", ai_analysis.get("unmatched", ai_analysis.get("pending_items", [])))
-        render_list("Out of Scope", ai_analysis.get("out_of_scope", ai_analysis.get("extra_items", [])))
-        render_list("Suggested Change Orders", ai_analysis.get("change_order_suggestions", []))
-
-        if not any(ai_analysis.get(k) for k in ["matched", "unmatched", "out_of_scope", "extra_items"]):
-            elements.append(Paragraph("⚠️ No AI analysis generated for this log compared to the Scope of Work.", normal))
+        render_confidence_table("✔️ Matched Items", ai_analysis.get("matched", []))
+        render_confidence_table("⏳ Unmatched Items", ai_analysis.get("unmatched", []))
+        render_confidence_table("❌ Out of Scope", ai_analysis.get("out_of_scope", []))
+        render_confidence_table("🔁 Suggested Change Orders", ai_analysis.get("change_order_suggestions", []))
 
         elements.append(PageBreak())
 
