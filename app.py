@@ -10,6 +10,7 @@ from utils.compare_scope_vs_log import (
     extract_scope_items,
     save_scope_for_project
 )
+from utils.pdf_generator import create_daily_log_pdf  # ✅ Re-add this line
 from datetime import datetime
 import requests
 
