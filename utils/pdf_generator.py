@@ -1,97 +1,103 @@
-from flask import Flask, request, render_template, send_from_directory
-import os
-import uuid
-from utils.compare_scope_vs_log import analyze_scope_vs_log, load_scope_for_project
-from werkzeug.utils import secure_filename
+# ---- utils/pdf_generator.py ----
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
 
-app = Flask(__name__)
-UPLOAD_FOLDER = "static/uploads"
-SCOPE_FOLDER = "scope_cache"
-GENERATED_FOLDER = "static/generated"
-LOGO_FOLDER = "static/logos"
-WEATHER_ICON_FOLDER = "static/weather"
+def create_daily_log_pdf(
+    data,
+    image_paths,
+    logo_path,
+    ai_analysis,
+    progress_report,
+    save_path,
+    weather_icon_path=None,
+    safety_sheet_path=None
+):
+    """
+    Generates the full Daily Log PDF (Page 1–4 layout).
+    """
+    doc = SimpleDocTemplate(save_path, pagesize=letter)
+    elements = []
+    styles = getSampleStyleSheet()
 
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(GENERATED_FOLDER, exist_ok=True)
-os.makedirs(LOGO_FOLDER, exist_ok=True)
+    # --- Title + Logo ---
+    if logo_path:
+        elements.append(Image(logo_path, width=100, height=50))
+    elements.append(Paragraph("<b>DAILY LOG</b>", styles["Title"]))
+    elements.append(Spacer(1, 12))
 
-@app.route("/")
-def health_check():
-    return "✅ Daily Log AI is running."
+    # --- Project Info ---
+    elements.append(Paragraph(f"<b>Project:</b> {data.get('project_name', '')}", styles["Normal"]))
+    elements.append(Paragraph(f"<b>Date:</b> {data.get('date', '')}", styles["Normal"]))
+    elements.append(Paragraph(f"<b>Location:</b> {data.get('location', '')}", styles["Normal"]))
+    elements.append(Spacer(1, 12))
 
-@app.route("/form")
-def form():
-    return render_template("form.html")
+    # --- Work/Crew/Safety Notes ---
+    elements.append(Paragraph("<b>Work Done:</b>", styles["Heading3"]))
+    elements.append(Paragraph(data.get("work_done", "N/A"), styles["Normal"]))
+    elements.append(Spacer(1, 6))
 
-@app.route("/generate_form", methods=["POST"])
-def generate_form():
-    data = request.form.to_dict()
-    files = request.files
+    elements.append(Paragraph("<b>Crew Notes:</b>", styles["Heading3"]))
+    elements.append(Paragraph(data.get("crew_notes", "N/A"), styles["Normal"]))
+    elements.append(Spacer(1, 6))
 
-    # Save uploaded job site images
-    image_paths = []
-    for i in range(1, 21):
-        file_key = f"image_{i}"
-        if file_key in files:
-            f = files[file_key]
-            if f and f.filename:
-                filename = secure_filename(f.filename)
-                path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4()}_{filename}")
-                f.save(path)
-                image_paths.append(path)
+    elements.append(Paragraph("<b>Safety Notes:</b>", styles["Heading3"]))
+    elements.append(Paragraph(data.get("safety_notes", "N/A"), styles["Normal"]))
+    elements.append(Spacer(1, 12))
 
-    # Save logo if uploaded
-    logo_path = None
-    if "logo" in files and files["logo"].filename:
-        logo_file = files["logo"]
-        filename = secure_filename(logo_file.filename)
-        logo_path = os.path.join(LOGO_FOLDER, f"{uuid.uuid4()}_{filename}")
-        logo_file.save(logo_path)
+    # --- AI Analysis Section ---
+    if ai_analysis:
+        elements.append(Paragraph("<b>AI Scope Analysis</b>", styles["Heading2"]))
+        elements.append(Paragraph(f"Completion: {ai_analysis.get('completion', 0)}%", styles["Normal"]))
+        elements.append(Spacer(1, 6))
 
-    # Save safety sheet
-    safety_path = None
-    if "safety_sheet" in files and files["safety_sheet"].filename:
-        sheet_file = files["safety_sheet"]
-        filename = secure_filename(sheet_file.filename)
-        safety_path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4()}_{filename}")
-        sheet_file.save(safety_path)
+        # Confidence Table
+        scored = ai_analysis.get("scored_items", [])
+        if scored:
+            table_data = [["Scope Item", "Confidence", "Match"]]
+            for s in scored:
+                table_data.append([
+                    s["scope"][:80] + ("..." if len(s["scope"]) > 80 else ""),
+                    str(s["confidence"]),
+                    "✅" if s["match"] else "❌"
+                ])
+            table = Table(table_data, repeatRows=1)
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+            ]))
+            elements.append(table)
+            elements.append(Spacer(1, 12))
 
-    # Weather icon path (optional)
-    weather_icon_path = os.path.join(WEATHER_ICON_FOLDER, "weather_icon.png")
-    if not os.path.exists(weather_icon_path):
-        weather_icon_path = None
+        out_of_scope = ai_analysis.get("out_of_scope", [])
+        if out_of_scope:
+            elements.append(Paragraph("<b>Out of Scope Items:</b>", styles["Heading3"]))
+            for line in out_of_scope:
+                elements.append(Paragraph(line, styles["Normal"]))
+            elements.append(Spacer(1, 12))
 
-    # Scope AI Analysis
-    ai_analysis = {}
-    if data.get("enable_ai") == "on":
-        project_id = data.get("project_name", "default_project").replace(" ", "_")
-        scope_items = load_scope_for_project(project_id)
-        ai_analysis = analyze_scope_vs_log(
-            scope_items,
-            data.get("work_done", ""),
-            data.get("crew_notes", ""),
-            data.get("safety_notes", "")
-        )
+    # --- Job Photos ---
+    if image_paths:
+        elements.append(Paragraph("<b>Job Site Photos</b>", styles["Heading2"]))
+        for img_path in image_paths:
+            elements.append(Image(img_path, width=250, height=180))
+            elements.append(Spacer(1, 6))
 
-    filename = f"daily_log_{uuid.uuid4()}.pdf"
-    pdf_path = os.path.join(GENERATED_FOLDER, filename)
+    # --- Safety Sheet ---
+    if safety_sheet_path:
+        elements.append(Paragraph("<b>Safety Sheet Uploaded:</b>", styles["Heading2"]))
+        elements.append(Paragraph(os.path.basename(safety_sheet_path), styles["Normal"]))
+        elements.append(Spacer(1, 12))
 
-    create_daily_log_pdf(
-        data,
-        image_paths,
-        logo_path,
-        ai_analysis,
-        ai_analysis,
-        pdf_path,
-        weather_icon_path,
-        safety_sheet_path=safety_path
-    )
+    # --- Footer ---
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph(
+        "Confidential – Do Not Duplicate without written consent from BAINS Dev Comm",
+        styles["Normal"]
+    ))
 
-    return {"pdf_url": f"/generated/{filename}"}
-
-@app.route("/generated/<filename>")
-def serve_pdf(filename):
-    return send_from_directory(GENERATED_FOLDER, filename)
-
-if __name__ == "__main__":
-    app.run(debug=True)
+    # --- Build PDF ---
+    doc.build(elements)
+    print(f"✅ PDF successfully created at {save_path}")
