@@ -9,7 +9,6 @@ from reportlab.graphics.shapes import Drawing, Rect
 from reportlab.lib.units import inch
 from PIL import Image as PILImage
 
-
 def create_daily_log_pdf(
     data,
     image_paths,
@@ -17,7 +16,7 @@ def create_daily_log_pdf(
     ai_analysis,
     progress_report,
     save_path,
-    weather_icon_path=None,
+    weather_icon_path=None,  # Kept for compatibility, but unused
     safety_sheet_path=None
 ):
     doc = SimpleDocTemplate(save_path, pagesize=letter)
@@ -30,7 +29,6 @@ def create_daily_log_pdf(
             elements.append(Image(logo_path, width=120, height=40))
         except Exception as e:
             print(f"⚠️ Error loading logo image: {e}")
-
     elements.append(Paragraph("<b>DAILY LOG</b>", styles["Title"]))
     elements.append(Spacer(1, 12))
 
@@ -38,21 +36,20 @@ def create_daily_log_pdf(
     elements.append(Paragraph(f"<b>Project:</b> {data.get('project_name', '')}", styles["Normal"]))
     elements.append(Paragraph(f"<b>Date:</b> {data.get('date', '')}", styles["Normal"]))
     elements.append(Paragraph(f"<b>Location:</b> {data.get('location', '')}", styles["Normal"]))
+    elements.append(Paragraph(f"<b>Weather:</b> {data.get('weather', 'N/A')}", styles["Normal"]))
     elements.append(Spacer(1, 12))
 
-    # --- Weather Icon ---
-    if weather_icon_path and os.path.exists(weather_icon_path):
-        try:
-            elements.append(Image(weather_icon_path, width=40, height=40))
-        except Exception as e:
-            print(f"⚠️ Weather icon error: {e}")
-    elements.append(Spacer(1, 12))
-
-    # --- Work and Safety Notes ---
-    for label, key in [("Work Done", "work_done"), ("Safety Notes", "safety_notes")]:
-        elements.append(Paragraph(f"<b>{label}:</b>", styles["Heading3"]))
-        elements.append(Paragraph(data.get(key, "N/A"), styles["Normal"]))
-        elements.append(Spacer(1, 8))
+    # --- Log Notes Sections ---
+    for label, key in [
+        ("Work Done", "work_done"),
+        ("Safety Notes", "safety_notes"),
+        ("Crew Notes", "crew_notes")
+    ]:
+        content = data.get(key, "").strip()
+        if content:
+            elements.append(Paragraph(f"<b>{label}:</b>", styles["Heading3"]))
+            elements.append(Paragraph(content, styles["Normal"]))
+            elements.append(Spacer(1, 10))
 
     # --- AI Scope Analysis Page ---
     if ai_analysis:
@@ -68,7 +65,6 @@ def create_daily_log_pdf(
             elements.append(drawing)
         except Exception as e:
             print(f"⚠️ Drawing error: {e}")
-
         elements.append(Paragraph(f"<b>Completion:</b> {completion:.1f}%", styles["Normal"]))
         elements.append(Spacer(1, 10))
 
@@ -104,13 +100,12 @@ def create_daily_log_pdf(
     if image_paths:
         elements.append(PageBreak())
         elements.append(Paragraph("📸 <b>Job Site Photos</b>", styles["Heading2"]))
-
         for img_path in image_paths:
             if os.path.exists(img_path):
                 try:
                     pil_img = PILImage.open(img_path)
                     pil_img.thumbnail((5*inch, 5*inch))
-                    pil_img.save(img_path)
+                    pil_img.save(img_path)  # Overwrite with compressed image
                     elements.append(Image(img_path, width=5*inch, height=pil_img.height / pil_img.width * 5*inch))
                     elements.append(Spacer(1, 8))
                 except Exception as e:
