@@ -1,159 +1,195 @@
-from flask import Flask, request, jsonify, render_template, send_from_directory, redirect, url_for
-from utils.pdf_generator import create_daily_log_pdf
-from utils.compare_scope_vs_log import analyze_scope_vs_log, load_scope_for_project
-import os, uuid, fitz, docx
+import os
+import traceback
+import json
+import uuid
+import requests
 import pandas as pd
+from flask import Flask, request, render_template, redirect, url_for, send_from_directory
+from werkzeug.utils import secure_filename
+
+from utils.pdf_generator import create_daily_log_pdf
+from utils.compare_scope_vs_log import analyze_scope_vs_log, load_scope_for_project, parse_scope_file
+from utils.weather_icon import download_weather_icon
+from utils.image_tools import fix_image_orientation
 
 app = Flask(__name__)
+app.config["UPLOAD_FOLDER"] = "static/uploads"
+app.config["GENERATED_FOLDER"] = "static/generated"
+app.config["SCOPE_FOLDER"] = "static/scope"
+app.config["AUTO_FILL_FOLDER"] = "static/autofill"
+app.config["LOGO_FOLDER"] = "static/logos"
+app.config["ALLOWED_SCOPE_EXTENSIONS"] = {"pdf", "docx", "txt", "xlsx", "xls"}
 
-UPLOAD_FOLDER = "static/uploads"
-GENERATED_FOLDER = "static/generated"
-SCOPE_FOLDER = "scope"
-TEMP_DATA = {}  # In-memory preview state
+os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+os.makedirs(app.config["GENERATED_FOLDER"], exist_ok=True)
+os.makedirs(app.config["SCOPE_FOLDER"], exist_ok=True)
+os.makedirs(app.config["AUTO_FILL_FOLDER"], exist_ok=True)
+os.makedirs(app.config["LOGO_FOLDER"], exist_ok=True)
 
-for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER]:
-    os.makedirs(folder, exist_ok=True)
+def allowed_scope_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config["ALLOWED_SCOPE_EXTENSIONS"]
 
 @app.route("/")
-def index():
-    return "✅ Daily Log AI is running."
+def health():
+    return "✅ Daily Log AI is up and running!"
 
-@app.route("/form")
+@app.route("/form", methods=["GET"])
 def form():
     return render_template("form.html")
 
-@app.route("/generate_form", methods=["POST"])
-def generate_from_form():
+@app.route("/get_weather", methods=["GET"])
+def get_weather():
+    location = request.args.get("location", "")
+    if not location:
+        return {"weather": "Unknown"}
     try:
-        form = request.form
-        files = request.files
+        r = requests.get(f"https://wttr.in/{location}?format=%C+%t")
+        return {"weather": r.text.strip()}
+    except:
+        return {"weather": "Unavailable"}
 
-        project_name = form.get("project_name", "")
-        project_id = project_name.replace(" ", "_").lower()
+@app.route("/generate_form", methods=["POST"])
+def generate_form():
+    try:
         data = {
-            "project_id": project_id,
-            "project_name": project_name,
-            "client_name": form.get("client_name", ""),
-            "location": form.get("location", ""),
-            "date": form.get("date", ""),
-            "weather": form.get("weather", ""),
-            "work_done": form.get("work_done", ""),
-            "safety_notes": form.get("safety_notes", ""),
-            "crew_notes": form.get("crew_notes", ""),
+            "project_name": request.form.get("project_name", ""),
+            "client_name": request.form.get("client_name", ""),
+            "location": request.form.get("location", ""),
+            "date": request.form.get("date", ""),
+            "weather": request.form.get("weather", ""),
+            "crew_notes": request.form.get("crew_notes", ""),
+            "work_done": request.form.get("work_done", ""),
+            "safety_notes": request.form.get("safety_notes", "")
         }
 
-        # --- Handle Scope Upload ---
-        scope_file = files.get("scope_doc")
-        if scope_file and scope_file.filename:
-            ext = os.path.splitext(scope_file.filename)[1].lower()
-            extracted = ""
-            if ext == ".pdf":
-                with fitz.open(stream=scope_file.stream.read(), filetype="pdf") as doc:
-                    extracted = "\n".join(page.get_text() for page in doc)
-            elif ext == ".docx":
-                extracted = "\n".join(p.text for p in docx.Document(scope_file).paragraphs)
-            elif ext == ".txt":
-                extracted = scope_file.read().decode("utf-8")
-            elif ext in [".xls", ".xlsx"]:
-                df = pd.read_excel(scope_file)
-                extracted = "\n".join(df.astype(str).apply(" ".join, axis=1))
-            with open(os.path.join(SCOPE_FOLDER, f"scope_{project_id}.txt"), "w", encoding="utf-8") as f:
-                f.write(extracted)
+        session_id = str(uuid.uuid4())[:8]
+        session_folder = os.path.join(app.config["UPLOAD_FOLDER"], session_id)
+        os.makedirs(session_folder, exist_ok=True)
 
-        # --- Handle File Uploads ---
-        logo_file = files.get("logo")
+        images = []
+        if "images" in request.files:
+            for file in request.files.getlist("images"):
+                if file.filename:
+                    filename = secure_filename(file.filename)
+                    path = os.path.join(session_folder, filename)
+                    file.save(path)
+                    fix_image_orientation(path)
+                    images.append(path)
+
+        safety_sheet_path = None
+        if "safety_sheet" in request.files:
+            file = request.files["safety_sheet"]
+            if file.filename:
+                filename = secure_filename(file.filename)
+                safety_sheet_path = os.path.join(session_folder, filename)
+                file.save(safety_sheet_path)
+
         logo_path = None
-        if logo_file and logo_file.filename:
-            logo_path = os.path.join(UPLOAD_FOLDER, f"logo_{uuid.uuid4().hex}.png")
-            logo_file.save(logo_path)
+        if "logo" in request.files:
+            file = request.files["logo"]
+            if file.filename:
+                filename = secure_filename(file.filename)
+                logo_path = os.path.join(app.config["LOGO_FOLDER"], filename)
+                file.save(logo_path)
 
-        safety_file = files.get("safety_sheet")
-        safety_path = None
-        if safety_file and safety_file.filename:
-            safety_path = os.path.join(UPLOAD_FOLDER, f"safety_{uuid.uuid4().hex}.pdf")
-            safety_file.save(safety_path)
+        scope_path = None
+        if "scope_doc" in request.files:
+            file = request.files["scope_doc"]
+            if file and allowed_scope_file(file.filename):
+                filename = secure_filename(file.filename)
+                scope_path = os.path.join(app.config["SCOPE_FOLDER"], filename)
+                file.save(scope_path)
 
-        image_paths = []
-        for img in request.files.getlist("images"):
-            if img and img.filename:
-                path = os.path.join(UPLOAD_FOLDER, f"img_{uuid.uuid4().hex}.jpg")
-                img.save(path)
-                image_paths.append(path)
+        ai_enabled = request.form.get("enable_ai", "on") == "on"
+        scope_text = ""
+        ai_result = None
+        if ai_enabled and scope_path:
+            scope_text = parse_scope_file(scope_path)
+            ai_result = analyze_scope_vs_log(scope_text, data)
 
-        # --- AI Analysis ---
-        scope_items = load_scope_for_project(project_id)
-        ai_analysis = analyze_scope_vs_log(scope_items, data) if form.get("enable_ai") == "on" else None
+        weather_icon_path = None
+        if data["weather"]:
+            weather_icon_path = download_weather_icon(data["weather"])
 
-        # Save temp preview state
-        session_id = uuid.uuid4().hex[:8]
-        TEMP_DATA[session_id] = {
+        # Save temp data for preview
+        preview_data = {
             "data": data,
-            "ai_analysis": ai_analysis,
-            "images": image_paths,
+            "images": images,
             "logo": logo_path,
-            "safety": safety_path
+            "ai_analysis": ai_result,
+            "weather_icon": weather_icon_path,
+            "safety_sheet_path": safety_sheet_path
         }
+        preview_json_path = os.path.join(app.config["UPLOAD_FOLDER"], f"{session_id}.json")
+        with open(preview_json_path, "w") as f:
+            json.dump(preview_data, f)
 
         return redirect(url_for("preview", session_id=session_id))
 
     except Exception as e:
-        return jsonify({"error": f"Form error: {str(e)}"}), 500
+        traceback.print_exc()
+        return f"Internal Server Error: {e}", 500
 
-@app.route("/preview/<session_id>")
+@app.route("/preview/<session_id>", methods=["GET"])
 def preview(session_id):
-    context = TEMP_DATA.get(session_id)
-    if not context:
-        return "Session expired or not found.", 404
-    return render_template("preview.html", session_id=session_id, **context)
+    try:
+        json_path = os.path.join(app.config["UPLOAD_FOLDER"], f"{session_id}.json")
+        with open(json_path, "r") as f:
+            preview_data = json.load(f)
+        return render_template(
+            "preview.html",
+            session_id=session_id,
+            data=preview_data["data"],
+            images=[img for img in preview_data["images"]],
+            logo=preview_data["logo"],
+            ai_analysis=preview_data["ai_analysis"],
+        )
+    except Exception as e:
+        traceback.print_exc()
+        return f"Internal Server Error: {e}", 500
 
 @app.route("/finalize_preview", methods=["POST"])
 def finalize_preview():
     try:
-        session_id = request.form.get("session_id")
-        context = TEMP_DATA.get(session_id)
-        if not context:
-            return "Session expired.", 400
+        session_id = request.form["session_id"]
+        json_path = os.path.join(app.config["UPLOAD_FOLDER"], f"{session_id}.json")
 
-        # Accept updated confidence scores from user edits
-        edited_scores = {}
-        for k, v in request.form.items():
-            if k.startswith("score_"):
-                item = k.replace("score_", "")
-                try:
-                    edited_scores[item] = float(v)
-                except:
-                    continue
+        with open(json_path, "r") as f:
+            preview_data = json.load(f)
 
-        for s in context["ai_analysis"]["scored_items"]:
-            item = s["scope"][:75]
-            if item in edited_scores:
-                s["confidence"] = round(edited_scores[item])
-                s["match"] = s["confidence"] >= 65
+        # Allow user to override confidence scores
+        if preview_data.get("ai_analysis"):
+            for s in preview_data["ai_analysis"]["scored_items"]:
+                key = f"score_{s['scope'][:75]}"
+                if key in request.form:
+                    try:
+                        s["confidence"] = int(request.form[key])
+                    except:
+                        pass
 
-        filename = f"log_{uuid.uuid4().hex[:8]}.pdf"
-        path = os.path.join(GENERATED_FOLDER, filename)
+        pdf_filename = f"daily_log_{session_id}.pdf"
+        save_path = os.path.join(app.config["GENERATED_FOLDER"], pdf_filename)
 
         create_daily_log_pdf(
-            data=context["data"],
-            image_paths=context["images"],
-            logo_path=context["logo"],
-            ai_analysis=context["ai_analysis"],
-            progress_report=None,
-            save_path=path,
-            weather_icon_path=None,
-            safety_sheet_path=context["safety"]
+            preview_data["data"],
+            preview_data["images"],
+            preview_data.get("logo"),
+            preview_data.get("ai_analysis"),
+            preview_data.get("ai_analysis", {}).get("percent_complete"),
+            save_path,
+            preview_data.get("weather_icon"),
+            preview_data.get("safety_sheet_path"),
         )
 
-        del TEMP_DATA[session_id]
-        return redirect(f"/generated/{filename}")
+        return redirect(f"/generated/{pdf_filename}")
 
     except Exception as e:
-        return f"Error finalizing: {str(e)}", 500
+        traceback.print_exc()
+        return f"Internal Server Error: {e}", 500
 
 @app.route("/generated/<filename>")
-def serve_pdf(filename):
-    return send_from_directory(GENERATED_FOLDER, filename)
+def serve_generated(filename):
+    return send_from_directory(app.config["GENERATED_FOLDER"], filename)
 
-@app.route("/upload_ui")
-def upload_ui():
-    return render_template("react_uploader.html")
+if __name__ == "__main__":
+    app.run(debug=True)
