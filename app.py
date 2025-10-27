@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from utils.pdf_generator import create_daily_log_pdf
-from compare_scope_vs_log import analyze_scope_vs_log, load_scope_for_project
+from utils.compare_scope_vs_log import analyze_scope_vs_log, load_scope_for_project  # ✅ FIXED IMPORT
+
 import os
 import uuid
 
@@ -12,6 +13,13 @@ SCOPE_FOLDER = "scope"
 
 for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER]:
     os.makedirs(folder, exist_ok=True)
+
+# ✅ Optional Debug Print to Confirm Folder Structure on Deploy
+print("🛠️ [Startup Debug] Current Working Directory:", os.getcwd())
+print("🛠️ [Startup Debug] Files in root:", os.listdir("."))
+print("🛠️ [Startup Debug] Files in utils/:", os.listdir("utils"))
+print("🛠️ [Startup Debug] Files in static/:", os.listdir("static") if os.path.exists("static") else "Missing 'static/' folder")
+print("🛠️ [Startup Debug] Python Path:", os.sys.path)
 
 @app.route("/")
 def index():
