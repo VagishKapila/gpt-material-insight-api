@@ -1,16 +1,18 @@
 from flask import Flask, request, jsonify, render_template, send_from_directory, redirect, url_for
 from utils.pdf_generator import create_daily_log_pdf
 from utils.compare_scope_vs_log import analyze_scope_vs_log, load_scope_for_project
-import os, uuid, fitz, docx
+import os, uuid, fitz, docx, json
+from datetime import datetime
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "static/uploads"
 GENERATED_FOLDER = "static/generated"
 SCOPE_FOLDER = "scope"
-TEMP_DATA = {}  # In-memory preview state (Phase 2B)
+TEMP_DATA = {}  # In-memory preview state
+LAST_DATA_PATH = "static/autofill/last_data.json"
 
-for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER]:
+for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER, "static/autofill"]:
     os.makedirs(folder, exist_ok=True)
 
 @app.route("/")
@@ -19,7 +21,11 @@ def index():
 
 @app.route("/form")
 def form():
-    return render_template("form.html")
+    last_data = {}
+    if os.path.exists(LAST_DATA_PATH):
+        with open(LAST_DATA_PATH, "r") as f:
+            last_data = json.load(f)
+    return render_template("form.html", last_data=last_data)
 
 @app.route("/generate_form", methods=["POST"])
 def generate_from_form():
@@ -38,10 +44,13 @@ def generate_from_form():
             "weather": form.get("weather", ""),
             "work_done": form.get("work_done", ""),
             "safety_notes": form.get("safety_notes", ""),
-            "crew_notes": form.get("crew_notes", ""),
+            "crew_notes": form.get("crew_notes", "")
         }
 
-        # --- Handle Scope Upload ---
+        # Save last data for autofill
+        with open(LAST_DATA_PATH, "w") as f:
+            json.dump(data, f)
+
         scope_file = files.get("scope_doc")
         if scope_file and scope_file.filename:
             ext = os.path.splitext(scope_file.filename)[1].lower()
@@ -53,10 +62,10 @@ def generate_from_form():
                 extracted = "\n".join(p.text for p in docx.Document(scope_file).paragraphs)
             elif ext == ".txt":
                 extracted = scope_file.read().decode("utf-8")
-            with open(os.path.join(SCOPE_FOLDER, f"scope_{project_id}.txt"), "w", encoding="utf-8") as f:
-                f.write(extracted)
+            if extracted:
+                with open(os.path.join(SCOPE_FOLDER, f"scope_{project_id}.txt"), "w", encoding="utf-8") as f:
+                    f.write(extracted)
 
-        # --- Handle File Uploads ---
         logo_file = files.get("logo")
         logo_path = None
         if logo_file and logo_file.filename:
@@ -76,11 +85,9 @@ def generate_from_form():
                 img.save(path)
                 image_paths.append(path)
 
-        # --- AI Analysis ---
         scope_items = load_scope_for_project(project_id)
         ai_analysis = analyze_scope_vs_log(scope_items, data) if form.get("enable_ai") == "on" else None
 
-        # Save temp preview state
         session_id = uuid.uuid4().hex[:8]
         TEMP_DATA[session_id] = {
             "data": data,
@@ -110,7 +117,6 @@ def finalize_preview():
         if not context:
             return "Session expired.", 400
 
-        # Accept updated confidence scores from user edits
         edited_scores = {}
         for k, v in request.form.items():
             if k.startswith("score_"):
@@ -120,9 +126,8 @@ def finalize_preview():
                 except:
                     continue
 
-        # Update confidence scores in ai_analysis
         for s in context["ai_analysis"]["scored_items"]:
-            item = s["scope"][:75]  # use truncated label as key
+            item = s["scope"][:75]
             if item in edited_scores:
                 s["confidence"] = edited_scores[item]
                 s["match"] = edited_scores[item] >= 65.0
@@ -141,7 +146,7 @@ def finalize_preview():
             safety_sheet_path=context["safety"]
         )
 
-        del TEMP_DATA[session_id]  # clear memory
+        del TEMP_DATA[session_id]
         return redirect(f"/generated/{filename}")
 
     except Exception as e:
