@@ -12,7 +12,12 @@ def load_scope_for_project(project_id):
     with open(scope_path, "r", encoding="utf-8") as f:
         return [line.strip() for line in f.readlines() if line.strip()]
 
-def analyze_scope_vs_log(scope_items, work_done, crew_notes, safety_notes):
+def analyze_scope_vs_log(scope_items, daily_log_data, threshold=0.65):
+    work_done = daily_log_data.get("work_done", "")
+    crew_notes = daily_log_data.get("crew_notes", "")
+    safety_notes = daily_log_data.get("safety_notes", "")
+
+    full_log = f"{work_done}\n{crew_notes}\n{safety_notes}".strip()
     if not scope_items:
         return {
             "completion": 0,
@@ -20,7 +25,6 @@ def analyze_scope_vs_log(scope_items, work_done, crew_notes, safety_notes):
             "out_of_scope": ["⚠️ No scope items loaded for project."]
         }
 
-    full_log = f"{work_done}\n{crew_notes}\n{safety_notes}".strip()
     if not full_log:
         return {
             "completion": 0,
@@ -31,9 +35,9 @@ def analyze_scope_vs_log(scope_items, work_done, crew_notes, safety_notes):
     vectorizer = TfidfVectorizer().fit(scope_items + [full_log])
     log_vec = vectorizer.transform([full_log])
 
-    matched = []
-    unmatched = []
+    matched = 0
     scored_items = []
+    unmatched_items = []
 
     for item in scope_items:
         scope_vec = vectorizer.transform([item])
@@ -41,30 +45,30 @@ def analyze_scope_vs_log(scope_items, work_done, crew_notes, safety_notes):
         fuzzy_score = fuzz.partial_ratio(item.lower(), full_log.lower()) / 100
 
         final_score = max(tfidf_score, fuzzy_score)
+        match = final_score >= threshold
 
-        match = final_score >= 0.65
+        if match:
+            matched += 1
+        else:
+            unmatched_items.append(item)
+
         scored_items.append({
             "scope": item,
             "confidence": round(final_score, 2),
             "match": match
         })
 
-        if match:
-            matched.append(item)
-        else:
-            unmatched.append(item)
-
-    # Out-of-scope detection
-    log_lines = [line.strip() for line in full_log.split('\n') if line.strip()]
+    # Out-of-scope items from log text
+    log_lines = [line.strip() for line in full_log.split("\n") if line.strip()]
     out_of_scope = []
     for line in log_lines:
         if all(fuzz.partial_ratio(line.lower(), item.lower()) < 60 for item in scope_items):
             out_of_scope.append(line)
 
-    percent_complete = int((len(matched) / len(scope_items)) * 100)
+    percent_complete = int((matched / len(scope_items)) * 100)
 
     return {
         "completion": percent_complete,
         "scored_items": scored_items,
-        "out_of_scope": out_of_scope[:10]  # limit output
+        "out_of_scope": out_of_scope[:10]  # Limit to top 10 lines
     }
