@@ -1,103 +1,115 @@
-# ---- utils/pdf_generator.py ----
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
+after we updted 
 
-def create_daily_log_pdf(
-    data,
-    image_paths,
-    logo_path,
-    ai_analysis,
-    progress_report,
-    save_path,
-    weather_icon_path=None,
-    safety_sheet_path=None
-):
-    """
-    Generates the full Daily Log PDF (Page 1–4 layout).
-    """
-    doc = SimpleDocTemplate(save_path, pagesize=letter)
-    elements = []
-    styles = getSampleStyleSheet()
-
-    # --- Title + Logo ---
-    if logo_path:
-        elements.append(Image(logo_path, width=100, height=50))
-    elements.append(Paragraph("<b>DAILY LOG</b>", styles["Title"]))
-    elements.append(Spacer(1, 12))
-
-    # --- Project Info ---
-    elements.append(Paragraph(f"<b>Project:</b> {data.get('project_name', '')}", styles["Normal"]))
-    elements.append(Paragraph(f"<b>Date:</b> {data.get('date', '')}", styles["Normal"]))
-    elements.append(Paragraph(f"<b>Location:</b> {data.get('location', '')}", styles["Normal"]))
-    elements.append(Spacer(1, 12))
-
-    # --- Work/Crew/Safety Notes ---
-    elements.append(Paragraph("<b>Work Done:</b>", styles["Heading3"]))
-    elements.append(Paragraph(data.get("work_done", "N/A"), styles["Normal"]))
-    elements.append(Spacer(1, 6))
-
-    elements.append(Paragraph("<b>Crew Notes:</b>", styles["Heading3"]))
-    elements.append(Paragraph(data.get("crew_notes", "N/A"), styles["Normal"]))
-    elements.append(Spacer(1, 6))
-
-    elements.append(Paragraph("<b>Safety Notes:</b>", styles["Heading3"]))
-    elements.append(Paragraph(data.get("safety_notes", "N/A"), styles["Normal"]))
-    elements.append(Spacer(1, 12))
-
-    # --- AI Analysis Section ---
-    if ai_analysis:
-        elements.append(Paragraph("<b>AI Scope Analysis</b>", styles["Heading2"]))
-        elements.append(Paragraph(f"Completion: {ai_analysis.get('completion', 0)}%", styles["Normal"]))
-        elements.append(Spacer(1, 6))
-
-        # Confidence Table
-        scored = ai_analysis.get("scored_items", [])
-        if scored:
-            table_data = [["Scope Item", "Confidence", "Match"]]
-            for s in scored:
-                table_data.append([
-                    s["scope"][:80] + ("..." if len(s["scope"]) > 80 else ""),
-                    str(s["confidence"]),
-                    "✅" if s["match"] else "❌"
-                ])
-            table = Table(table_data, repeatRows=1)
-            table.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                ("ALIGN", (1, 1), (-1, -1), "CENTER"),
-            ]))
-            elements.append(table)
-            elements.append(Spacer(1, 12))
-
-        out_of_scope = ai_analysis.get("out_of_scope", [])
-        if out_of_scope:
-            elements.append(Paragraph("<b>Out of Scope Items:</b>", styles["Heading3"]))
-            for line in out_of_scope:
-                elements.append(Paragraph(line, styles["Normal"]))
-            elements.append(Spacer(1, 12))
-
-    # --- Job Photos ---
-    if image_paths:
-        elements.append(Paragraph("<b>Job Site Photos</b>", styles["Heading2"]))
-        for img_path in image_paths:
-            elements.append(Image(img_path, width=250, height=180))
-            elements.append(Spacer(1, 6))
-
-    # --- Safety Sheet ---
-    if safety_sheet_path:
-        elements.append(Paragraph("<b>Safety Sheet Uploaded:</b>", styles["Heading2"]))
-        elements.append(Paragraph(os.path.basename(safety_sheet_path), styles["Normal"]))
-        elements.append(Spacer(1, 12))
-
-    # --- Footer ---
-    elements.append(Spacer(1, 20))
-    elements.append(Paragraph(
-        "Confidential – Do Not Duplicate without written consent from BAINS Dev Comm",
-        styles["Normal"]
-    ))
-
-    # --- Build PDF ---
-    doc.build(elements)
-    print(f"✅ PDF successfully created at {save_path}")
+[2025-10-26 21:08:30 +0000] [1] [ERROR] Worker (pid:2) exited with code 3
+[2025-10-26 21:08:30 +0000] [1] [ERROR] Shutting down: Master
+[2025-10-26 21:08:30 +0000] [1] [ERROR] Reason: Worker failed to boot.
+[2025-10-26 21:08:33 +0000] [1] [INFO] Starting gunicorn 21.2.0
+[2025-10-26 21:08:33 +0000] [1] [INFO] Listening at: http://0.0.0.0:8080 (1)
+[2025-10-26 21:08:33 +0000] [1] [INFO] Using worker: sync
+[2025-10-26 21:08:33 +0000] [2] [INFO] Booting worker with pid: 2
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/app/wsgiapp.py", line 48, in load_wsgiapp
+    return util.import_app(self.app_uri)
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/util.py", line 371, in import_app
+    mod = importlib.import_module(module)
+/app/.venv/lib/python3.10/site-packages/fuzzywuzzy/fuzz.py:11: UserWarning: Using slow pure-python SequenceMatcher. Install python-Levenshtein to remove this warning
+  warnings.warn('Using slow pure-python SequenceMatcher. Install python-Levenshtein to remove this warning')
+[2025-10-26 21:08:34 +0000] [2] [ERROR] Exception in worker process
+Traceback (most recent call last):
+    worker.init_process()
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/arbiter.py", line 609, in spawn_worker
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 134, in init_process
+    self.load_wsgi()
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/app/base.py", line 67, in wsgi
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 146, in load_wsgi
+    self.wsgi = self.app.wsgi()
+    self.callable = self.load()
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/app/wsgiapp.py", line 58, in load
+    return self.load_wsgiapp()
+  File "/mise/installs/python/3.10.12/lib/python3.10/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1006, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 688, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 883, in exec_module
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "/app/app.py", line 10, in <module>
+    from utils.compare_scope_vs_log import (
+ImportError: cannot import name 'load_scope_for_project' from 'utils.compare_scope_vs_log' (/app/utils/compare_scope_vs_log.py)
+[2025-10-26 21:08:34 +0000] [2] [INFO] Worker exiting (pid: 2)
+[2025-10-26 21:08:34 +0000] [1] [ERROR] Worker (pid:2) exited with code 3
+[2025-10-26 21:08:34 +0000] [1] [ERROR] Shutting down: Master
+[2025-10-26 21:08:34 +0000] [1] [ERROR] Reason: Worker failed to boot.
+[2025-10-26 21:08:36 +0000] [1] [INFO] Starting gunicorn 21.2.0
+[2025-10-26 21:08:36 +0000] [1] [INFO] Listening at: http://0.0.0.0:8080 (1)
+[2025-10-26 21:08:36 +0000] [1] [INFO] Using worker: sync
+[2025-10-26 21:08:36 +0000] [2] [INFO] Booting worker with pid: 2
+/app/.venv/lib/python3.10/site-packages/fuzzywuzzy/fuzz.py:11: UserWarning: Using slow pure-python SequenceMatcher. Install python-Levenshtein to remove this warning
+  warnings.warn('Using slow pure-python SequenceMatcher. Install python-Levenshtein to remove this warning')
+[2025-10-26 21:08:37 +0000] [2] [ERROR] Exception in worker process
+Traceback (most recent call last):
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/arbiter.py", line 609, in spawn_worker
+    worker.init_process()
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 134, in init_process
+    self.load_wsgi()
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 146, in load_wsgi
+    self.wsgi = self.app.wsgi()
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/app/base.py", line 67, in wsgi
+    self.callable = self.load()
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/app/wsgiapp.py", line 58, in load
+    return self.load_wsgiapp()
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/app/wsgiapp.py", line 48, in load_wsgiapp
+    return util.import_app(self.app_uri)
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/util.py", line 371, in import_app
+    mod = importlib.import_module(module)
+  File "/mise/installs/python/3.10.12/lib/python3.10/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1006, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 688, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 883, in exec_module
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "/app/app.py", line 10, in <module>
+    from utils.compare_scope_vs_log import (
+ImportError: cannot import name 'load_scope_for_project' from 'utils.compare_scope_vs_log' (/app/utils/compare_scope_vs_log.py)
+[2025-10-26 21:08:37 +0000] [2] [INFO] Worker exiting (pid: 2)
+[2025-10-26 21:08:37 +0000] [1] [ERROR] Worker (pid:2) exited with code 3
+[2025-10-26 21:08:37 +0000] [1] [ERROR] Shutting down: Master
+[2025-10-26 21:08:37 +0000] [1] [ERROR] Reason: Worker failed to boot.
+[2025-10-26 21:08:39 +0000] [1] [INFO] Starting gunicorn 21.2.0
+[2025-10-26 21:08:39 +0000] [1] [INFO] Listening at: http://0.0.0.0:8080 (1)
+[2025-10-26 21:08:39 +0000] [2] [INFO] Booting worker with pid: 2
+[2025-10-26 21:08:39 +0000] [1] [INFO] Using worker: sync
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/app/wsgiapp.py", line 48, in load_wsgiapp
+    return util.import_app(self.app_uri)
+/app/.venv/lib/python3.10/site-packages/fuzzywuzzy/fuzz.py:11: UserWarning: Using slow pure-python SequenceMatcher. Install python-Levenshtein to remove this warning
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/util.py", line 371, in import_app
+    mod = importlib.import_module(module)
+  warnings.warn('Using slow pure-python SequenceMatcher. Install python-Levenshtein to remove this warning')
+[2025-10-26 21:08:40 +0000] [2] [ERROR] Exception in worker process
+Traceback (most recent call last):
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/arbiter.py", line 609, in spawn_worker
+    worker.init_process()
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 134, in init_process
+    self.load_wsgi()
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 146, in load_wsgi
+    self.wsgi = self.app.wsgi()
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/app/base.py", line 67, in wsgi
+    self.callable = self.load()
+  File "/app/.venv/lib/python3.10/site-packages/gunicorn/app/wsgiapp.py", line 58, in load
+    return self.load_wsgiapp()
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "/app/app.py", line 10, in <module>
+  File "/mise/installs/python/3.10.12/lib/python3.10/importlib/__init__.py", line 126, in import_module
+    from utils.compare_scope_vs_log import (
+    return _bootstrap._gcd_import(name[level:], package, level)
+ImportError: cannot import name 'load_scope_for_project' from 'utils.compare_scope_vs_log' (/app/utils/compare_scope_vs_log.py)
+[2025-10-26 21:08:40 +0000] [2] [INFO] Worker exiting (pid: 2)
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1006, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 688, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 883, in exec_module
+[2025-10-26 21:08:40 +0000] [1] [ERROR] Worker (pid:2) exited with code 3
+[2025-10-26 21:08:40 +0000] [1] [ERROR] Shutting down: Master
