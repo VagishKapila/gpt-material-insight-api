@@ -1,51 +1,37 @@
 from flask import Flask, request, jsonify
 from utils.pdf_generator import create_daily_log_pdf
-from compare_scope_vs_log import analyze_scope_vs_log
+from compare_scope_vs_log import analyze_scope_vs_log, load_scope_for_project
 import os
 import uuid
-import json
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "static/uploads"
 GENERATED_FOLDER = "static/generated"
-SCOPE_FOLDER = "static/scope"
+SCOPE_FOLDER = "scope"
 
 for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
 @app.route("/")
 def index():
-    return "Daily Log AI is running."
+    return "✅ Daily Log AI is running."
 
 @app.route("/generate", methods=["POST"])
 def generate_log():
     try:
         data = request.json
-
-        # Input validation
-        required_fields = ["project_name", "date", "location", "work_done", "crew_notes", "safety_notes"]
-        for field in required_fields:
-            if field not in data:
-                return jsonify({"error": f"Missing field: {field}"}), 400
-
         project_id = data.get("project_id", "default")
-        scope_path = os.path.join(SCOPE_FOLDER, f"{project_id}.json")
+        scope_items = load_scope_for_project(project_id)
 
-        # AI Analysis
-        ai_analysis = None
-        if os.path.exists(scope_path):
-            with open(scope_path, "r") as f:
-                scope_data = json.load(f)
-            ai_analysis = analyze_scope_vs_log(scope_data, data)
+        ai_analysis = analyze_scope_vs_log(scope_items, data)
 
-        # PDF Generation
         filename = f"log_{uuid.uuid4().hex[:8]}.pdf"
         pdf_path = os.path.join(GENERATED_FOLDER, filename)
 
         create_daily_log_pdf(
             data=data,
-            image_paths=[],  # update to use if you send photo paths
+            image_paths=[],  # Extend later if needed
             logo_path=None,
             ai_analysis=ai_analysis,
             progress_report=None,
@@ -59,21 +45,23 @@ def generate_log():
     except Exception as e:
         return jsonify({"error": f"Server error: {str(e)}"}), 500
 
-@app.route("/upload_scope", methods=["POST"])
-def upload_scope():
+@app.route("/upload_scope_txt", methods=["POST"])
+def upload_scope_txt():
     try:
         content = request.json
         project_id = content.get("project_id")
-        scope = content.get("scope_items", [])
+        scope_lines = content.get("scope_items", [])
 
-        if not project_id or not scope:
+        if not project_id or not scope_lines:
             return jsonify({"error": "Missing project_id or scope_items"}), 400
 
-        save_path = os.path.join(SCOPE_FOLDER, f"{project_id}.json")
-        with open(save_path, "w") as f:
-            json.dump(scope, f)
+        path = os.path.join(SCOPE_FOLDER, f"scope_{project_id}.txt")
+        with open(path, "w", encoding="utf-8") as f:
+            for line in scope_lines:
+                f.write(line.strip() + "\n")
 
-        return jsonify({"message": "Scope saved"}), 200
+        return jsonify({"message": f"Scope saved for project {project_id}"}), 200
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
