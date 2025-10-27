@@ -1,82 +1,25 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_from_directory, redirect, url_for
 from utils.pdf_generator import create_daily_log_pdf
 from utils.compare_scope_vs_log import analyze_scope_vs_log, load_scope_for_project
-
-import os
-import uuid
-import fitz  # PyMuPDF
-import docx  # python-docx
+import os, uuid, fitz, docx
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "static/uploads"
 GENERATED_FOLDER = "static/generated"
 SCOPE_FOLDER = "scope"
+TEMP_DATA = {}  # In-memory preview state (Phase 2B)
 
 for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER]:
     os.makedirs(folder, exist_ok=True)
-
-print("🛠️ [Startup Debug] Current Working Directory:", os.getcwd())
-print("🛠️ [Startup Debug] Files in root:", os.listdir("."))
-print("🛠️ [Startup Debug] Files in utils/:", os.listdir("utils"))
-print("🛠️ [Startup Debug] Files in static/:", os.listdir("static") if os.path.exists("static") else "Missing 'static/' folder")
-print("🛠️ [Startup Debug] Python Path:", os.sys.path)
 
 @app.route("/")
 def index():
     return "✅ Daily Log AI is running."
 
-@app.route("/generate", methods=["POST"])
-def generate_log():
-    try:
-        data = request.json
-        project_id = data.get("project_id", "default")
-        scope_items = load_scope_for_project(project_id)
-
-        ai_analysis = analyze_scope_vs_log(scope_items, data)
-
-        filename = f"log_{uuid.uuid4().hex[:8]}.pdf"
-        pdf_path = os.path.join(GENERATED_FOLDER, filename)
-
-        create_daily_log_pdf(
-            data=data,
-            image_paths=[],
-            logo_path=None,
-            ai_analysis=ai_analysis,
-            progress_report=None,
-            save_path=pdf_path,
-            weather_icon_path=None,
-            safety_sheet_path=None
-        )
-
-        return jsonify({"pdf_url": f"/generated/{filename}"}), 200
-
-    except Exception as e:
-        return jsonify({"error": f"Server error: {str(e)}"}), 500
-
-@app.route("/upload_scope_txt", methods=["POST"])
-def upload_scope_txt():
-    try:
-        content = request.json
-        project_id = content.get("project_id")
-        scope_lines = content.get("scope_items", [])
-
-        if not project_id or not scope_lines:
-            return jsonify({"error": "Missing project_id or scope_items"}), 400
-
-        path = os.path.join(SCOPE_FOLDER, f"scope_{project_id}.txt")
-        with open(path, "w", encoding="utf-8") as f:
-            for line in scope_lines:
-                f.write(line.strip() + "\n")
-
-        return jsonify({"message": f"Scope saved for project {project_id}"}), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/generated/<filename>")
-def serve_pdf(filename):
-    return app.send_static_file(f"generated/{filename}")
+@app.route("/form")
+def form():
+    return render_template("form.html")
 
 @app.route("/generate_form", methods=["POST"])
 def generate_from_form():
@@ -85,97 +28,129 @@ def generate_from_form():
         files = request.files
 
         project_name = form.get("project_name", "")
-        client_name = form.get("client_name", "")
-        location = form.get("location", "")
-        date = form.get("date", "")
-        weather = form.get("weather", "")
-        work_done = form.get("work_done", "")
-        safety_notes = form.get("safety_notes", "")
-        crew_notes = form.get("crew_notes", "")
-        enable_ai = form.get("enable_ai") == "on"
-
         project_id = project_name.replace(" ", "_").lower()
+        data = {
+            "project_id": project_id,
+            "project_name": project_name,
+            "client_name": form.get("client_name", ""),
+            "location": form.get("location", ""),
+            "date": form.get("date", ""),
+            "weather": form.get("weather", ""),
+            "work_done": form.get("work_done", ""),
+            "safety_notes": form.get("safety_notes", ""),
+            "crew_notes": form.get("crew_notes", ""),
+        }
 
+        # --- Handle Scope Upload ---
         scope_file = files.get("scope_doc")
         if scope_file and scope_file.filename:
             ext = os.path.splitext(scope_file.filename)[1].lower()
-            extracted_text = ""
-
+            extracted = ""
             if ext == ".pdf":
                 with fitz.open(stream=scope_file.stream.read(), filetype="pdf") as doc:
-                    extracted_text = "\n".join(page.get_text() for page in doc)
-
+                    extracted = "\n".join(page.get_text() for page in doc)
             elif ext in [".docx"]:
-                doc = docx.Document(scope_file)
-                extracted_text = "\n".join(p.text for p in doc.paragraphs)
-
+                extracted = "\n".join(p.text for p in docx.Document(scope_file).paragraphs)
             elif ext == ".txt":
-                extracted_text = scope_file.read().decode("utf-8")
+                extracted = scope_file.read().decode("utf-8")
+            with open(os.path.join(SCOPE_FOLDER, f"scope_{project_id}.txt"), "w", encoding="utf-8") as f:
+                f.write(extracted)
 
-            if extracted_text:
-                txt_path = os.path.join("scope", f"scope_{project_id}.txt")
-                with open(txt_path, "w", encoding="utf-8") as f:
-                    f.write(extracted_text)
-
+        # --- Handle File Uploads ---
         logo_file = files.get("logo")
         logo_path = None
         if logo_file and logo_file.filename:
-            logo_path = os.path.join("static/uploads", f"logo_{uuid.uuid4().hex}.png")
+            logo_path = os.path.join(UPLOAD_FOLDER, f"logo_{uuid.uuid4().hex}.png")
             logo_file.save(logo_path)
 
         safety_file = files.get("safety_sheet")
         safety_path = None
         if safety_file and safety_file.filename:
-            safety_path = os.path.join("static/uploads", f"safety_{uuid.uuid4().hex}.pdf")
+            safety_path = os.path.join(UPLOAD_FOLDER, f"safety_{uuid.uuid4().hex}.pdf")
             safety_file.save(safety_path)
 
         image_paths = []
-        images = request.files.getlist("images")
-        for img in images:
-            if img.filename:
-                img_path = os.path.join("static/uploads", f"img_{uuid.uuid4().hex}.jpg")
-                img.save(img_path)
-                image_paths.append(img_path)
+        for img in request.files.getlist("images"):
+            if img and img.filename:
+                path = os.path.join(UPLOAD_FOLDER, f"img_{uuid.uuid4().hex}.jpg")
+                img.save(path)
+                image_paths.append(path)
 
+        # --- AI Analysis ---
         scope_items = load_scope_for_project(project_id)
+        ai_analysis = analyze_scope_vs_log(scope_items, data) if form.get("enable_ai") == "on" else None
 
-        data = {
-            "project_id": project_id,
-            "project_name": project_name,
-            "client_name": client_name,
-            "location": location,
-            "date": date,
-            "weather": weather,
-            "work_done": work_done,
-            "safety_notes": safety_notes,
-            "crew_notes": crew_notes,
+        # Save temp preview state
+        session_id = uuid.uuid4().hex[:8]
+        TEMP_DATA[session_id] = {
+            "data": data,
+            "ai_analysis": ai_analysis,
+            "images": image_paths,
+            "logo": logo_path,
+            "safety": safety_path
         }
 
-        ai_analysis = analyze_scope_vs_log(scope_items, data) if enable_ai else None
-
-        filename = f"log_{uuid.uuid4().hex[:8]}.pdf"
-        save_path = os.path.join(GENERATED_FOLDER, filename)
-
-        create_daily_log_pdf(
-            data=data,
-            image_paths=image_paths,
-            logo_path=logo_path,
-            ai_analysis=ai_analysis,
-            progress_report=None,
-            save_path=save_path,
-            weather_icon_path=None,
-            safety_sheet_path=safety_path,
-        )
-
-        return jsonify({"pdf_url": f"/generated/{filename}"}), 200
+        return redirect(url_for("preview", session_id=session_id))
 
     except Exception as e:
-        return jsonify({"error": f"Server error in form upload: {str(e)}"}), 500
+        return jsonify({"error": f"Form error: {str(e)}"}), 500
+
+@app.route("/preview/<session_id>")
+def preview(session_id):
+    context = TEMP_DATA.get(session_id)
+    if not context:
+        return "Session expired or not found.", 404
+    return render_template("preview.html", session_id=session_id, **context)
+
+@app.route("/finalize_preview", methods=["POST"])
+def finalize_preview():
+    try:
+        session_id = request.form.get("session_id")
+        context = TEMP_DATA.get(session_id)
+        if not context:
+            return "Session expired.", 400
+
+        # Accept updated confidence scores from user edits
+        edited_scores = {}
+        for k, v in request.form.items():
+            if k.startswith("score_"):
+                item = k.replace("score_", "")
+                try:
+                    edited_scores[item] = float(v)
+                except:
+                    continue
+
+        # Update confidence scores in ai_analysis
+        for s in context["ai_analysis"]["scored_items"]:
+            item = s["scope"][:75]  # use truncated label as key
+            if item in edited_scores:
+                s["confidence"] = edited_scores[item]
+                s["match"] = edited_scores[item] >= 65.0
+
+        filename = f"log_{uuid.uuid4().hex[:8]}.pdf"
+        path = os.path.join(GENERATED_FOLDER, filename)
+
+        create_daily_log_pdf(
+            data=context["data"],
+            image_paths=context["images"],
+            logo_path=context["logo"],
+            ai_analysis=context["ai_analysis"],
+            progress_report=None,
+            save_path=path,
+            weather_icon_path=None,
+            safety_sheet_path=context["safety"]
+        )
+
+        del TEMP_DATA[session_id]  # clear memory
+        return redirect(f"/generated/{filename}")
+
+    except Exception as e:
+        return f"Error finalizing: {str(e)}", 500
+
+@app.route("/generated/<filename>")
+def serve_pdf(filename):
+    return send_from_directory(GENERATED_FOLDER, filename)
 
 @app.route("/upload_ui")
 def upload_ui():
     return render_template("react_uploader.html")
-
-@app.route("/form")
-def form():
-    return render_template("form.html")
