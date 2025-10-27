@@ -175,7 +175,9 @@ def generate_from_form():
 
     except Exception as e:
         return jsonify({"error": f"Server error in form upload: {str(e)}"}), 500
-
+@app.route("/upload_ui")
+def upload_ui():
+    return render_template("react_uploader.html")
 @app.route("/form")
 def form():
     return render_template("form.html")
