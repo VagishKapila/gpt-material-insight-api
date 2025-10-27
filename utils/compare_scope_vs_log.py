@@ -2,15 +2,19 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from fuzzywuzzy import fuzz
 import os
+import re
 
 SCOPE_DIR = "scope"
+
+def clean_scope_text(text):
+    return re.sub(r"[^\x00-\x7F]+", "", text).strip()
 
 def load_scope_for_project(project_id):
     scope_path = os.path.join(SCOPE_DIR, f"scope_{project_id}.txt")
     if not os.path.exists(scope_path):
         return []
     with open(scope_path, "r", encoding="utf-8") as f:
-        return [line.strip() for line in f.readlines() if line.strip()]
+        return [clean_scope_text(line) for line in f.readlines() if line.strip()]
 
 def analyze_scope_vs_log(scope_items, daily_log_data, threshold=0.65):
     work_done = daily_log_data.get("work_done", "")
@@ -54,14 +58,17 @@ def analyze_scope_vs_log(scope_items, daily_log_data, threshold=0.65):
 
         scored_items.append({
             "scope": item,
-            "confidence": round(final_score, 2),
+            "confidence": round(final_score * 100, 1),  # percent format
             "match": match
         })
 
-    # Out-of-scope items from log text
+    # Out-of-scope items from log text (filtered)
+    known_ignore = ["ppe", "tailgate", "safety", "meeting"]
     log_lines = [line.strip() for line in full_log.split("\n") if line.strip()]
     out_of_scope = []
     for line in log_lines:
+        if any(kw in line.lower() for kw in known_ignore):
+            continue
         if all(fuzz.partial_ratio(line.lower(), item.lower()) < 60 for item in scope_items):
             out_of_scope.append(line)
 
@@ -70,5 +77,5 @@ def analyze_scope_vs_log(scope_items, daily_log_data, threshold=0.65):
     return {
         "completion": percent_complete,
         "scored_items": scored_items,
-        "out_of_scope": out_of_scope[:10]  # Limit to top 10 lines
+        "out_of_scope": out_of_scope[:10]
     }
