@@ -1,6 +1,16 @@
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from fuzzywuzzy import fuzz
+import os
+
+SCOPE_DIR = "scope"
+
+def load_scope_for_project(project_id):
+    scope_path = os.path.join(SCOPE_DIR, f"scope_{project_id}.txt")
+    if not os.path.exists(scope_path):
+        return []
+    with open(scope_path, "r", encoding="utf-8") as f:
+        return [line.strip() for line in f.readlines() if line.strip()]
 
 def analyze_scope_vs_log(scope_items, work_done, crew_notes, safety_notes):
     if not scope_items:
@@ -44,7 +54,7 @@ def analyze_scope_vs_log(scope_items, work_done, crew_notes, safety_notes):
         else:
             unmatched.append(item)
 
-    # Out-of-scope detection (basic line scan)
+    # Out-of-scope detection
     log_lines = [line.strip() for line in full_log.split('\n') if line.strip()]
     out_of_scope = []
     for line in log_lines:
