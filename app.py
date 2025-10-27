@@ -12,20 +12,19 @@ app = Flask(__name__)
 UPLOAD_FOLDER = "static/uploads"
 GENERATED_FOLDER = "static/generated"
 SCOPE_FOLDER = "scope"
-WEATHER_ICON_PATH = "static/icons/weather_sunny.png"  # TEMP STATIC (improve later)
 
 for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
-print("\U0001f6e0\ufe0f [Startup Debug] Current Working Directory:", os.getcwd())
-print("\U0001f6e0\ufe0f [Startup Debug] Files in root:", os.listdir("."))
-print("\U0001f6e0\ufe0f [Startup Debug] Files in utils/:", os.listdir("utils"))
-print("\U0001f6e0\ufe0f [Startup Debug] Files in static/:", os.listdir("static") if os.path.exists("static") else "Missing 'static/' folder")
-print("\U0001f6e0\ufe0f [Startup Debug] Python Path:", os.sys.path)
+print("🛠️ [Startup Debug] Current Working Directory:", os.getcwd())
+print("🛠️ [Startup Debug] Files in root:", os.listdir("."))
+print("🛠️ [Startup Debug] Files in utils/:", os.listdir("utils"))
+print("🛠️ [Startup Debug] Files in static/:", os.listdir("static") if os.path.exists("static") else "Missing 'static/' folder")
+print("🛠️ [Startup Debug] Python Path:", os.sys.path)
 
 @app.route("/")
 def index():
-    return "\u2705 Daily Log AI is running."
+    return "✅ Daily Log AI is running."
 
 @app.route("/generate", methods=["POST"])
 def generate_log():
@@ -46,7 +45,7 @@ def generate_log():
             ai_analysis=ai_analysis,
             progress_report=None,
             save_path=pdf_path,
-            weather_icon_path=WEATHER_ICON_PATH,
+            weather_icon_path=None,
             safety_sheet_path=None
         )
 
@@ -92,11 +91,11 @@ def generate_from_form():
         weather = form.get("weather", "")
         work_done = form.get("work_done", "")
         safety_notes = form.get("safety_notes", "")
+        crew_notes = form.get("crew_notes", "")
         enable_ai = form.get("enable_ai") == "on"
 
         project_id = project_name.replace(" ", "_").lower()
 
-        # Save and parse scope file
         scope_file = files.get("scope_doc")
         if scope_file and scope_file.filename:
             ext = os.path.splitext(scope_file.filename)[1].lower()
@@ -118,21 +117,18 @@ def generate_from_form():
                 with open(txt_path, "w", encoding="utf-8") as f:
                     f.write(extracted_text)
 
-        # Save logo
         logo_file = files.get("logo")
         logo_path = None
         if logo_file and logo_file.filename:
             logo_path = os.path.join("static/uploads", f"logo_{uuid.uuid4().hex}.png")
             logo_file.save(logo_path)
 
-        # Save safety sheet
         safety_file = files.get("safety_sheet")
         safety_path = None
         if safety_file and safety_file.filename:
             safety_path = os.path.join("static/uploads", f"safety_{uuid.uuid4().hex}.pdf")
             safety_file.save(safety_path)
 
-        # Save jobsite images
         image_paths = []
         images = request.files.getlist("images")
         for img in images:
@@ -142,6 +138,7 @@ def generate_from_form():
                 image_paths.append(img_path)
 
         scope_items = load_scope_for_project(project_id)
+
         data = {
             "project_id": project_id,
             "project_name": project_name,
@@ -151,6 +148,7 @@ def generate_from_form():
             "weather": weather,
             "work_done": work_done,
             "safety_notes": safety_notes,
+            "crew_notes": crew_notes,
         }
 
         ai_analysis = analyze_scope_vs_log(scope_items, data) if enable_ai else None
@@ -165,7 +163,7 @@ def generate_from_form():
             ai_analysis=ai_analysis,
             progress_report=None,
             save_path=save_path,
-            weather_icon_path=WEATHER_ICON_PATH,
+            weather_icon_path=None,
             safety_sheet_path=safety_path,
         )
 
