@@ -6,37 +6,32 @@ from fuzzywuzzy import fuzz
 
 SCOPE_DIR = "scope"
 
+# 🧠 Phase 1 Boost Chain Logic
+BOOST_CHAINS = {
+    "excavate trench": ["pipe", "piping", "laid pipe", "drainage installed", "backfilled", "covered", "gravel"],
+    "install pipe": ["pipe laid", "drainage", "connected", "flow tested"],
+    "pour concrete": ["concrete poured", "broom finish", "concrete cured", "edging done", "rebar", "formwork"],
+    "regrade": ["regraded", "slope adjusted", "leveled", "compacted"],
+    "remove debris": ["site cleaned", "debris hauled", "final cleanup", "trash removed"],
+    "erosion control": ["fabric", "mulch", "jute", "straw", "erosion mat", "control installed"],
+}
+
 EXCLUSION_PHRASES = [
     "no ", "not ", "do not", "does not", "will not", "excluded", "without",
     "doesn't", "isn't", "wasn't", "aren't", "weren't", "cannot", "never"
 ]
 
-KEYWORD_BOOSTS = {
-    "trench": 1.1,
-    "concrete": 1.2,
-    "safety": 1.05,
-    "grading": 1.15,
-    "cleanup": 1.1,
-    "inspection": 1.05,
-    "utility": 1.1,
-    "installation": 1.1,
-    "foundation": 1.15,
-    "waterproof": 1.2,
-}
-
-
 def clean_scope_text(text):
     text = re.sub(r"[^\x00-\x7F]+", "", text).strip()
     if len(text) < 5:
-        return ""  # Ignore very short lines
+        return ""
     if text.lower().startswith((
         "client", "project", "date", "prepared by", "include",
         "scope", "description", "location")):
-        return ""  # Skip headers and labels
+        return ""
     if any(phrase in text.lower() for phrase in EXCLUSION_PHRASES):
-        return ""  # Skip exclusion-based lines
+        return ""
     return text
-
 
 def load_scope_for_project(project_id):
     scope_path = os.path.join(SCOPE_DIR, f"scope_{project_id}.txt")
@@ -45,14 +40,13 @@ def load_scope_for_project(project_id):
     with open(scope_path, "r", encoding="utf-8") as f:
         return [clean_scope_text(line) for line in f.readlines() if clean_scope_text(line)]
 
-
-def boost_confidence(item, base_score):
-    boost = 1.0
-    for keyword, factor in KEYWORD_BOOSTS.items():
-        if keyword in item.lower():
-            boost *= factor
-    return min(base_score * boost, 1.0)
-
+def boost_score(scope_item, log_text, base_score):
+    for base_key, boosters in BOOST_CHAINS.items():
+        if base_key in scope_item.lower():
+            for trigger in boosters:
+                if trigger in log_text.lower():
+                    return max(base_score, 0.85)  # Boost to 85% if chain found
+    return base_score
 
 def analyze_scope_vs_log(scope_items, daily_log_data, threshold=0.65):
     work_done = daily_log_data.get("work_done", "")
@@ -77,18 +71,20 @@ def analyze_scope_vs_log(scope_items, daily_log_data, threshold=0.65):
         scope_vec = vectorizer.transform([item])
         tfidf_score = cosine_similarity(scope_vec, log_vec)[0][0]
         fuzzy_score = fuzz.partial_ratio(item.lower(), full_log.lower()) / 100
-        combined_score = max(tfidf_score, fuzzy_score)
-        boosted_score = boost_confidence(item, combined_score)
-        match = boosted_score >= threshold
+
+        final_score = max(tfidf_score, fuzzy_score)
+        final_score = boost_score(item, full_log, final_score)  # Apply boost chain logic
+
+        match = final_score >= threshold
         if match:
             matched += 1
         scored_items.append({
             "scope": item,
-            "confidence": round(boosted_score * 100, 1),
+            "confidence": round(final_score * 100, 1),
             "match": match
         })
 
-    # Out-of-scope filtering
+    # Out-of-scope detection
     known_ignore = ["ppe", "tailgate", "safety", "meeting"]
     log_lines = [line.strip() for line in full_log.split("\n") if line.strip()]
     out_of_scope = []
