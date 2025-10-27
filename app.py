@@ -12,20 +12,20 @@ app = Flask(__name__)
 UPLOAD_FOLDER = "static/uploads"
 GENERATED_FOLDER = "static/generated"
 SCOPE_FOLDER = "scope"
+WEATHER_ICON_PATH = "static/icons/weather_sunny.png"  # TEMP STATIC (improve later)
 
 for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
-# ✅ Optional Debug Print to Confirm Folder Structure on Deploy
-print("🛠️ [Startup Debug] Current Working Directory:", os.getcwd())
-print("🛠️ [Startup Debug] Files in root:", os.listdir("."))
-print("🛠️ [Startup Debug] Files in utils/:", os.listdir("utils"))
-print("🛠️ [Startup Debug] Files in static/:", os.listdir("static") if os.path.exists("static") else "Missing 'static/' folder")
-print("🛠️ [Startup Debug] Python Path:", os.sys.path)
+print("\U0001f6e0\ufe0f [Startup Debug] Current Working Directory:", os.getcwd())
+print("\U0001f6e0\ufe0f [Startup Debug] Files in root:", os.listdir("."))
+print("\U0001f6e0\ufe0f [Startup Debug] Files in utils/:", os.listdir("utils"))
+print("\U0001f6e0\ufe0f [Startup Debug] Files in static/:", os.listdir("static") if os.path.exists("static") else "Missing 'static/' folder")
+print("\U0001f6e0\ufe0f [Startup Debug] Python Path:", os.sys.path)
 
 @app.route("/")
 def index():
-    return "✅ Daily Log AI is running."
+    return "\u2705 Daily Log AI is running."
 
 @app.route("/generate", methods=["POST"])
 def generate_log():
@@ -41,12 +41,12 @@ def generate_log():
 
         create_daily_log_pdf(
             data=data,
-            image_paths=[],  # Extend later if needed
+            image_paths=[],
             logo_path=None,
             ai_analysis=ai_analysis,
             progress_report=None,
             save_path=pdf_path,
-            weather_icon_path=None,
+            weather_icon_path=WEATHER_ICON_PATH,
             safety_sheet_path=None
         )
 
@@ -141,9 +141,7 @@ def generate_from_form():
                 img.save(img_path)
                 image_paths.append(img_path)
 
-        # Load scope items for AI
         scope_items = load_scope_for_project(project_id)
-
         data = {
             "project_id": project_id,
             "project_name": project_name,
@@ -167,7 +165,7 @@ def generate_from_form():
             ai_analysis=ai_analysis,
             progress_report=None,
             save_path=save_path,
-            weather_icon_path=None,
+            weather_icon_path=WEATHER_ICON_PATH,
             safety_sheet_path=safety_path,
         )
 
@@ -175,9 +173,11 @@ def generate_from_form():
 
     except Exception as e:
         return jsonify({"error": f"Server error in form upload: {str(e)}"}), 500
+
 @app.route("/upload_ui")
 def upload_ui():
     return render_template("react_uploader.html")
+
 @app.route("/form")
 def form():
     return render_template("form.html")
