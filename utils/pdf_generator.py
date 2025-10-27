@@ -5,6 +5,10 @@ from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
 )
 from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.graphics.shapes import Drawing, Rect
+from reportlab.graphics.charts.barcharts import HorizontalBarChart
+from reportlab.graphics import renderPDF
+
 
 def create_daily_log_pdf(
     data,
@@ -24,7 +28,7 @@ def create_daily_log_pdf(
     if logo_path and os.path.exists(logo_path):
         elements.append(Image(logo_path, width=100, height=50))
 
-    # --- Title and Project Info ---
+    # --- Header Info ---
     elements.append(Paragraph("<b>DAILY LOG</b>", styles["Title"]))
     elements.append(Spacer(1, 12))
     elements.append(Paragraph(f"<b>Project:</b> {data.get('project_name', '')}", styles["Normal"]))
@@ -32,61 +36,78 @@ def create_daily_log_pdf(
     elements.append(Paragraph(f"<b>Location:</b> {data.get('location', '')}", styles["Normal"]))
     elements.append(Spacer(1, 12))
 
-    # --- Work Done ---
-    elements.append(Paragraph("<b>Work Done:</b>", styles["Heading3"]))
-    elements.append(Paragraph(data.get("work_done", "N/A"), styles["Normal"]))
-    elements.append(Spacer(1, 6))
+    # --- Weather Icon ---
+    if weather_icon_path and os.path.exists(weather_icon_path):
+        elements.append(Image(weather_icon_path, width=40, height=40))
+        elements.append(Spacer(1, 12))
 
-    # --- Crew Notes ---
-    elements.append(Paragraph("<b>Crew Notes:</b>", styles["Heading3"]))
-    elements.append(Paragraph(data.get("crew_notes", "N/A"), styles["Normal"]))
-    elements.append(Spacer(1, 6))
-
-    # --- Safety Notes ---
-    elements.append(Paragraph("<b>Safety Notes:</b>", styles["Heading3"]))
-    elements.append(Paragraph(data.get("safety_notes", "N/A"), styles["Normal"]))
-    elements.append(Spacer(1, 12))
+    # --- Work/Crew/Safety Notes ---
+    for label, key in [("Work Done", "work_done"), ("Crew Notes", "crew_notes"), ("Safety Notes", "safety_notes")]:
+        elements.append(Paragraph(f"<b>{label}:</b>", styles["Heading3"]))
+        elements.append(Paragraph(data.get(key, "N/A"), styles["Normal"]))
+        elements.append(Spacer(1, 6))
 
     # --- AI Scope Analysis ---
     if ai_analysis:
+        elements.append(Spacer(1, 12))
         elements.append(Paragraph("<b>AI Scope Analysis</b>", styles["Heading2"]))
-        elements.append(Paragraph(f"Completion: {ai_analysis.get('completion', 0)}%", styles["Normal"]))
-        elements.append(Spacer(1, 6))
+        completion = ai_analysis.get("completion", 0)
 
-        # Matched Items Table
+        # -- Visual Completion Bar --
+        try:
+            drawing = Drawing(200, 20)
+            percent_width = 2 * completion  # scale
+            drawing.add(Rect(0, 0, 200, 20, fillColor=colors.lightgrey))
+            drawing.add(Rect(0, 0, percent_width, 20, fillColor=colors.green))
+            elements.append(drawing)
+            elements.append(Paragraph(f"<b>Completion:</b> {completion:.1f}%", styles["Normal"]))
+        except Exception:
+            elements.append(Paragraph(f"<b>Completion:</b> {completion:.1f}%", styles["Normal"]))
+
+        elements.append(Spacer(1, 8))
+
+        # -- Scored Items Table --
         scored = ai_analysis.get("scored_items", [])
         if scored:
             table_data = [["Scope Item", "Confidence", "Match"]]
             for s in scored:
+                item = s.get("scope", "N/A")
+                confidence = s.get("confidence", 0.0)
+                is_match = s.get("match", False)
                 table_data.append([
-                    s["scope"][:70] + ("..." if len(s["scope"]) > 70 else ""),
-                    f"{s['confidence']}",
-                    "✅" if s["match"] else "❌"
+                    item[:75] + ("..." if len(item) > 75 else ""),
+                    f"{confidence:.1f}%",
+                    "✅" if is_match else "❌"
                 ])
             table = Table(table_data, repeatRows=1)
             table.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.lightblue),
                 ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
                 ("ALIGN", (1, 1), (-1, -1), "CENTER"),
             ]))
             elements.append(table)
             elements.append(Spacer(1, 12))
 
-        if ai_analysis.get("out_of_scope"):
+        # -- Out-of-Scope Items --
+        oos = ai_analysis.get("out_of_scope", [])
+        if oos:
             elements.append(Paragraph("<b>Out-of-Scope Items:</b>", styles["Heading3"]))
-            for line in ai_analysis["out_of_scope"]:
-                elements.append(Paragraph(line, styles["Normal"]))
+            for line in oos:
+                elements.append(Paragraph(f"• {line}", styles["Normal"]))
             elements.append(Spacer(1, 12))
 
-    # --- Job Photos ---
+    # --- Job Site Photos ---
     if image_paths:
         elements.append(Paragraph("<b>Job Site Photos</b>", styles["Heading2"]))
         for path in image_paths:
             if os.path.exists(path):
-                elements.append(Image(path, width=240, height=180))
-                elements.append(Spacer(1, 6))
+                try:
+                    elements.append(Image(path, width=240, height=180))
+                    elements.append(Spacer(1, 6))
+                except Exception:
+                    continue
 
-    # --- Safety Sheet Info ---
+    # --- Safety Sheet Mention ---
     if safety_sheet_path:
         elements.append(Spacer(1, 12))
         elements.append(Paragraph(f"<b>Safety Sheet:</b> {os.path.basename(safety_sheet_path)}", styles["Normal"]))
@@ -95,5 +116,8 @@ def create_daily_log_pdf(
     elements.append(Spacer(1, 24))
     elements.append(Paragraph("Confidential – Do Not Duplicate without written consent from BAINS Dev Comm", styles["Normal"]))
 
-    doc.build(elements)
-    print(f"✅ PDF successfully created at {save_path}")
+    try:
+        doc.build(elements)
+        print(f"✅ PDF successfully created at {save_path}")
+    except Exception as e:
+        print(f"❌ PDF creation failed: {e}")
