@@ -1,4 +1,3 @@
-# 🔁 Trigger redeploy: dummy comment for Railway sync test
 Flask>=2.3.3,<2.4
 gunicorn>=21.2.0,<22
 reportlab==4.0.5
@@ -18,3 +17,5 @@ fuzzywuzzy==0.18.0
 python-Levenshtein==0.21.1
 sentence-transformers==2.2.2
 huggingface_hub==0.16.4
+**pandas==2.1.1**
+**openpyxl==3.1.2**
