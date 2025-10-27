@@ -2,12 +2,12 @@ import os
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+    SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
 )
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.graphics.shapes import Drawing, Rect
-from reportlab.graphics import renderPDF
-
+from reportlab.lib.utils import ImageReader
+from PIL import Image as PILImage
 
 def create_daily_log_pdf(
     data,
@@ -48,14 +48,14 @@ def create_daily_log_pdf(
 
     # --- AI Scope Analysis ---
     if ai_analysis:
-        elements.append(Spacer(1, 12))
+        elements.append(PageBreak())
         elements.append(Paragraph("<b>AI Scope Analysis</b>", styles["Heading2"]))
         completion = ai_analysis.get("completion", 0)
 
-        # -- Visual Completion Bar --
+        # Visual Completion Bar
         try:
             drawing = Drawing(200, 20)
-            percent_width = 2 * completion  # scale to 200px max
+            percent_width = 2 * completion  # 200px max
             drawing.add(Rect(0, 0, 200, 20, fillColor=colors.lightgrey))
             drawing.add(Rect(0, 0, percent_width, 20, fillColor=colors.green))
             elements.append(drawing)
@@ -65,7 +65,7 @@ def create_daily_log_pdf(
 
         elements.append(Spacer(1, 8))
 
-        # -- Scored Items Table --
+        # Scored Items Table
         scored = ai_analysis.get("scored_items", [])
         if scored:
             table_data = [["Scope Item", "Confidence %", "Match"]]
@@ -86,19 +86,54 @@ def create_daily_log_pdf(
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ]))
             elements.append(table)
-            elements.append(Spacer(1, 12))
 
-        # -- Out-of-Scope Items --
+        # Out-of-Scope Items
         oos = ai_analysis.get("out_of_scope", [])
         if oos:
+            elements.append(Spacer(1, 12))
             elements.append(Paragraph("<b>Out-of-Scope Items:</b>", styles["Heading3"]))
             for line in oos:
                 elements.append(Paragraph(f"• {line}", styles["Normal"]))
-            elements.append(Spacer(1, 12))
+
+    # --- Job Site Photos ---
+    if image_paths:
+        elements.append(PageBreak())
+        elements.append(Paragraph("<b>Job Site Photos</b>", styles["Heading2"]))
+        elements.append(Spacer(1, 12))
+
+        for img_path in image_paths:
+            try:
+                if os.path.exists(img_path):
+                    with PILImage.open(img_path) as pil_img:
+                        pil_img.thumbnail((500, 500))
+                        img_reader = ImageReader(pil_img)
+                        elements.append(Image(img_reader))
+                        elements.append(Spacer(1, 12))
+            except Exception as e:
+                elements.append(Paragraph(f"⚠️ Error loading image: {img_path}", styles["Normal"]))
+
+    # --- Safety Sheet ---
+    if safety_sheet_path and os.path.exists(safety_sheet_path):
+        elements.append(PageBreak())
+        elements.append(Paragraph("<b>Safety Sheet</b>", styles["Heading2"]))
+        elements.append(Spacer(1, 12))
+
+        ext = os.path.splitext(safety_sheet_path)[1].lower()
+        try:
+            if ext in [".jpg", ".jpeg", ".png"]:
+                elements.append(Image(safety_sheet_path, width=400, height=500))
+            elif ext == ".pdf":
+                from PyPDF2 import PdfReader
+                reader = PdfReader(safety_sheet_path)
+                if reader.pages:
+                    elements.append(Paragraph("PDF safety sheet attached separately.", styles["Normal"]))
+        except Exception as e:
+            elements.append(Paragraph(f"⚠️ Error loading safety sheet: {e}", styles["Normal"]))
 
     # --- Footer ---
+    elements.append(PageBreak())
     elements.append(Spacer(1, 24))
     elements.append(Paragraph("Confidential – Do Not Duplicate without written consent from BAINS Dev Comm", styles["Normal"]))
 
     doc.build(elements)
-    print(f"✅ PDF successfully created at {save_path}")
+    print(f"✅ PDF created at: {save_path}")
