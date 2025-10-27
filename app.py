@@ -1,6 +1,6 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from utils.pdf_generator import create_daily_log_pdf
-from utils.compare_scope_vs_log import analyze_scope_vs_log, load_scope_for_project  # ✅ FIXED IMPORT
+from utils.compare_scope_vs_log import analyze_scope_vs_log, load_scope_for_project
 
 import os
 import uuid
@@ -76,3 +76,8 @@ def upload_scope_txt():
 @app.route("/generated/<filename>")
 def serve_pdf(filename):
     return app.send_static_file(f"generated/{filename}")
+
+# ✅ NEW: Form Page Route
+@app.route("/form")
+def form():
+    return render_template("form.html")
