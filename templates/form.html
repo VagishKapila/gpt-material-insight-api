@@ -2,82 +2,129 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Daily Log Form</title>
+    <title>Daily Log Entry</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
-        h1 { font-size: 26px; }
-        label { display: block; margin-top: 15px; font-weight: bold; }
-        input[type="text"], textarea, input[type="file"], select {
-            width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 6px;
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
         }
+
+        h1 {
+            font-size: 28px;
+            margin-bottom: 20px;
+        }
+
+        label {
+            font-weight: bold;
+            margin-top: 12px;
+            display: block;
+        }
+
+        input[type="text"], textarea, input[type="file"], select, input[type="date"] {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+        }
+
         .form-section {
-            background: white; padding: 20px; margin-bottom: 20px;
-            border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            background: #fff;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
+
+        .form-footer {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 15px;
+        }
+
         .submit-button {
-            display: inline-block; padding: 12px 24px; background-color: #007bff; color: white;
-            border: none; border-radius: 6px; cursor: pointer; font-size: 16px;
+            padding: 12px 20px;
+            background-color: #007bff;
+            color: #fff;
+            font-size: 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
         }
-        .submit-button:hover { background-color: #0056b3; }
+
+        .submit-button:hover {
+            background-color: #0056b3;
+        }
 
         .skip-link {
-            display: inline-block; margin-left: 20px; font-size: 14px;
-            text-decoration: underline; color: #666; cursor: pointer;
+            font-size: 14px;
+            color: #666;
+            text-decoration: underline;
+            cursor: pointer;
+            padding-top: 15px;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 8px;
         }
     </style>
 </head>
 <body>
 
-    <h1>🛠️ Daily Log Entry</h1>
+<h1>🛠️ Daily Log Entry</h1>
 
-    <form action="/generate_form" method="POST" enctype="multipart/form-data">
-        <div class="form-section">
-            <label>Project Name</label>
-            <input type="text" name="project_name" required>
+<form action="/generate_form" method="POST" enctype="multipart/form-data">
+    <div class="form-section">
+        <label>Project Name</label>
+        <input type="text" name="project_name" required>
 
-            <label>Client Name</label>
-            <input type="text" name="client_name">
+        <label>Client Name</label>
+        <input type="text" name="client_name">
 
-            <label>Location</label>
-            <input type="text" name="location" required>
+        <label>Location</label>
+        <input type="text" name="location" required>
 
-            <label>Date</label>
-            <input type="text" name="date" placeholder="YYYY-MM-DD" required>
+        <label>Date (MM/DD/YY)</label>
+        <input type="date" name="date" required>
 
-            <label>Weather</label>
-            <input type="text" name="weather" placeholder="Sunny, Rainy, etc.">
-        </div>
+        <label>Weather</label>
+        <input type="text" name="weather" placeholder="Sunny, Rainy, etc.">
+    </div>
 
-        <div class="form-section">
-            <label>Work Done</label>
-            <textarea name="work_done" rows="4" required></textarea>
+    <div class="form-section">
+        <label>Work Done</label>
+        <textarea name="work_done" rows="4" required></textarea>
 
-            <label>Crew Notes</label>
-            <textarea name="crew_notes" rows="3"></textarea>
+        <label>Crew Notes</label>
+        <textarea name="crew_notes" rows="3"></textarea>
 
-            <label>Safety Notes</label>
-            <textarea name="safety_notes" rows="3"></textarea>
-        </div>
+        <label>Safety Notes</label>
+        <textarea name="safety_notes" rows="3"></textarea>
+    </div>
 
-        <div class="form-section">
-            <label>Scope of Work File (.pdf, .docx, .txt)</label>
-            <input type="file" name="scope_doc">
+    <div class="form-section">
+        <label>Scope of Work File (.pdf, .docx, .txt, .xls, .xlsx)</label>
+        <input type="file" name="scope_doc">
 
-            <label>Upload Photos</label>
-            <input type="file" name="images" multiple accept="image/*">
+        <label>Upload Photos</label>
+        <input type="file" name="images" multiple accept="image/*">
 
-            <label>Logo Image (optional)</label>
-            <input type="file" name="logo" accept="image/*">
+        <label>Logo (optional)</label>
+        <input type="file" name="logo" accept="image/*">
 
-            <label>Safety Sheet (PDF or Image)</label>
-            <input type="file" name="safety_sheet" accept=".pdf,image/*">
+        <label>Safety Sheet (PDF or Image)</label>
+        <input type="file" name="safety_sheet" accept=".pdf,image/*">
 
-            <label><input type="checkbox" name="enable_ai" checked> Enable AI Scope Comparison</label>
-        </div>
+        <label><input type="checkbox" name="enable_ai" checked> Enable AI Scope Comparison</label>
+    </div>
 
+    <div class="form-footer">
         <button class="submit-button" type="submit">🔍 Preview Log</button>
         <a class="skip-link" href="/generate_skip">Skip Preview & Generate PDF →</a>
-    </form>
+    </div>
+</form>
 
 </body>
 </html>
