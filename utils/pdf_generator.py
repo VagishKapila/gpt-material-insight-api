@@ -1,6 +1,5 @@
 after we updted 
 
-[2025-10-26 21:08:30 +0000] [1] [ERROR] Worker (pid:2) exited with code 3
 [2025-10-26 21:08:30 +0000] [1] [ERROR] Shutting down: Master
 [2025-10-26 21:08:30 +0000] [1] [ERROR] Reason: Worker failed to boot.
 [2025-10-26 21:08:33 +0000] [1] [INFO] Starting gunicorn 21.2.0
