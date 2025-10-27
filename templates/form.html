@@ -1,135 +1,83 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Daily Log Submission</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f8f9fa;
-      color: #222;
-      padding: 40px;
-    }
+    <meta charset="UTF-8">
+    <title>Daily Log Form</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
+        h1 { font-size: 26px; }
+        label { display: block; margin-top: 15px; font-weight: bold; }
+        input[type="text"], textarea, input[type="file"], select {
+            width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 6px;
+        }
+        .form-section {
+            background: white; padding: 20px; margin-bottom: 20px;
+            border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+        }
+        .submit-button {
+            display: inline-block; padding: 12px 24px; background-color: #007bff; color: white;
+            border: none; border-radius: 6px; cursor: pointer; font-size: 16px;
+        }
+        .submit-button:hover { background-color: #0056b3; }
 
-    h1 {
-      color: #0057a5;
-      text-align: center;
-    }
-
-    form {
-      max-width: 700px;
-      margin: 0 auto;
-      padding: 30px;
-      background: #fff;
-      border-radius: 10px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    }
-
-    label {
-      font-weight: bold;
-      display: block;
-      margin-top: 10px;
-    }
-
-    input[type="text"],
-    input[type="date"],
-    textarea {
-      width: 100%;
-      padding: 8px;
-      margin-top: 5px;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-    }
-
-    input[type="file"] {
-      margin-top: 5px;
-    }
-
-    small {
-      color: #555;
-      display: block;
-      margin-top: 3px;
-      margin-bottom: 10px;
-    }
-
-    button, input[type="submit"] {
-      background-color: #0057a5;
-      color: white;
-      border: none;
-      padding: 12px 20px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: bold;
-      margin-top: 15px;
-    }
-
-    button:hover, input[type="submit"]:hover {
-      background-color: #0070d1;
-    }
-
-    p {
-      text-align: center;
-    }
-
-    a {
-      color: #0070d1;
-      text-decoration: none;
-    }
-
-    a:hover {
-      text-decoration: underline;
-    }
-  </style>
+        .skip-link {
+            display: inline-block; margin-left: 20px; font-size: 14px;
+            text-decoration: underline; color: #666; cursor: pointer;
+        }
+    </style>
 </head>
 <body>
-  <h1>Daily Log Submission Form</h1>
 
-  <form action="/generate_form" method="post" enctype="multipart/form-data">
-    <label>Project Name:</label>
-    <input type="text" name="project_name" required><br>
+    <h1>🛠️ Daily Log Entry</h1>
 
-    <label>Client Name:</label>
-    <input type="text" name="client_name" required><br>
+    <form action="/generate_form" method="POST" enctype="multipart/form-data">
+        <div class="form-section">
+            <label>Project Name</label>
+            <input type="text" name="project_name" required>
 
-    <label>Location:</label>
-    <input type="text" name="location" required><br>
+            <label>Client Name</label>
+            <input type="text" name="client_name">
 
-    <label>Date:</label>
-    <input type="date" name="date" required><br>
+            <label>Location</label>
+            <input type="text" name="location" required>
 
-    <label>Weather:</label>
-    <input type="text" name="weather"><br>
+            <label>Date</label>
+            <input type="text" name="date" placeholder="YYYY-MM-DD" required>
 
-    <label>Work Done:</label>
-    <textarea name="work_done" rows="6" required></textarea><br>
+            <label>Weather</label>
+            <input type="text" name="weather" placeholder="Sunny, Rainy, etc.">
+        </div>
 
-    <label>Safety Notes:</label>
-    <textarea name="safety_notes" rows="4"></textarea><br>
+        <div class="form-section">
+            <label>Work Done</label>
+            <textarea name="work_done" rows="4" required></textarea>
 
-    <label>Upload Scope of Work (PDF, DOCX, TXT, etc.):</label>
-    <input type="file" name="scope_doc" accept=".pdf,.doc,.docx,.xlsx,.xls,.ppt,.pptx,.txt">
-    <small>Accepted formats: PDF, DOCX, TXT, etc. Upload your full scope document.</small>
+            <label>Crew Notes</label>
+            <textarea name="crew_notes" rows="3"></textarea>
 
-    <label>Upload Logo (Optional):</label>
-    <input type="file" name="logo" accept=".png, .jpg, .jpeg">
-    <small>Recommended size: under 5MB.</small>
+            <label>Safety Notes</label>
+            <textarea name="safety_notes" rows="3"></textarea>
+        </div>
 
-    <label>Upload Safety Sheet (Image or PDF):</label>
-    <input type="file" name="safety_sheet" accept=".pdf,.png,.jpg,.jpeg">
-    <small>Accepted formats: PDF or image. Max 10MB.</small>
+        <div class="form-section">
+            <label>Scope of Work File (.pdf, .docx, .txt)</label>
+            <input type="file" name="scope_doc">
 
-    <label>Upload Site Photos (Multiple Allowed):</label>
-    <input type="file" name="images" multiple accept=".png, .jpg, .jpeg">
-    <small>Multiple images allowed. Max 10MB per file.</small>
+            <label>Upload Photos</label>
+            <input type="file" name="images" multiple accept="image/*">
 
-    <label>Enable AI Analysis:</label>
-    <input type="checkbox" name="enable_ai" checked><br>
+            <label>Logo Image (optional)</label>
+            <input type="file" name="logo" accept="image/*">
 
-    <input type="submit" value="Generate PDF">
-  </form>
+            <label>Safety Sheet (PDF or Image)</label>
+            <input type="file" name="safety_sheet" accept=".pdf,image/*">
 
-  <p style="margin-top: 30px;">
-    Prefer a drag-and-drop uploader?  
-    <a href="/upload_ui"><b>Try the React Upload Tool</b> 🔄</a>
-  </p>
+            <label><input type="checkbox" name="enable_ai" checked> Enable AI Scope Comparison</label>
+        </div>
+
+        <button class="submit-button" type="submit">🔍 Preview Log</button>
+        <a class="skip-link" href="/generate_skip">Skip Preview & Generate PDF →</a>
+    </form>
+
 </body>
 </html>
