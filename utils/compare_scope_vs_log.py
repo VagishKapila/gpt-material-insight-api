@@ -1,8 +1,58 @@
+import os
+import re
+from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
+from fuzzywuzzy import fuzz
+
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
+SCOPE_DIR = "static/scope"
+EXCLUSION_PHRASES = [
+    "no ", "not ", "do not", "does not", "will not", "excluded", "without",
+    "doesn't", "isn't", "wasn't", "aren't", "weren't", "cannot", "never"
+]
+
+def clean_scope_text(text):
+    text = re.sub(r"[^\x00-\x7F]+", "", text).strip()
+    if len(text) < 5:
+        return ""
+    if text.lower().startswith((
+        "client", "project", "date", "prepared by", "include", "scope", "description", "location"
+    )):
+        return ""
+    if any(phrase in text.lower() for phrase in EXCLUSION_PHRASES):
+        return ""
+    return text
+
+def parse_scope_file(file_path):
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == ".pdf":
+        import fitz
+        doc = fitz.open(file_path)
+        text = "\n".join([page.get_text() for page in doc])
+        doc.close()
+        return text
+    elif ext == ".docx":
+        from docx import Document
+        doc = Document(file_path)
+        return "\n".join([p.text for p in doc.paragraphs])
+    elif ext in [".xls", ".xlsx"]:
+        import pandas as pd
+        df = pd.read_excel(file_path, engine="openpyxl")
+        return df.to_string(index=False)
+    elif ext == ".txt":
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return ""
+
+def load_scope_for_project(project_id):
+    scope_path = os.path.join(SCOPE_DIR, f"scope_{project_id}.txt")
+    if not os.path.exists(scope_path):
+        return []
+    with open(scope_path, "r", encoding="utf-8") as f:
+        return [clean_scope_text(line) for line in f.readlines() if clean_scope_text(line)]
+
 def analyze_scope_vs_log(scope_items, daily_log_data, threshold=0.65):
-    """
-    Compares log entries against scope using sentence embeddings + fuzzy matching.
-    Ensures all embeddings are 2D arrays for cosine similarity.
-    """
     work_done = daily_log_data.get("work_done", "")
     crew_notes = daily_log_data.get("crew_notes", "")
     safety_notes = daily_log_data.get("safety_notes", "")
@@ -15,17 +65,14 @@ def analyze_scope_vs_log(scope_items, daily_log_data, threshold=0.65):
             "out_of_scope": ["⚠️ Missing scope items or log data."]
         }
 
-    # ✅ Make sure both log_embedding and scope_embed are 2D
-    log_embedding = model.encode([full_log])  # Shape: [1, 384]
-    scope_embeddings = model.encode(scope_items)  # Shape: [N, 384]
+    log_embedding = model.encode([full_log])  # shape: [1, 384]
+    scope_embeddings = model.encode(scope_items)  # shape: [N, 384]
 
     matched = 0
     scored_items = []
 
     for item, scope_embed in zip(scope_items, scope_embeddings):
-        # ✅ Ensure scope_embed is also reshaped to 2D
-        scope_embed_2d = scope_embed.reshape(1, -1)  # Shape: [1, 384]
-
+        scope_embed_2d = scope_embed.reshape(1, -1)
         cosine_score = cosine_similarity(scope_embed_2d, log_embedding)[0][0]
         fuzzy_score = fuzz.partial_ratio(item.lower(), full_log.lower()) / 100
         final_score = max(cosine_score, fuzzy_score)
@@ -40,7 +87,6 @@ def analyze_scope_vs_log(scope_items, daily_log_data, threshold=0.65):
             "match": is_match
         })
 
-    # 🔎 Out-of-Scope Detection (lines not matching any scope item)
     known_ignore = ["ppe", "tailgate", "safety", "meeting"]
     log_lines = [line.strip() for line in full_log.split("\n") if line.strip()]
     out_of_scope = []
