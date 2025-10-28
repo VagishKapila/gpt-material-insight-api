@@ -3,13 +3,10 @@ import traceback
 import json
 import uuid
 import requests
-import pandas as pd
-import numpy as np
 from flask import Flask, request, render_template, redirect, url_for, send_from_directory
 from werkzeug.utils import secure_filename
-
 from utils.pdf_generator import create_daily_log_pdf
-from utils.compare_scope_vs_log import analyze_scope_vs_log, load_scope_for_project, parse_scope_file
+from utils.compare_scope_vs_log import analyze_scope_vs_log, parse_scope_file
 from utils.weather_icon import download_weather_icon
 from utils.image_tools import fix_image_orientation
 
@@ -17,30 +14,24 @@ app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = "static/uploads"
 app.config["GENERATED_FOLDER"] = "static/generated"
 app.config["SCOPE_FOLDER"] = "static/scope"
-app.config["AUTO_FILL_FOLDER"] = "static/autofill"
 app.config["LOGO_FOLDER"] = "static/logos"
 app.config["ALLOWED_SCOPE_EXTENSIONS"] = {"pdf", "docx", "txt", "xlsx", "xls"}
 
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 os.makedirs(app.config["GENERATED_FOLDER"], exist_ok=True)
 os.makedirs(app.config["SCOPE_FOLDER"], exist_ok=True)
-os.makedirs(app.config["AUTO_FILL_FOLDER"], exist_ok=True)
 os.makedirs(app.config["LOGO_FOLDER"], exist_ok=True)
-
 
 def allowed_scope_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config["ALLOWED_SCOPE_EXTENSIONS"]
-
 
 @app.route("/")
 def health():
     return "✅ Daily Log AI is up and running!"
 
-
 @app.route("/form", methods=["GET"])
 def form():
     return render_template("form.html")
-
 
 @app.route("/get_weather", methods=["GET"])
 def get_weather():
@@ -52,7 +43,6 @@ def get_weather():
         return {"weather": r.text.strip()}
     except:
         return {"weather": "Unavailable"}
-
 
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
@@ -107,30 +97,23 @@ def generate_form():
                 file.save(scope_path)
 
         ai_enabled = request.form.get("enable_ai", "on") == "on"
-        scope_text = ""
         ai_result = None
         if ai_enabled and scope_path:
             scope_text = parse_scope_file(scope_path)
-            scope_lines = [line for line in scope_text.split("\n") if line.strip()]
-            ai_result = analyze_scope_vs_log(scope_lines, data)
+            ai_result = analyze_scope_vs_log(scope_text, data)
+
+        # Clean up NumPy or bool_ objects for JSON
+        def safe_for_json(obj):
+            if isinstance(obj, (int, float, str, bool)) or obj is None:
+                return obj
+            if hasattr(obj, "item"):  # NumPy types
+                return obj.item()
+            return str(obj)
 
         weather_icon_path = None
         if data["weather"]:
             weather_icon_path = download_weather_icon(data["weather"])
 
-        # ---- FIX: JSON-safe serialization ----
-        def convert_np(obj):
-            if isinstance(obj, (np.bool_, bool)):
-                return bool(obj)
-            elif isinstance(obj, (np.integer,)):
-                return int(obj)
-            elif isinstance(obj, (np.floating,)):
-                return float(obj)
-            elif isinstance(obj, np.ndarray):
-                return obj.tolist()
-            raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
-
-        # Save temp data for preview
         preview_data = {
             "data": data,
             "images": images,
@@ -140,9 +123,12 @@ def generate_form():
             "safety_sheet_path": safety_sheet_path
         }
 
-        preview_json_path = os.path.join(app.config["UPLOAD_FOLDER"], f"{session_id}.json")
-        with open(preview_json_path, "w") as f:
-            json.dump(preview_data, f, default=convert_np)
+        # Sanitize before saving to JSON
+        clean_preview = json.loads(json.dumps(preview_data, default=safe_for_json))
+
+        preview_path = os.path.join(app.config["UPLOAD_FOLDER"], f"{session_id}.json")
+        with open(preview_path, "w") as f:
+            json.dump(clean_preview, f)
 
         return redirect(url_for("preview", session_id=session_id))
 
@@ -150,18 +136,18 @@ def generate_form():
         traceback.print_exc()
         return f"Internal Server Error: {e}", 500
 
-
-@app.route("/preview/<session_id>", methods=["GET"])
+@app.route("/preview/<session_id>")
 def preview(session_id):
     try:
-        json_path = os.path.join(app.config["UPLOAD_FOLDER"], f"{session_id}.json")
-        with open(json_path, "r") as f:
+        preview_path = os.path.join(app.config["UPLOAD_FOLDER"], f"{session_id}.json")
+        with open(preview_path, "r") as f:
             preview_data = json.load(f)
+
         return render_template(
             "preview.html",
             session_id=session_id,
             data=preview_data["data"],
-            images=[img for img in preview_data["images"]],
+            images=preview_data["images"],
             logo=preview_data["logo"],
             ai_analysis=preview_data["ai_analysis"],
         )
@@ -169,23 +155,24 @@ def preview(session_id):
         traceback.print_exc()
         return f"Internal Server Error: {e}", 500
 
-
 @app.route("/finalize_preview", methods=["POST"])
 def finalize_preview():
     try:
         session_id = request.form["session_id"]
-        json_path = os.path.join(app.config["UPLOAD_FOLDER"], f"{session_id}.json")
+        preview_path = os.path.join(app.config["UPLOAD_FOLDER"], f"{session_id}.json")
 
-        with open(json_path, "r") as f:
+        with open(preview_path, "r") as f:
             preview_data = json.load(f)
 
-        # Allow user to override confidence scores
-        if preview_data.get("ai_analysis"):
-            for s in preview_data["ai_analysis"]["scored_items"]:
+        # Update confidence values if user edited them
+        ai = preview_data.get("ai_analysis", {})
+        if "scored_items" in ai:
+            for s in ai["scored_items"]:
                 key = f"score_{s['scope'][:75]}"
                 if key in request.form:
                     try:
                         s["confidence"] = int(request.form[key])
+                        s["match"] = s["confidence"] >= 65
                     except:
                         pass
 
@@ -196,8 +183,8 @@ def finalize_preview():
             preview_data["data"],
             preview_data["images"],
             preview_data.get("logo"),
-            preview_data.get("ai_analysis"),
-            preview_data.get("ai_analysis", {}).get("percent_complete"),
+            ai,
+            ai.get("completion", 0),
             save_path,
             preview_data.get("weather_icon"),
             preview_data.get("safety_sheet_path"),
@@ -209,11 +196,9 @@ def finalize_preview():
         traceback.print_exc()
         return f"Internal Server Error: {e}", 500
 
-
 @app.route("/generated/<filename>")
 def serve_generated(filename):
     return send_from_directory(app.config["GENERATED_FOLDER"], filename)
-
 
 if __name__ == "__main__":
     app.run(debug=True)
