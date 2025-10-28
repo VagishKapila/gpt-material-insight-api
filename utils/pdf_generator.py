@@ -1,7 +1,7 @@
 import os
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Image, Table, PageBreak
+    SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
@@ -9,24 +9,25 @@ from reportlab.pdfgen.canvas import Canvas
 from PyPDF2 import PdfReader
 from PIL import Image as PILImage, ExifTags
 
-
 def fix_image_orientation(img_path):
     try:
         img = PILImage.open(img_path)
+        for orientation in ExifTags.TAGS.keys():
+            if ExifTags.TAGS[orientation] == 'Orientation':
+                break
         exif = img._getexif()
-        if exif:
-            orientation_key = next((k for k, v in ExifTags.TAGS.items() if v == "Orientation"), None)
-            orientation = exif.get(orientation_key)
-            if orientation == 3:
+        if exif is not None:
+            orientation_value = exif.get(orientation, None)
+            if orientation_value == 3:
                 img = img.rotate(180, expand=True)
-            elif orientation == 6:
+            elif orientation_value == 6:
                 img = img.rotate(270, expand=True)
-            elif orientation == 8:
+            elif orientation_value == 8:
                 img = img.rotate(90, expand=True)
-        img.save(img_path)
+            img.save(img_path)
+            img.close()
     except Exception as e:
-        print(f"[Orientation] ⚠️ {e}")
-
+        print(f"Orientation fix failed: {e}")
 
 def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_report,
                          save_path, weather_icon_path=None, safety_sheet_path=None):
@@ -34,9 +35,9 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
     doc = SimpleDocTemplate(save_path, pagesize=letter)
     elements = []
     styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="Bold", fontName="Helvetica-Bold"))
+    styles.add(ParagraphStyle(name='Bold', fontName='Helvetica-Bold'))
 
-    # === PAGE 1: Log Info ===
+    # Page 1: Title and Info
     if logo_path and os.path.exists(logo_path):
         fix_image_orientation(logo_path)
         elements.append(Image(logo_path, width=120, height=50))
@@ -44,76 +45,63 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
     elements.append(Paragraph("<b>DAILY LOG</b>", styles["Title"]))
     elements.append(Spacer(1, 12))
 
-    for key in ["project_name", "date", "location", "weather"]:
+    for key in ["Project", "Date", "Location", "Weather"]:
         if key in data:
-            elements.append(Paragraph(f"<b>{key.capitalize()}:</b> {data[key]}", styles["Normal"]))
+            elements.append(Paragraph(f"<b>{key}:</b> {data[key]}", styles["Normal"]))
     elements.append(Spacer(1, 12))
 
-    for section in ["work_done", "crew_notes", "safety_notes"]:
+    for section in ["Work Done", "Crew Notes", "Safety Notes"]:
         if section in data and data[section].strip():
-            elements.append(Paragraph(f"<b>{section.replace('_',' ').title()}:</b>", styles["Bold"]))
+            elements.append(Paragraph(f"<b>{section}:</b>", styles["Bold"]))
             elements.append(Paragraph(data[section], styles["Normal"]))
             elements.append(Spacer(1, 12))
 
     elements.append(PageBreak())
 
-    # === PAGE 2: Photos ===
-    if image_paths:
-        elements.append(Paragraph("<b>Job Site Photos</b>", styles["Heading2"]))
-        elements.append(Spacer(1, 12))
-        photo_rows, row = [], []
+    # Page 2: Jobsite Photos (2-column layout)
+    elements.append(Paragraph("<b>Job Site Photos</b>", styles["Heading2"]))
+    elements.append(Spacer(1, 12))
 
-        for idx, path in enumerate(image_paths):
-            if os.path.exists(path):
-                fix_image_orientation(path)
-                row.append(Image(path, width=250, height=150))
-                if len(row) == 2:
-                    photo_rows.append(row)
-                    row = []
-                if len(photo_rows) == 3:
-                    elements.append(Table(photo_rows, colWidths=[270, 270]))
-                    elements.append(PageBreak())
-                    photo_rows = []
+    photo_rows, row = [], []
+    for idx, path in enumerate(image_paths):
+        if os.path.exists(path):
+            fix_image_orientation(path)
+            row.append(Image(path, width=250, height=150))
+            if len(row) == 2:
+                photo_rows.append(row)
+                row = []
+            if len(photo_rows) == 3:
+                elements.append(Table(photo_rows, colWidths=[270, 270]))
+                elements.append(PageBreak())
+                photo_rows = []
 
-        if row:
-            photo_rows.append(row)
-        if photo_rows:
-            elements.append(Table(photo_rows, colWidths=[270, 270]))
-            elements.append(PageBreak())
+    if row:
+        photo_rows.append(row)
+    if photo_rows:
+        elements.append(Table(photo_rows, colWidths=[270, 270]))
+        elements.append(PageBreak())
 
-    # === PAGE 3: AI Analysis ===
+    # Page 3: AI Scope Analysis (from override data)
     elements.append(Paragraph("<b>AI Scope Analysis</b>", styles["Heading2"]))
     elements.append(Spacer(1, 12))
 
-    completion = progress_report.get("completion", 0)
-    user_override = progress_report.get("user_override", False)
-    note = " (user adjusted)" if user_override else ""
-    try:
-        percent = int(round(float(completion)))
-    except:
-        percent = 0
-
-    elements.append(Paragraph(f"<b>Completion:</b> {percent}%{note}", styles["Normal"]))
-    elements.append(Spacer(1, 12))
-
-    if ai_analysis:
-        for item in ai_analysis.get("scored_items", []):
-            label = item.get("scope", "")
-            score = int(round(item.get("confidence", 0)))
-            icon = "✅" if item.get("match") else "❌"
-            elements.append(Paragraph(f"{icon} {label} – {score}%", styles["Normal"]))
+    scored = progress_report.get("scored_items", [])
+    if scored:
+        total = len(scored)
+        matched = sum(1 for x in scored if x.get("match"))
+        percent = round((matched / total) * 100, 1) if total else 0
+        elements.append(Paragraph(f"<b>Adjusted Completion:</b> {percent}%", styles["Normal"]))
         elements.append(Spacer(1, 12))
 
-        out_items = ai_analysis.get("out_of_scope", [])
-        valid = [line for line in out_items if len(line.split()) > 4]
-        if valid:
-            elements.append(Paragraph("<b>Out-of-Scope Items:</b>", styles["Bold"]))
-            for line in valid:
-                elements.append(Paragraph(f"• {line}", styles["Normal"]))
+        for item in scored:
+            label = item.get("scope", "")
+            score = item.get("confidence", 0)
+            match_icon = "✅" if item.get("match") else "❌"
+            elements.append(Paragraph(f"{match_icon} {label} – {score}%", styles["Normal"]))
 
     elements.append(PageBreak())
 
-    # === PAGE 4: Safety Sheet ===
+    # Page 4: Safety Sheet
     if safety_sheet_path and os.path.exists(safety_sheet_path):
         elements.append(Paragraph("<b>Safety Sheet</b>", styles["Heading2"]))
         if safety_sheet_path.endswith(".pdf"):
@@ -123,18 +111,17 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
                     text = page.extract_text() or "Page unreadable"
                     elements.append(Paragraph(text, styles["Normal"]))
             except Exception as e:
-                elements.append(Paragraph(f"Error reading safety sheet: {e}", styles["Normal"]))
+                elements.append(Paragraph(f"Error loading safety sheet PDF: {e}", styles["Normal"]))
         elif safety_sheet_path.lower().endswith((".jpg", ".jpeg", ".png")):
             fix_image_orientation(safety_sheet_path)
             elements.append(Image(safety_sheet_path, width=500, height=350))
 
     doc.build(elements, onFirstPage=_footer, onLaterPages=_footer)
 
-
 def _footer(canvas: Canvas, doc):
     footer_text = "Confidential – Do Not Duplicate without written consent from BAINS Dev Comm"
     canvas.saveState()
-    canvas.setFont("Helvetica", 8)
+    canvas.setFont('Helvetica', 8)
     canvas.setFillColor(colors.grey)
     canvas.drawString(30, 30, footer_text)
     canvas.drawRightString(letter[0] - 30, 30, f"Page {doc.page}")
