@@ -1,3 +1,4 @@
+# ✅ pdf_generator.py (full)
 import os
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import (
@@ -58,11 +59,13 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
 
     elements.append(PageBreak())
 
-    # Page 2: Jobsite Photos (2-column layout)
+    # Page 2: Photos Grid (6 per page)
     elements.append(Paragraph("<b>Job Site Photos</b>", styles["Heading2"]))
     elements.append(Spacer(1, 12))
 
-    photo_rows, row = [], []
+    photo_rows = []
+    row = []
+
     for idx, path in enumerate(image_paths):
         if os.path.exists(path):
             fix_image_orientation(path)
@@ -81,23 +84,37 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
         elements.append(Table(photo_rows, colWidths=[270, 270]))
         elements.append(PageBreak())
 
-    # Page 3: AI Scope Analysis (from override data)
+    # Page 3: AI Scope Comparison
     elements.append(Paragraph("<b>AI Scope Analysis</b>", styles["Heading2"]))
     elements.append(Spacer(1, 12))
 
-    scored = progress_report.get("scored_items", [])
-    if scored:
-        total = len(scored)
-        matched = sum(1 for x in scored if x.get("match"))
-        percent = round((matched / total) * 100, 1) if total else 0
-        elements.append(Paragraph(f"<b>Adjusted Completion:</b> {percent}%", styles["Normal"]))
+    try:
+        percent = int(round(progress_report.get("completion", 0)))
+    except:
+        percent = 0
+
+    elements.append(Paragraph(f"<b>Completion:</b> {percent}% (user-edited)", styles["Normal"]))
+    elements.append(Spacer(1, 12))
+
+    if ai_analysis:
+        for item in ai_analysis.get("scored_items", []):
+            score = item.get("confidence", 0)
+            label = item.get("scope", "")
+            match_icon = "✅" if item.get("match") else "❌"
+            try:
+                score_int = int(round(score))
+            except:
+                score_int = 0
+            elements.append(Paragraph(f"{match_icon} {label} – {score_int}%", styles["Normal"]))
         elements.append(Spacer(1, 12))
 
-        for item in scored:
-            label = item.get("scope", "")
-            score = item.get("confidence", 0)
-            match_icon = "✅" if item.get("match") else "❌"
-            elements.append(Paragraph(f"{match_icon} {label} – {score}%", styles["Normal"]))
+        out_items = ai_analysis.get("out_of_scope", [])
+        filtered = [line for line in out_items if len(line.split()) > 4]
+        if filtered:
+            elements.append(Paragraph("<b>Out-of-Scope Items:</b>", styles["Bold"]))
+            for line in filtered:
+                elements.append(Paragraph(f"• {line}", styles["Normal"]))
+            elements.append(Spacer(1, 12))
 
     elements.append(PageBreak())
 
