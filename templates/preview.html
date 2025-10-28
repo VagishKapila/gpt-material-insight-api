@@ -4,70 +4,71 @@
   <meta charset="UTF-8">
   <title>Daily Log Preview</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; background: #f9f9f9; }
-    h1, h2 { color: #333; }
-    .section { margin-bottom: 25px; padding: 15px; background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
-    .label { font-weight: bold; margin-top: 10px; display: block; color: #444; }
-    .value { margin-left: 10px; color: #222; }
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f0f4f7; }
+    h1, h2 { color: #2c3e50; }
+    .section { margin-bottom: 30px; padding: 20px; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .label { font-weight: bold; color: #34495e; display: block; margin-top: 10px; }
+    .value { color: #2c3e50; margin-left: 10px; }
     .images { display: flex; flex-wrap: wrap; gap: 10px; }
-    .images img { width: 30%; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-    .score { margin: 5px 0; }
-    .score .match { color: green; }
-    .score .no-match { color: red; }
-    .out-of-scope { color: #b30000; }
-    .button { margin-top: 30px; padding: 12px 25px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; }
-    .button:hover { background: #0056b3; }
+    .images img { width: 30%; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+    .score { margin: 6px 0; }
+    .match { color: green; }
+    .no-match { color: red; }
+    .out-of-scope { color: #c0392b; }
+    .button { margin-top: 30px; padding: 14px 28px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    .button:hover { background: #2980b9; }
   </style>
 </head>
 <body>
-  <h1>Daily Log Preview</h1>
+  <h1>📋 Daily Log Preview</h1>
 
   <div class="section">
-    <h2>Project Information</h2>
-    <div><span class="label">Project:</span> {{ data.Project }}</div>
-    <div><span class="label">Date:</span> {{ data.Date }}</div>
-    <div><span class="label">Location:</span> {{ data.Location }}</div>
-    <div><span class="label">Weather:</span> {{ data.Weather }}</div>
+    <h2>📌 Project Information</h2>
+    <div><span class="label">Project:</span> {{ form_data.project_name }}</div>
+    <div><span class="label">Client:</span> {{ form_data.client_name }}</div>
+    <div><span class="label">Location:</span> {{ form_data.location }}</div>
+    <div><span class="label">Date:</span> {{ form_data.date }}</div>
+    <div><span class="label">Weather:</span> {{ form_data.weather }}</div>
   </div>
 
   <div class="section">
-    <h2>Work Notes</h2>
-    <div><span class="label">Work Done:</span> {{ data['Work Done'] }}</div>
-    <div><span class="label">Crew Notes:</span> {{ data['Crew Notes'] }}</div>
-    <div><span class="label">Safety Notes:</span> {{ data['Safety Notes'] }}</div>
+    <h2>🛠️ Work Log</h2>
+    <div><span class="label">Work Done:</span> {{ form_data.work_done }}</div>
+    <div><span class="label">Crew Notes:</span> {{ form_data.crew_notes }}</div>
+    <div><span class="label">Safety Notes:</span> {{ form_data.safety_notes }}</div>
   </div>
 
-  {% if image_urls %}
+  {% if image_paths %}
   <div class="section">
-    <h2>Uploaded Photos</h2>
+    <h2>📷 Uploaded Photos</h2>
     <div class="images">
-      {% for img_url in image_urls %}
-        <img src="{{ img_url }}" alt="Job Site Photo">
+      {% for img_path in image_paths %}
+        <img src="/{{ img_path }}" alt="Job Site Photo">
       {% endfor %}
     </div>
   </div>
   {% endif %}
 
-  {% if ai_analysis %}
+  {% if ai_results %}
   <div class="section">
-    <h2>AI Scope Analysis</h2>
-    <div><strong>Estimated Completion:</strong> {{ ai_analysis.completion | round(0) }}%</div>
+    <h2>🤖 AI Scope Comparison</h2>
+    <div><strong>Estimated Completion:</strong> {{ ai_results.completion }}%</div>
     <hr>
-    {% for item in ai_analysis.scored_items %}
+    {% for item in ai_results.scored_items %}
       <div class="score">
         {% if item.match %}
-          ✅ <span class="match">{{ item.scope }} – {{ item.confidence | round(0) }}%</span>
+          ✅ <span class="match">{{ item.scope }} – {{ item.confidence }}%</span>
         {% else %}
-          ❌ <span class="no-match">{{ item.scope }} – {{ item.confidence | round(0) }}%</span>
+          ❌ <span class="no-match">{{ item.scope }} – {{ item.confidence }}%</span>
         {% endif %}
       </div>
     {% endfor %}
 
-    {% if ai_analysis.out_of_scope %}
+    {% if ai_results.out_of_scope %}
       <div class="out-of-scope">
         <strong>Out-of-Scope Items:</strong>
         <ul>
-        {% for line in ai_analysis.out_of_scope if line|length > 4 %}
+        {% for line in ai_results.out_of_scope if line|length > 4 %}
           <li>{{ line }}</li>
         {% endfor %}
         </ul>
@@ -77,7 +78,7 @@
   {% endif %}
 
   <form action="/generate_pdf/{{ session_id }}" method="post">
-    <button type="submit" class="button">✅ Generate PDF</button>
+    <button type="submit" class="button">✅ Generate Final PDF</button>
   </form>
 </body>
 </html>
