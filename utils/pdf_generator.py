@@ -31,7 +31,7 @@ def fix_image_orientation(img_path):
 
 def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_report,
                          save_path, weather_icon_path=None, safety_sheet_path=None):
-    
+
     doc = SimpleDocTemplate(save_path, pagesize=letter)
     elements = []
     styles = getSampleStyleSheet()
@@ -56,42 +56,37 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
             elements.append(Paragraph(data[section], styles["Normal"]))
             elements.append(Spacer(1, 12))
 
-    doc.build(elements)
+    elements.append(PageBreak())
 
-    # Page 2: Photos Grid (6 per page, 3 rows × 2 columns)
-    doc = SimpleDocTemplate(save_path, pagesize=letter)
-    elements = []
-    styles = getSampleStyleSheet()
+    # Page 2: Photos Grid (6 per page)
     elements.append(Paragraph("<b>Job Site Photos</b>", styles["Heading2"]))
     elements.append(Spacer(1, 12))
 
-    photo_cells = []
-    rows = []
-    count = 0
+    photo_rows = []
+    row = []
 
-    for path in image_paths:
+    for idx, path in enumerate(image_paths):
         if os.path.exists(path):
             fix_image_orientation(path)
-            photo_cells.append(Image(path, width=250, height=150))
-            count += 1
-            if count % 2 == 0:
-                rows.append(photo_cells)
-                photo_cells = []
-            if len(rows) == 3:
-                elements.append(Table(rows, colWidths=[270, 270]))
+            row.append(Image(path, width=250, height=150))
+            if len(row) == 2:
+                photo_rows.append(row)
+                row = []
+            if len(photo_rows) == 3:
+                elements.append(Table(photo_rows, colWidths=[270, 270]))
                 elements.append(PageBreak())
-                rows = []
+                photo_rows = []
 
-    if photo_cells:
-        rows.append(photo_cells)
-    if rows:
-        elements.append(Table(rows, colWidths=[270, 270]))
+    if row:
+        photo_rows.append(row)
+    if photo_rows:
+        elements.append(Table(photo_rows, colWidths=[270, 270]))
         elements.append(PageBreak())
 
-    # Page 3: AI Scope Analysis
+    # Page 3: AI Scope Comparison
     elements.append(Paragraph("<b>AI Scope Analysis</b>", styles["Heading2"]))
     elements.append(Spacer(1, 12))
-    
+
     try:
         percent = int(round(progress_report.get("completion", 0)))
     except:
@@ -105,18 +100,21 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
             score = item.get("confidence", 0)
             label = item.get("scope", "")
             match_icon = "✅" if item.get("match") else "❌"
-            elements.append(Paragraph(f"{match_icon} {label} – {int(round(score))}%", styles["Normal"]))
+            try:
+                score_int = int(round(score))
+            except:
+                score_int = 0
+            elements.append(Paragraph(f"{match_icon} {label} – {score_int}%", styles["Normal"]))
         elements.append(Spacer(1, 12))
 
-        # Filter valid out-of-scope lines
+        # Filter out short out-of-scope lines
         out_items = ai_analysis.get("out_of_scope", [])
-        if out_items:
-            filtered = [line for line in out_items if len(line.split()) > 4]
-            if filtered:
-                elements.append(Paragraph("<b>Out-of-Scope Items:</b>", styles["Bold"]))
-                for line in filtered:
-                    elements.append(Paragraph(f"• {line}", styles["Normal"]))
-                elements.append(Spacer(1, 12))
+        filtered = [line for line in out_items if len(line.split()) > 4]
+        if filtered:
+            elements.append(Paragraph("<b>Out-of-Scope Items:</b>", styles["Bold"]))
+            for line in filtered:
+                elements.append(Paragraph(f"• {line}", styles["Normal"]))
+            elements.append(Spacer(1, 12))
 
     elements.append(PageBreak())
 
@@ -135,7 +133,7 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
             fix_image_orientation(safety_sheet_path)
             elements.append(Image(safety_sheet_path, width=500, height=350))
 
-    # Build final PDF
+    # Compile PDF
     doc.build(elements, onFirstPage=_footer, onLaterPages=_footer)
 
 def _footer(canvas: Canvas, doc):
