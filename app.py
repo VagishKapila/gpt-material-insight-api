@@ -1,28 +1,28 @@
 import os
 import uuid
 import json
-import tempfile
-from flask import Flask, request, render_template, redirect, url_for
+import traceback
+from flask import Flask, request, render_template, send_file, redirect, url_for
+from werkzeug.utils import secure_filename
 from datetime import datetime
-from utils.pdf_generator import create_daily_log_pdf
 from compare_scope_vs_log import analyze_scope_vs_log, parse_scope_file, load_scope_for_project
+from utils.pdf_generator import create_daily_log_pdf
+from utils.weather import get_weather_icon
+from PIL import Image
 
 app = Flask(__name__)
 UPLOAD_FOLDER = "static/uploads"
-SCOPE_FOLDER = "scope"
 GENERATED_FOLDER = "static/generated"
-PREVIEW_FOLDER = "static/previews"
 AUTOFILL_FOLDER = "static/autofill"
+SCOPE_FOLDER = "static/scope"
+PREVIEW_FOLDER = "static/preview"
 
-for folder in [UPLOAD_FOLDER, SCOPE_FOLDER, GENERATED_FOLDER, PREVIEW_FOLDER, AUTOFILL_FOLDER]:
+for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, AUTOFILL_FOLDER, SCOPE_FOLDER, PREVIEW_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
-def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in {"png", "jpg", "jpeg", "pdf", "docx", "xlsx", "xls", "txt"}
-
 @app.route("/")
-def home():
-    return "🛠️ Daily Log AI is Running"
+def index():
+    return "Daily Log AI is running."
 
 @app.route("/form")
 def form():
@@ -30,92 +30,88 @@ def form():
 
 @app.route("/get_weather")
 def get_weather():
-    import requests
     location = request.args.get("location", "")
-    try:
-        resp = requests.get(f"https://wttr.in/{location}?format=1", timeout=2)
-        return resp.text.strip()
-    except:
-        return "Could not fetch"
+    icon_path = get_weather_icon(location)
+    if icon_path:
+        return icon_path
+    return "", 404
 
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
-    data = request.form.to_dict()
-    images = request.files.getlist("images")
-    logo = request.files.get("logo")
-    safety_sheet = request.files.get("safety_sheet")
-    scope_file = request.files.get("scope_file")
-    enable_ai = True if request.form.get("enable_ai") == "on" else False
+    try:
+        form_data = request.form.to_dict()
+        session_id = uuid.uuid4().hex
 
-    session_id = str(uuid.uuid4())
-    project_id = data.get("Project", "default").strip().replace(" ", "_")
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Upload files
+        logo = request.files.get("logo")
+        scope_file = request.files.get("scope_file")
+        safety_sheet = request.files.get("safety_sheet")
+        photos = request.files.getlist("images")
 
-    image_paths = []
-    for file in images:
-        if file and allowed_file(file.filename):
-            path = os.path.join(UPLOAD_FOLDER, f"{session_id}_{file.filename}")
-            file.save(path)
-            image_paths.append(path)
+        def save_file(file_obj, folder):
+            if not file_obj:
+                return None
+            filename = secure_filename(file_obj.filename)
+            path = os.path.join(folder, f"{session_id}_{filename}")
+            file_obj.save(path)
+            return path
 
-    logo_path = None
-    if logo and allowed_file(logo.filename):
-        logo_path = os.path.join(UPLOAD_FOLDER, f"{session_id}_logo_{logo.filename}")
-        logo.save(logo_path)
+        logo_path = save_file(logo, UPLOAD_FOLDER)
+        safety_sheet_path = save_file(safety_sheet, UPLOAD_FOLDER)
 
-    safety_path = None
-    if safety_sheet and allowed_file(safety_sheet.filename):
-        safety_path = os.path.join(UPLOAD_FOLDER, f"{session_id}_safety_{safety_sheet.filename}")
-        safety_sheet.save(safety_path)
+        image_paths = []
+        for photo in photos:
+            img_path = save_file(photo, UPLOAD_FOLDER)
+            if img_path:
+                image_paths.append(img_path)
 
-    if scope_file and allowed_file(scope_file.filename):
-        scope_path = os.path.join(SCOPE_FOLDER, f"scope_{project_id}.txt")
-        parsed_scope = parse_scope_file(scope_file)
-        with open(scope_path, "w", encoding="utf-8") as f:
-            f.write(parsed_scope)
+        # Load or save scope file
+        project_id = form_data.get("Project", "default_project").strip().replace(" ", "_")
+        scope_path = os.path.join(SCOPE_FOLDER, f"{project_id}.txt")
 
-    with open(os.path.join(AUTOFILL_FOLDER, f"{project_id}.json"), "w") as f:
-        json.dump(data, f)
+        if scope_file:
+            scope_uploaded = save_file(scope_file, SCOPE_FOLDER)
+            parsed_scope = parse_scope_file(scope_uploaded)
+            with open(scope_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(parsed_scope))
 
-    scope_items = load_scope_for_project(project_id)
-    ai_result = analyze_scope_vs_log(scope_items, data) if enable_ai else {}
+        scope_text = load_scope_for_project(project_id)
 
-    preview_data = {
-        "session_id": session_id,
-        "data": data,
-        "image_paths": image_paths,
-        "logo_path": logo_path,
-        "safety_sheet_path": safety_path,
-        "ai_result": ai_result,
-        "project_id": project_id
-    }
+        combined_text = "\n".join([
+            form_data.get("Work Done", ""),
+            form_data.get("Crew Notes", ""),
+            form_data.get("Safety Notes", ""),
+        ])
 
-    # Safely convert non-serializable types
-    def safe_json(obj):
-        if isinstance(obj, (bool, int, float, str, type(None))):
-            return obj
-        if isinstance(obj, dict):
-            return {k: safe_json(v) for k, v in obj.items()}
-        if isinstance(obj, list):
-            return [safe_json(x) for x in obj]
-        return str(obj)
+        ai_results = analyze_scope_vs_log(scope_text, combined_text)
 
-    preview_path = os.path.join(PREVIEW_FOLDER, f"{session_id}.json")
-    with open(preview_path, "w") as f:
-        json.dump(safe_json(preview_data), f)
+        # Save preview data
+        preview_data = {
+            "session_id": session_id,
+            "form_data": form_data,
+            "logo_path": logo_path,
+            "safety_sheet_path": safety_sheet_path,
+            "image_paths": image_paths,
+            "ai_results": ai_results,
+            "project_id": project_id,
+        }
 
-    return redirect(url_for("preview", session_id=session_id))
+        with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "w") as f:
+            json.dump(preview_data, f, indent=2, default=str)
+
+        return redirect(url_for("preview", session_id=session_id))
+
+    except Exception as e:
+        traceback.print_exc()
+        return f"Internal Server Error: {e}", 500
 
 @app.route("/preview/<session_id>")
 def preview(session_id):
     try:
-        preview_path = os.path.join(PREVIEW_FOLDER, f"{session_id}.json")
-        with open(preview_path, "r") as f:
-            context = json.load(f)
-
-        return render_template("preview.html", **context)
+        with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "r") as f:
+            data = json.load(f)
+        return render_template("preview.html", **data)
     except Exception as e:
-        import traceback
         traceback.print_exc()
         return f"Internal Server Error: {e}", 500
 
@@ -123,26 +119,26 @@ def preview(session_id):
 def generate_pdf(session_id):
     try:
         with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "r") as f:
-            context = json.load(f)
+            data = json.load(f)
 
-        filename = f"daily_log_{session_id}.pdf"
-        save_path = os.path.join(GENERATED_FOLDER, filename)
+        save_path = os.path.join(GENERATED_FOLDER, f"daily_log_{session_id}.pdf")
 
         create_daily_log_pdf(
-            data=context.get("data"),
-            image_paths=context.get("image_paths"),
-            logo_path=context.get("logo_path"),
-            ai_analysis=context.get("ai_result"),
-            progress_report=context.get("ai_result"),
+            data=data["form_data"],
+            image_paths=data["image_paths"],
+            logo_path=data.get("logo_path"),
+            ai_analysis=data.get("ai_results"),
+            progress_report=data.get("ai_results"),
             save_path=save_path,
-            safety_sheet_path=context.get("safety_sheet_path")
+            weather_icon_path=None,
+            safety_sheet_path=data.get("safety_sheet_path"),
         )
 
-        return redirect(f"/{save_path}")
+        return send_file(save_path, as_attachment=True)
+
     except Exception as e:
-        import traceback
         traceback.print_exc()
-        return f"PDF Generation Error: {e}", 500
+        return f"Internal Server Error: {e}", 500
 
 if __name__ == "__main__":
     app.run(debug=True)
