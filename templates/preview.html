@@ -1,77 +1,124 @@
-# ✅ preview.html (Fixed image display, zoom, live slider, text, safety preview)
-
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Preview Daily Log</title>
   <style>
-    body { font-family: sans-serif; max-width: 900px; margin: auto; padding: 20px; }
-    .images img { width: 180px; margin: 10px; border-radius: 6px; border: 1px solid #aaa; }
-    .images img:hover { cursor: zoom-in; border-color: #000; }
-    .slider-container { margin-bottom: 20px; }
+    body { font-family: Arial, sans-serif; padding: 2rem; max-width: 900px; margin: auto; }
+    h2 { margin-top: 2rem; color: #333; }
+    .image-preview { width: 200px; height: auto; margin: 10px; cursor: pointer; transition: transform 0.3s ease; }
+    .image-preview:hover { transform: scale(1.05); }
+    .preview-container { display: flex; flex-wrap: wrap; justify-content: flex-start; }
+    .slider-group { margin: 12px 0; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+    .progress-bar { background: #f0f0f0; border-radius: 8px; height: 20px; margin: 10px 0; }
+    .progress-fill { background: green; height: 100%; border-radius: 8px; text-align: center; color: white; line-height: 20px; font-weight: bold; }
+    .section { margin-bottom: 30px; }
   </style>
 </head>
 <body>
-  <h1>📝 Preview Daily Log Submission</h1>
-  <form method="POST" action="/generate_pdf/{{ session_id }}">
-    <h3>📋 Project Info</h3>
-    <p><b>Project:</b> {{ form_data.project_name }}</p>
-    <p><b>Client:</b> {{ form_data.client_name }}</p>
-    <p><b>Date:</b> {{ form_data.date }}</p>
-    <p><b>Weather:</b> {{ form_data.weather }}</p>
+  <h1>Preview Your Daily Log</h1>
+  <form action="/generate_pdf/{{ session_id }}" method="POST">
 
-    <h3>🛠️ Work Summary</h3>
-    <p><b>Work Done:</b> {{ form_data.work_done }}</p>
-    <p><b>Crew Notes:</b> {{ form_data.crew_notes }}</p>
-    <p><b>Safety Notes:</b> {{ form_data.safety_notes }}</p>
+    <div class="section">
+      <h2>Project Info</h2>
+      {% for key, value in form_data.items() %}
+        {% if key in ["project_name", "client_name", "location", "date", "weather"] %}
+          <p><b>{{ key.replace("_", " ").title() }}:</b> {{ value }}</p>
+        {% endif %}
+      {% endfor %}
+    </div>
 
-    {% if safety_sheet_path %}
-      <h3>🧾 Safety Sheet</h3>
-      <img src="/{{ safety_sheet_path }}" width="300" />
-    {% endif %}
+    <div class="section">
+      <h2>Work Notes</h2>
+      <p><b>Work Done:</b><br>{{ form_data.get("work_done", "") }}</p>
+      <p><b>Crew Notes:</b><br>{{ form_data.get("crew_notes", "") }}</p>
+      <p><b>Safety Notes:</b><br>{{ form_data.get("safety_notes", "") }}</p>
+    </div>
 
     {% if ai_results %}
-      <h3>🤖 AI Scope Comparison</h3>
-      <p><b>Estimated Completion:</b> {{ ai_results.completion }}%</p>
-      <input type="hidden" name="item_count" value="{{ ai_results.scored_items | length }}">
-
-      {% for item in ai_results.scored_items %}
-        <div class="slider-container">
-          <p>
-            <input type="checkbox" name="match_{{ loop.index0 }}" {% if item.match %}checked{% endif %}>
-            <b>{{ item.scope }}</b> — <span id="score_{{ loop.index0 }}">{{ item.confidence }}%</span>
-          </p>
-          <input type="range" min="0" max="100" value="{{ item.confidence }}" name="confidence_{{ loop.index0 }}" 
-                 oninput="document.getElementById('score_{{ loop.index0 }}').innerText = this.value + '%'">
-          <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
+      <div class="section">
+        <h2>AI Scope Comparison</h2>
+        <p><b>Estimated Completion:</b> <span id="completion-value">{{ ai_results.completion }}%</span></p>
+        <div class="progress-bar">
+          <div id="progress-fill" class="progress-fill" style="width: {{ ai_results.completion }}%">{{ ai_results.completion }}%</div>
         </div>
-      {% endfor %}
-    {% endif %}
-
-    {% if image_paths %}
-      <h3>📸 Jobsite Photos</h3>
-      <div class="images">
-        {% for img in image_paths %}
-          <img src="/{{ img }}" onclick="zoomImage(this.src)">
+        {% set item_count = ai_results.scored_items | length %}
+        <input type="hidden" name="item_count" value="{{ item_count }}" />
+        {% for i in range(item_count) %}
+          {% set item = ai_results.scored_items[i] %}
+          <div class="slider-group">
+            <p><b>{{ item.scope }}</b></p>
+            <input type="hidden" name="scope_{{ i }}" value="{{ item.scope }}" />
+            <label>Confidence: <span id="conf_val_{{ i }}">{{ item.confidence }}</span>%</label><br>
+            <input type="range" min="0" max="100" value="{{ item.confidence }}" name="confidence_{{ i }}"
+              oninput="document.getElementById('conf_val_{{ i }}').innerText = this.value; updateProgress();" />
+            <br>
+            <label><input type="checkbox" name="match_{{ i }}" {% if item.match %}checked{% endif %}/> Matched</label>
+          </div>
         {% endfor %}
       </div>
     {% endif %}
 
-    <br>
+    {% if image_paths %}
+      <div class="section">
+        <h2>Jobsite Photos</h2>
+        <div class="preview-container">
+          {% for path in image_paths %}
+            <img src="/{{ path }}" class="image-preview" onclick="openImage('{{ path }}')" />
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+    {% if safety_sheet_path %}
+      <div class="section">
+        <h2>Safety Sheet</h2>
+        {% if safety_sheet_path.endswith(".pdf") %}
+          <p>PDF attached: {{ safety_sheet_path }}</p>
+        {% elif safety_sheet_path.endswith(".jpg") or safety_sheet_path.endswith(".jpeg") or safety_sheet_path.endswith(".png") %}
+          <img src="/{{ safety_sheet_path }}" class="image-preview" onclick="openImage('{{ safety_sheet_path }}')" />
+        {% else %}
+          <p>Unsupported safety file type.</p>
+        {% endif %}
+      </div>
+    {% endif %}
+
     <button type="submit">✅ Generate Final PDF</button>
   </form>
 
   <script>
-    function zoomImage(src) {
-      const modal = document.createElement("div");
-      modal.style = "position:fixed;top:0;left:0;width:100%;height:100%;background:#0008;display:flex;align-items:center;justify-content:center;z-index:9999";
-      modal.innerHTML = `<img src="${src}" style="max-width:90%;max-height:90%;border:4px solid white;border-radius:12px;box-shadow:0 0 20px black">`;
-      modal.onclick = () => document.body.removeChild(modal);
-      document.body.appendChild(modal);
+    function openImage(src) {
+      const img = new Image();
+      img.src = '/' + src;
+      img.style.maxWidth = '90vw';
+      img.style.maxHeight = '90vh';
+      img.style.border = '5px solid #333';
+      const overlay = document.createElement('div');
+      overlay.style.position = 'fixed';
+      overlay.style.top = '0';
+      overlay.style.left = '0';
+      overlay.style.width = '100vw';
+      overlay.style.height = '100vh';
+      overlay.style.background = 'rgba(0, 0, 0, 0.8)';
+      overlay.style.display = 'flex';
+      overlay.style.alignItems = 'center';
+      overlay.style.justifyContent = 'center';
+      overlay.style.zIndex = '9999';
+      overlay.appendChild(img);
+      overlay.onclick = () => document.body.removeChild(overlay);
+      document.body.appendChild(overlay);
+    }
+
+    function updateProgress() {
+      const sliders = document.querySelectorAll('input[type=range]');
+      let total = 0;
+      sliders.forEach(sl => total += parseInt(sl.value));
+      const avg = Math.round(total / sliders.length);
+      document.getElementById("completion-value").innerText = avg + "%";
+      document.getElementById("progress-fill").style.width = avg + "%";
+      document.getElementById("progress-fill").innerText = avg + "%";
     }
   </script>
 </body>
 </html>
-```
