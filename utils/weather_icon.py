@@ -1,23 +1,35 @@
-import os
+# utils/weather_icon.py
+
 import requests
 
-def download_weather_icon(icon_code):
-    """Download weather icon from wttr.in and return the local file path."""
-    icon_map = {
-        "☀️": "sun.png",
-        "🌧️": "rain.png",
-        "☁️": "cloud.png",
-        "⛅": "partly_cloudy.png",
-        "❄️": "snow.png",
-        "🌩️": "storm.png"
-    }
-    icon_filename = icon_map.get(icon_code.strip(), "weather.png")
+def get_weather_icon(location):
+    """
+    Fetch weather condition from wttr.in and return local icon path
+    """
+    try:
+        if not location:
+            return "/static/icons/default.png"
 
-    # Local file path
-    icon_path = os.path.join("static", "icons", icon_filename)
+        url = f"https://wttr.in/{location}?format=%C"
+        response = requests.get(url, timeout=5)
+        if response.status_code != 200:
+            return "/static/icons/default.png"
 
-    # If not found locally, fallback to a placeholder
-    if not os.path.exists(icon_path):
-        return None
+        condition = response.text.strip().lower()
 
-    return icon_path
+        if "sun" in condition:
+            return "/static/icons/sunny.png"
+        elif "cloud" in condition:
+            return "/static/icons/cloudy.png"
+        elif "rain" in condition:
+            return "/static/icons/rainy.png"
+        elif "snow" in condition:
+            return "/static/icons/snowy.png"
+        elif "fog" in condition:
+            return "/static/icons/foggy.png"
+        else:
+            return "/static/icons/default.png"
+
+    except Exception as e:
+        print(f"[Weather Icon] Error: {e}")
+        return "/static/icons/default.png"
