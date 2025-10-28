@@ -5,9 +5,9 @@ import traceback
 from flask import Flask, request, render_template, send_file, redirect, url_for
 from werkzeug.utils import secure_filename
 from datetime import datetime
-from compare_scope_vs_log import analyze_scope_vs_log, parse_scope_file, load_scope_for_project
+from utils.compare_scope_vs_log import analyze_scope_vs_log, parse_scope_file, load_scope_for_project
 from utils.pdf_generator import create_daily_log_pdf
-from utils.weather import get_weather_icon
+from utils.weather_icon import get_weather_icon  # assuming correct file name is weather_icon.py
 from PIL import Image
 
 app = Flask(__name__)
@@ -17,12 +17,13 @@ AUTOFILL_FOLDER = "static/autofill"
 SCOPE_FOLDER = "static/scope"
 PREVIEW_FOLDER = "static/preview"
 
+# Make sure folders exist
 for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, AUTOFILL_FOLDER, SCOPE_FOLDER, PREVIEW_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
 @app.route("/")
 def index():
-    return "Daily Log AI is running."
+    return "✅ Daily Log AI is running."
 
 @app.route("/form")
 def form():
@@ -42,7 +43,7 @@ def generate_form():
         form_data = request.form.to_dict()
         session_id = uuid.uuid4().hex
 
-        # Upload files
+        # Uploaded files
         logo = request.files.get("logo")
         scope_file = request.files.get("scope_file")
         safety_sheet = request.files.get("safety_sheet")
@@ -59,19 +60,20 @@ def generate_form():
         logo_path = save_file(logo, UPLOAD_FOLDER)
         safety_sheet_path = save_file(safety_sheet, UPLOAD_FOLDER)
 
+        # Jobsite photos
         image_paths = []
         for photo in photos:
             img_path = save_file(photo, UPLOAD_FOLDER)
             if img_path:
                 image_paths.append(img_path)
 
-        # Load or save scope file
+        # Scope handling
         project_id = form_data.get("Project", "default_project").strip().replace(" ", "_")
         scope_path = os.path.join(SCOPE_FOLDER, f"{project_id}.txt")
 
         if scope_file:
-            scope_uploaded = save_file(scope_file, SCOPE_FOLDER)
-            parsed_scope = parse_scope_file(scope_uploaded)
+            uploaded_path = save_file(scope_file, SCOPE_FOLDER)
+            parsed_scope = parse_scope_file(uploaded_path)
             with open(scope_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(parsed_scope))
 
@@ -85,7 +87,7 @@ def generate_form():
 
         ai_results = analyze_scope_vs_log(scope_text, combined_text)
 
-        # Save preview data
+        # Save preview session
         preview_data = {
             "session_id": session_id,
             "form_data": form_data,
@@ -96,6 +98,7 @@ def generate_form():
             "project_id": project_id,
         }
 
+        # Save JSON for preview
         with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "w") as f:
             json.dump(preview_data, f, indent=2, default=str)
 
@@ -103,7 +106,7 @@ def generate_form():
 
     except Exception as e:
         traceback.print_exc()
-        return f"Internal Server Error: {e}", 500
+        return f"❌ Internal Server Error: {e}", 500
 
 @app.route("/preview/<session_id>")
 def preview(session_id):
@@ -113,7 +116,7 @@ def preview(session_id):
         return render_template("preview.html", **data)
     except Exception as e:
         traceback.print_exc()
-        return f"Internal Server Error: {e}", 500
+        return f"❌ Internal Server Error: {e}", 500
 
 @app.route("/generate_pdf/<session_id>")
 def generate_pdf(session_id):
@@ -138,7 +141,7 @@ def generate_pdf(session_id):
 
     except Exception as e:
         traceback.print_exc()
-        return f"Internal Server Error: {e}", 500
+        return f"❌ Internal Server Error: {e}", 500
 
 if __name__ == "__main__":
     app.run(debug=True)
