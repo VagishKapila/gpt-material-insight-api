@@ -1,5 +1,4 @@
 # ✅ pdf_generator.py (rotate + compress)
-```python
 import os
 from PIL import Image as PILImage
 from reportlab.lib.pagesizes import letter
@@ -105,6 +104,3 @@ def create_daily_log_pdf(
     elements.append(Spacer(1, 30))
     elements.append(Paragraph("Confidential – Do Not Duplicate without written consent from BAINS Dev Comm", styles["Normal"]))
     doc.build(elements)
-```
-
-✅ Let me know when ready to test, or I’ll help you upload these to server now.
