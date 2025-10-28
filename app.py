@@ -1,8 +1,8 @@
-# ✅ app.py (full, with slider + image_paths for AI)
 import os
 import uuid
 import json
 import traceback
+import numpy as np
 from flask import Flask, request, render_template, send_file, redirect, url_for
 from werkzeug.utils import secure_filename
 from datetime import datetime
@@ -19,6 +19,20 @@ SCOPE_FOLDER = "static/scope"
 for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, PREVIEW_FOLDER, SCOPE_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
+def clean_for_json(obj):
+    if isinstance(obj, dict):
+        return {k: clean_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_for_json(i) for i in obj]
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    else:
+        return obj
+
 @app.route("/")
 def index():
     return "✅ Daily Log AI is running"
@@ -26,6 +40,12 @@ def index():
 @app.route("/form")
 def form():
     return render_template("form.html")
+
+@app.route("/get_weather")
+def get_weather():
+    location = request.args.get("location", "")
+    icon_path = get_weather_icon(location)
+    return icon_path if icon_path else ("", 404)
 
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
@@ -89,7 +109,7 @@ def generate_form():
         }
 
         with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "w") as f:
-            json.dump(preview_data, f, indent=2)
+            json.dump(clean_for_json(preview_data), f, indent=2)
 
         return redirect(url_for("preview", session_id=session_id))
 
