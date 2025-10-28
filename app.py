@@ -4,6 +4,7 @@ import json
 import uuid
 import requests
 import pandas as pd
+import numpy as np
 from flask import Flask, request, render_template, redirect, url_for, send_from_directory
 from werkzeug.utils import secure_filename
 
@@ -26,16 +27,20 @@ os.makedirs(app.config["SCOPE_FOLDER"], exist_ok=True)
 os.makedirs(app.config["AUTO_FILL_FOLDER"], exist_ok=True)
 os.makedirs(app.config["LOGO_FOLDER"], exist_ok=True)
 
+
 def allowed_scope_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config["ALLOWED_SCOPE_EXTENSIONS"]
+
 
 @app.route("/")
 def health():
     return "✅ Daily Log AI is up and running!"
 
+
 @app.route("/form", methods=["GET"])
 def form():
     return render_template("form.html")
+
 
 @app.route("/get_weather", methods=["GET"])
 def get_weather():
@@ -47,6 +52,7 @@ def get_weather():
         return {"weather": r.text.strip()}
     except:
         return {"weather": "Unavailable"}
+
 
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
@@ -105,11 +111,24 @@ def generate_form():
         ai_result = None
         if ai_enabled and scope_path:
             scope_text = parse_scope_file(scope_path)
-            ai_result = analyze_scope_vs_log(scope_text, data)
+            scope_lines = [line for line in scope_text.split("\n") if line.strip()]
+            ai_result = analyze_scope_vs_log(scope_lines, data)
 
         weather_icon_path = None
         if data["weather"]:
             weather_icon_path = download_weather_icon(data["weather"])
+
+        # ---- FIX: JSON-safe serialization ----
+        def convert_np(obj):
+            if isinstance(obj, (np.bool_, bool)):
+                return bool(obj)
+            elif isinstance(obj, (np.integer,)):
+                return int(obj)
+            elif isinstance(obj, (np.floating,)):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
         # Save temp data for preview
         preview_data = {
@@ -120,15 +139,17 @@ def generate_form():
             "weather_icon": weather_icon_path,
             "safety_sheet_path": safety_sheet_path
         }
+
         preview_json_path = os.path.join(app.config["UPLOAD_FOLDER"], f"{session_id}.json")
         with open(preview_json_path, "w") as f:
-            json.dump(preview_data, f)
+            json.dump(preview_data, f, default=convert_np)
 
         return redirect(url_for("preview", session_id=session_id))
 
     except Exception as e:
         traceback.print_exc()
         return f"Internal Server Error: {e}", 500
+
 
 @app.route("/preview/<session_id>", methods=["GET"])
 def preview(session_id):
@@ -147,6 +168,7 @@ def preview(session_id):
     except Exception as e:
         traceback.print_exc()
         return f"Internal Server Error: {e}", 500
+
 
 @app.route("/finalize_preview", methods=["POST"])
 def finalize_preview():
@@ -187,9 +209,11 @@ def finalize_preview():
         traceback.print_exc()
         return f"Internal Server Error: {e}", 500
 
+
 @app.route("/generated/<filename>")
 def serve_generated(filename):
     return send_from_directory(app.config["GENERATED_FOLDER"], filename)
+
 
 if __name__ == "__main__":
     app.run(debug=True)
