@@ -3,136 +3,145 @@ import re
 import numpy as np
 from PIL import Image
 from sklearn.metrics.pairwise import cosine_similarity
-from sentence_transformers import SentenceTransformer
 from fuzzywuzzy import fuzz
+from transformers import CLIPProcessor, CLIPModel
 
-# ========== Model Setup ==========
-# Uses MiniLM for text; tries to load CLIP for image embeddings
-try:
-    clip_model = SentenceTransformer('clip-ViT-B-32')
-    print("✅ CLIP model loaded for image intelligence.")
-except Exception:
-    clip_model = None
-    print("⚠️ CLIP model not available, image AI disabled.")
+# --- Initialize CLIP model (text + image unified embeddings, 512‑dim) ---
+clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-text_model = SentenceTransformer('all-MiniLM-L6-v2')
 SCOPE_DIR = "static/scope"
-THRESHOLD = 0.65
+EXCLUDE_WORDS = [
+    "no ", "not ", "exclude", "without", "doesn't", "isn't", "cannot", "never"
+]
 
 
-# ========== Helper: Clean & Parse ==========
+# -------------------------------------------------------------
+# 🔹  Helper: clean up scope lines
+# -------------------------------------------------------------
 def clean_scope_text(text):
     text = re.sub(r"[^\x00-\x7F]+", "", text).strip()
     if len(text) < 5:
         return ""
-    if text.lower().startswith(("client", "project", "date", "prepared by", "include", "scope", "description", "location")):
+    if text.lower().startswith(("client", "project", "date", "prepared by")):
         return ""
-    if any(bad in text.lower() for bad in ["no ", "not ", "excluded", "without", "does not", "will not"]):
+    if any(word in text.lower() for word in EXCLUDE_WORDS):
         return ""
     return text
 
 
+# -------------------------------------------------------------
+# 🔹  Parse uploaded scope files (PDF, DOCX, XLSX, TXT)
+# -------------------------------------------------------------
 def parse_scope_file(file_path):
     ext = os.path.splitext(file_path)[1].lower()
-    try:
-        if ext == ".pdf":
-            import fitz
-            doc = fitz.open(file_path)
-            text = "\n".join(page.get_text() for page in doc)
-            doc.close()
-            return text
-        elif ext == ".docx":
-            from docx import Document
-            return "\n".join(p.text for p in Document(file_path).paragraphs)
-        elif ext in [".xls", ".xlsx"]:
-            import pandas as pd
-            df = pd.read_excel(file_path)
-            return df.to_string(index=False)
-        elif ext == ".txt":
-            with open(file_path, encoding="utf-8") as f:
-                return f.read()
-    except Exception as e:
-        print(f"[Scope Parser] Error reading {file_path}: {e}")
+    if ext == ".pdf":
+        import fitz
+        with fitz.open(file_path) as doc:
+            text = "\n".join([p.get_text("text") for p in doc])
+        return text
+    elif ext == ".docx":
+        from docx import Document
+        return "\n".join(p.text for p in Document(file_path).paragraphs)
+    elif ext in [".xls", ".xlsx"]:
+        import pandas as pd
+        df = pd.read_excel(file_path)
+        return df.to_string(index=False)
+    elif ext == ".txt":
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
     return ""
 
 
+# -------------------------------------------------------------
+# 🔹  Load project scope text
+# -------------------------------------------------------------
 def load_scope_for_project(project_id):
-    scope_path = os.path.join(SCOPE_DIR, f"scope_{project_id}.txt")
-    if not os.path.exists(scope_path):
+    path = os.path.join(SCOPE_DIR, f"scope_{project_id}.txt")
+    if not os.path.exists(path):
         return []
-    with open(scope_path, encoding="utf-8") as f:
-        lines = [clean_scope_text(line) for line in f]
+    with open(path, encoding="utf-8") as f:
+        lines = [clean_scope_text(l) for l in f]
     return [l for l in lines if l]
 
 
-# ========== Helper: Image Embeddings ==========
-def encode_images(image_paths):
-    if not clip_model:
-        return []
-    vectors = []
-    for path in image_paths:
+# -------------------------------------------------------------
+# 🔹  Encode text & images with CLIP
+# -------------------------------------------------------------
+def encode_text_clip(texts):
+    if not texts:
+        return np.zeros((1, 512))
+    inputs = clip_processor(text=texts, return_tensors="pt", padding=True, truncation=True)
+    with np.errstate(all="ignore"):
+        features = clip_model.get_text_features(**inputs).detach().numpy()
+    return features
+
+
+def encode_image_clip(paths):
+    embeds = []
+    for p in paths or []:
         try:
-            img = Image.open(path).convert("RGB").resize((224, 224))
-            img_embed = clip_model.encode(img, convert_to_tensor=False, normalize_embeddings=True)
-            vectors.append(img_embed)
-        except Exception as e:
-            print(f"[Image Encode] Skipped {path}: {e}")
-    return vectors
+            img = Image.open(p).convert("RGB")
+            inputs = clip_processor(images=img, return_tensors="pt")
+            feat = clip_model.get_image_features(**inputs).detach().numpy()
+            embeds.append(feat[0])
+        except Exception:
+            continue
+    if not embeds:
+        return None
+    return np.mean(np.stack(embeds), axis=0).reshape(1, -1)
 
 
-# ========== Main Comparison ==========
-def analyze_scope_vs_log(scope_items, log_texts, image_paths=None, threshold=THRESHOLD):
+# -------------------------------------------------------------
+# 🔹  Main analysis (hybrid text + image)
+# -------------------------------------------------------------
+def analyze_scope_vs_log(scope_items, log_texts, image_paths=None, threshold=0.65):
+    """
+    Compare scope items vs combined daily log (text + optional photo embeddings)
+    """
     if not scope_items:
-        return {"completion": 0, "scored_items": [], "out_of_scope": ["⚠️ No scope items provided."]}
+        return {"completion": 0, "scored_items": [], "out_of_scope": ["⚠️ No scope items."]}
 
-    # Combine all text inputs
+    # Combine textual inputs
     combined_log = " ".join(log_texts.values()).strip()
-    if not combined_log:
-        return {"completion": 0, "scored_items": [], "out_of_scope": ["⚠️ No daily log text available."]}
+    text_embed = encode_text_clip([combined_log])[0].reshape(1, -1)
 
-    # Encode log + scope embeddings
-    log_embed = text_model.encode([combined_log])[0].reshape(1, -1)
-    scope_embeds = text_model.encode(scope_items)
+    # Encode all scope items
+    scope_embeds = encode_text_clip(scope_items)
 
-    # Encode images (if CLIP available)
-    image_embeds = encode_images(image_paths or [])
-    avg_img_embed = np.mean(image_embeds, axis=0).reshape(1, -1) if len(image_embeds) > 0 else None
+    # Encode images (average embedding)
+    img_embed = encode_image_clip(image_paths)
+    use_image = img_embed is not None
 
     matched = 0
-    scored_items = []
+    results = []
 
-    for item, s_embed in zip(scope_items, scope_embeds):
-        scope_vec = np.array(s_embed).reshape(1, -1)
-        text_score = cosine_similarity(scope_vec, log_embed)[0][0]
+    for item, scope_vec in zip(scope_items, scope_embeds):
+        scope_vec_2d = scope_vec.reshape(1, -1)
+
+        # --- text similarity ---
+        text_score = cosine_similarity(scope_vec_2d, text_embed)[0][0]
         fuzzy_score = fuzz.partial_ratio(item.lower(), combined_log.lower()) / 100
-        img_score = cosine_similarity(scope_vec, avg_img_embed)[0][0] if avg_img_embed is not None else 0
-        final_score = max(text_score, fuzzy_score, img_score)
 
-        match = final_score >= threshold
+        # --- image similarity (optional) ---
+        img_score = cosine_similarity(scope_vec_2d, img_embed)[0][0] if use_image else 0
+
+        # --- hybrid weighting (70% text/fuzzy + 30% image) ---
+        hybrid_score = (0.7 * max(text_score, fuzzy_score)) + (0.3 * img_score)
+        match = hybrid_score >= threshold
+
         if match:
             matched += 1
 
-        scored_items.append({
+        results.append({
             "scope": item,
-            "confidence": float(round(final_score * 100, 1)),  # ensure JSON-safe float
-            "match": bool(match)  # ensure JSON-safe bool
+            "confidence": round(hybrid_score * 100, 1),
+            "match": match
         })
 
-    percent = round((matched / len(scope_items)) * 100, 1)
-    print(f"[AI Compare] ✅ {matched}/{len(scope_items)} matched → {percent}% complete")
-
-    # Out-of-scope detection (simple keyword filter)
-    out_of_scope = []
-    known_ignore = ["ppe", "tailgate", "meeting", "safety"]
-    log_lines = [l.strip() for l in combined_log.split("\n") if len(l.strip()) > 3]
-    for line in log_lines:
-        if any(kw in line.lower() for kw in known_ignore):
-            continue
-        if all(fuzz.partial_ratio(line.lower(), s.lower()) < 60 for s in scope_items):
-            out_of_scope.append(line)
-
+    completion = round((matched / len(scope_items)) * 100, 1)
     return {
-        "completion": float(percent),
-        "scored_items": scored_items,
-        "out_of_scope": out_of_scope[:10]
+        "completion": completion,
+        "scored_items": results,
+        "out_of_scope": []
     }
