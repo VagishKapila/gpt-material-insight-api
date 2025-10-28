@@ -39,11 +39,6 @@
     <div><span class="label">Crew Notes:</span> {{ form_data.crew_notes or "—" }}</div>
     <div><span class="label">Safety Notes:</span> {{ form_data.safety_notes or "—" }}</div>
   </div>
-  {% else %}
-    <div class="section">
-      <h2>⚠️ Debug: No form data found</h2>
-      <div class="debug">Please check that form submission saved correctly.</div>
-    </div>
   {% endif %}
 
   {% if image_paths %}
@@ -55,14 +50,16 @@
       {% endfor %}
     </div>
   </div>
-  {% else %}
-    <div class="section"><strong>No images uploaded</strong></div>
   {% endif %}
 
   {% if ai_results %}
   <div class="section">
     <h2>🤖 AI Scope Comparison</h2>
-    <div><strong>Estimated Completion:</strong> {{ ai_results.completion or 0 }}%</div>
+    <div>
+      <label class="label">Adjust Completion % (AI estimated {{ ai_results.completion }}%)</label>
+      <input type="range" name="override_percent" min="0" max="100" step="1" value="{{ ai_results.completion }}" oninput="percentOutput.value = this.value">
+      <output id="percentOutput">{{ ai_results.completion }}</output>%
+    </div>
     <hr>
     {% for item in ai_results.scored_items %}
       <div class="score">
@@ -85,14 +82,10 @@
       </div>
     {% endif %}
   </div>
-  {% else %}
-    <div class="section">
-      <strong>⚠️ AI analysis not enabled or failed to load.</strong>
-      <div class="debug">Ensure AI was enabled during form submission and scope file was uploaded.</div>
-    </div>
   {% endif %}
 
   <form action="/generate_pdf/{{ session_id }}" method="post">
+    <input type="hidden" name="override_percent" id="overridePercentInput" value="{{ ai_results.completion }}">
     <button type="submit" class="button">✅ Generate Final PDF</button>
   </form>
 </body>
