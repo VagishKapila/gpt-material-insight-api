@@ -1,124 +1,104 @@
+<!-- preview.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Preview Daily Log</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
-    body { font-family: Arial, sans-serif; padding: 2rem; max-width: 900px; margin: auto; }
-    h2 { margin-top: 2rem; color: #333; }
-    .image-preview { width: 200px; height: auto; margin: 10px; cursor: pointer; transition: transform 0.3s ease; }
-    .image-preview:hover { transform: scale(1.05); }
-    .preview-container { display: flex; flex-wrap: wrap; justify-content: flex-start; }
-    .slider-group { margin: 12px 0; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
-    .progress-bar { background: #f0f0f0; border-radius: 8px; height: 20px; margin: 10px 0; }
-    .progress-fill { background: green; height: 100%; border-radius: 8px; text-align: center; color: white; line-height: 20px; font-weight: bold; }
-    .section { margin-bottom: 30px; }
+    .photo-thumb {
+      width: 120px;
+      height: auto;
+      margin: 5px;
+      cursor: pointer;
+    }
+    .confidence-slider {
+      width: 200px;
+    }
+    .match-checkbox {
+      margin-left: 10px;
+    }
+    .progress {
+      max-width: 300px;
+    }
+    .img-section {
+      display: flex;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
   </style>
 </head>
-<body>
-  <h1>Preview Your Daily Log</h1>
-  <form action="/generate_pdf/{{ session_id }}" method="POST">
+<body class="container py-4">
+  <h2>Preview Your Daily Log</h2>
 
-    <div class="section">
-      <h2>Project Info</h2>
+  <!-- Project Metadata -->
+  <div class="mb-4">
+    <h5>Project Info</h5>
+    <ul>
       {% for key, value in form_data.items() %}
-        {% if key in ["project_name", "client_name", "location", "date", "weather"] %}
-          <p><b>{{ key.replace("_", " ").title() }}:</b> {{ value }}</p>
+        {% if key not in ["work_done", "crew_notes", "safety_notes"] %}
+        <li><strong>{{ key.replace('_', ' ').title() }}:</strong> {{ value }}</li>
         {% endif %}
       {% endfor %}
+    </ul>
+  </div>
+
+  <!-- Work Notes -->
+  <div class="mb-4">
+    <h5>Work Notes</h5>
+    <p><strong>Work Done:</strong> {{ form_data.work_done }}</p>
+    <p><strong>Crew Notes:</strong> {{ form_data.crew_notes }}</p>
+    <p><strong>Safety Notes:</strong> {{ form_data.safety_notes }}</p>
+  </div>
+
+  <!-- Uploaded Photos -->
+  {% if image_paths %}
+  <div class="mb-4">
+    <h5>Jobsite Photos</h5>
+    <div class="img-section">
+      {% for path in image_paths %}
+      <a href="/{{ path }}" target="_blank">
+        <img src="/{{ path }}" class="photo-thumb" />
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- AI Scope Analysis -->
+  {% if ai_results %}
+  <form method="POST" action="/generate_pdf/{{ session_id }}">
+    <h5>AI Scope Comparison</h5>
+
+    <p>Estimated Completion: {{ ai_results.completion or 0 }}%</p>
+    <div class="progress mb-3">
+      <div class="progress-bar bg-success" style="width: {{ ai_results.completion or 0 }}%"></div>
     </div>
 
-    <div class="section">
-      <h2>Work Notes</h2>
-      <p><b>Work Done:</b><br>{{ form_data.get("work_done", "") }}</p>
-      <p><b>Crew Notes:</b><br>{{ form_data.get("crew_notes", "") }}</p>
-      <p><b>Safety Notes:</b><br>{{ form_data.get("safety_notes", "") }}</p>
-    </div>
-
-    {% if ai_results %}
-      <div class="section">
-        <h2>AI Scope Comparison</h2>
-        <p><b>Estimated Completion:</b> <span id="completion-value">{{ ai_results.completion }}%</span></p>
-        <div class="progress-bar">
-          <div id="progress-fill" class="progress-fill" style="width: {{ ai_results.completion }}%">{{ ai_results.completion }}%</div>
-        </div>
-        {% set item_count = ai_results.scored_items | length %}
-        <input type="hidden" name="item_count" value="{{ item_count }}" />
-        {% for i in range(item_count) %}
-          {% set item = ai_results.scored_items[i] %}
-          <div class="slider-group">
-            <p><b>{{ item.scope }}</b></p>
-            <input type="hidden" name="scope_{{ i }}" value="{{ item.scope }}" />
-            <label>Confidence: <span id="conf_val_{{ i }}">{{ item.confidence }}</span>%</label><br>
-            <input type="range" min="0" max="100" value="{{ item.confidence }}" name="confidence_{{ i }}"
-              oninput="document.getElementById('conf_val_{{ i }}').innerText = this.value; updateProgress();" />
-            <br>
-            <label><input type="checkbox" name="match_{{ i }}" {% if item.match %}checked{% endif %}/> Matched</label>
-          </div>
-        {% endfor %}
+    {% for i, item in enumerate(ai_results.scored_items) %}
+      <div class="mb-2">
+        <input type="hidden" name="scope_{{ i }}" value="{{ item.scope }}">
+        <label><strong>{{ item.scope }}</strong></label><br />
+        Confidence: <input class="confidence-slider" type="range" name="confidence_{{ i }}" min="0" max="100" value="{{ item.confidence|round(0) }}">
+        <span>{{ item.confidence|round(0) }}%</span>
+        <label class="match-checkbox"><input type="checkbox" name="match_{{ i }}" {% if item.match %}checked{% endif %}> Match</label>
       </div>
-    {% endif %}
+    {% endfor %}
 
-    {% if image_paths %}
-      <div class="section">
-        <h2>Jobsite Photos</h2>
-        <div class="preview-container">
-          {% for path in image_paths %}
-            <img src="/{{ path }}" class="image-preview" onclick="openImage('{{ path }}')" />
-          {% endfor %}
-        </div>
-      </div>
-    {% endif %}
-
-    {% if safety_sheet_path %}
-      <div class="section">
-        <h2>Safety Sheet</h2>
-        {% if safety_sheet_path.endswith(".pdf") %}
-          <p>PDF attached: {{ safety_sheet_path }}</p>
-        {% elif safety_sheet_path.endswith(".jpg") or safety_sheet_path.endswith(".jpeg") or safety_sheet_path.endswith(".png") %}
-          <img src="/{{ safety_sheet_path }}" class="image-preview" onclick="openImage('{{ safety_sheet_path }}')" />
-        {% else %}
-          <p>Unsupported safety file type.</p>
-        {% endif %}
-      </div>
-    {% endif %}
-
-    <button type="submit">✅ Generate Final PDF</button>
+    <input type="hidden" name="item_count" value="{{ ai_results.scored_items|length }}">
+    <button type="submit" class="btn btn-primary mt-3">Generate Final PDF</button>
   </form>
+  {% endif %}
 
-  <script>
-    function openImage(src) {
-      const img = new Image();
-      img.src = '/' + src;
-      img.style.maxWidth = '90vw';
-      img.style.maxHeight = '90vh';
-      img.style.border = '5px solid #333';
-      const overlay = document.createElement('div');
-      overlay.style.position = 'fixed';
-      overlay.style.top = '0';
-      overlay.style.left = '0';
-      overlay.style.width = '100vw';
-      overlay.style.height = '100vh';
-      overlay.style.background = 'rgba(0, 0, 0, 0.8)';
-      overlay.style.display = 'flex';
-      overlay.style.alignItems = 'center';
-      overlay.style.justifyContent = 'center';
-      overlay.style.zIndex = '9999';
-      overlay.appendChild(img);
-      overlay.onclick = () => document.body.removeChild(overlay);
-      document.body.appendChild(overlay);
-    }
+  <!-- Safety Sheet Preview -->
+  {% if safety_sheet_path %}
+  <div class="mt-5">
+    <h5>Safety Sheet</h5>
+    <a href="/{{ safety_sheet_path }}" target="_blank">
+      <img src="/{{ safety_sheet_path }}" class="photo-thumb" />
+    </a>
+  </div>
+  {% endif %}
 
-    function updateProgress() {
-      const sliders = document.querySelectorAll('input[type=range]');
-      let total = 0;
-      sliders.forEach(sl => total += parseInt(sl.value));
-      const avg = Math.round(total / sliders.length);
-      document.getElementById("completion-value").innerText = avg + "%";
-      document.getElementById("progress-fill").style.width = avg + "%";
-      document.getElementById("progress-fill").innerText = avg + "%";
-    }
-  </script>
 </body>
 </html>
