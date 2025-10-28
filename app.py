@@ -2,7 +2,6 @@ import os
 import uuid
 import json
 import traceback
-import numpy as np
 from flask import Flask, request, render_template, send_file, redirect, url_for
 from werkzeug.utils import secure_filename
 from datetime import datetime
@@ -18,20 +17,6 @@ SCOPE_FOLDER = "static/scope"
 
 for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, PREVIEW_FOLDER, SCOPE_FOLDER]:
     os.makedirs(folder, exist_ok=True)
-
-def clean_for_json(obj):
-    if isinstance(obj, dict):
-        return {k: clean_for_json(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [clean_for_json(i) for i in obj]
-    elif isinstance(obj, np.bool_):
-        return bool(obj)
-    elif isinstance(obj, np.integer):
-        return int(obj)
-    elif isinstance(obj, np.floating):
-        return float(obj)
-    else:
-        return obj
 
 @app.route("/")
 def index():
@@ -76,10 +61,7 @@ def generate_form():
 
         if scope_file:
             parsed = parse_scope_file(save_file(scope_file, SCOPE_FOLDER))
-            if isinstance(parsed, str):
-                parsed_lines = parsed.splitlines()
-            else:
-                parsed_lines = [line.strip() for line in parsed.splitlines() if line.strip()]
+            parsed_lines = [line.strip() for line in parsed.splitlines() if line.strip()]
             with open(scope_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(parsed_lines))
 
@@ -109,7 +91,7 @@ def generate_form():
         }
 
         with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "w") as f:
-            json.dump(clean_for_json(preview_data), f, indent=2)
+            json.dump(preview_data, f, indent=2, default=str)
 
         return redirect(url_for("preview", session_id=session_id))
 
@@ -133,12 +115,23 @@ def generate_pdf(session_id):
         with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "r") as f:
             data = json.load(f)
 
-        override = request.form.get("override_completion")
-        if override:
-            try:
-                data["ai_results"]["completion"] = float(override)
-            except:
-                pass
+        item_count = int(request.form.get("item_count", 0))
+        edited_items = []
+
+        for i in range(item_count):
+            scope = request.form.get(f"scope_{i}")
+            confidence = float(request.form.get(f"confidence_{i}", 0))
+            match = request.form.get(f"match_{i}") == "on"
+            edited_items.append({
+                "scope": scope,
+                "confidence": confidence,
+                "match": match
+            })
+
+        if "ai_results" in data:
+            data["ai_results"]["scored_items"] = edited_items
+            avg = sum(item["confidence"] for item in edited_items) / max(1, len(edited_items))
+            data["ai_results"]["completion"] = round(avg)
 
         save_path = os.path.join(GENERATED_FOLDER, f"{session_id}_daily_log.pdf")
 
