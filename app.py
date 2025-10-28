@@ -1,3 +1,5 @@
+# app.py
+
 import os
 import uuid
 import json
@@ -5,19 +7,22 @@ import traceback
 from flask import Flask, request, render_template, send_file, redirect, url_for
 from werkzeug.utils import secure_filename
 from datetime import datetime
+
+# ✅ Corrected imports from utils
 from utils.compare_scope_vs_log import analyze_scope_vs_log, parse_scope_file, load_scope_for_project
 from utils.pdf_generator import create_daily_log_pdf
-from utils.weather_icon import get_weather_icon  # assuming correct file name is weather_icon.py
+from utils.weather_icon import get_weather_icon
 from PIL import Image
 
 app = Flask(__name__)
+
+# ✅ Folder paths
 UPLOAD_FOLDER = "static/uploads"
 GENERATED_FOLDER = "static/generated"
 AUTOFILL_FOLDER = "static/autofill"
 SCOPE_FOLDER = "static/scope"
 PREVIEW_FOLDER = "static/preview"
 
-# Make sure folders exist
 for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, AUTOFILL_FOLDER, SCOPE_FOLDER, PREVIEW_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
@@ -43,7 +48,7 @@ def generate_form():
         form_data = request.form.to_dict()
         session_id = uuid.uuid4().hex
 
-        # Uploaded files
+        # ✅ File uploads
         logo = request.files.get("logo")
         scope_file = request.files.get("scope_file")
         safety_sheet = request.files.get("safety_sheet")
@@ -60,14 +65,9 @@ def generate_form():
         logo_path = save_file(logo, UPLOAD_FOLDER)
         safety_sheet_path = save_file(safety_sheet, UPLOAD_FOLDER)
 
-        # Jobsite photos
-        image_paths = []
-        for photo in photos:
-            img_path = save_file(photo, UPLOAD_FOLDER)
-            if img_path:
-                image_paths.append(img_path)
+        image_paths = [save_file(photo, UPLOAD_FOLDER) for photo in photos if photo]
 
-        # Scope handling
+        # ✅ Handle scope
         project_id = form_data.get("Project", "default_project").strip().replace(" ", "_")
         scope_path = os.path.join(SCOPE_FOLDER, f"{project_id}.txt")
 
@@ -87,7 +87,7 @@ def generate_form():
 
         ai_results = analyze_scope_vs_log(scope_text, combined_text)
 
-        # Save preview session
+        # ✅ Save preview data
         preview_data = {
             "session_id": session_id,
             "form_data": form_data,
@@ -98,7 +98,6 @@ def generate_form():
             "project_id": project_id,
         }
 
-        # Save JSON for preview
         with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "w") as f:
             json.dump(preview_data, f, indent=2, default=str)
 
