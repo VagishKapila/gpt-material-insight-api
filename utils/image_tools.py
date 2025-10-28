@@ -1,8 +1,10 @@
 from PIL import Image, ExifTags
 
-def fix_image_orientation(image_path):
+def fix_image_orientation(image_path, max_size=(1200, 1200)):
     try:
         image = Image.open(image_path)
+
+        # Correct orientation if EXIF exists
         for orientation in ExifTags.TAGS.keys():
             if ExifTags.TAGS[orientation] == "Orientation":
                 break
@@ -16,6 +18,11 @@ def fix_image_orientation(image_path):
                 image = image.rotate(270, expand=True)
             elif orientation == 8:
                 image = image.rotate(90, expand=True)
-        image.save(image_path)
+
+        # Resize image while keeping aspect ratio
+        image.thumbnail(max_size, Image.LANCZOS)
+
+        # Save (overwrite original)
+        image.save(image_path, optimize=True, quality=85)
     except Exception:
-        pass  # Safe fallback if no EXIF data
+        pass  # Ignore failures silently
