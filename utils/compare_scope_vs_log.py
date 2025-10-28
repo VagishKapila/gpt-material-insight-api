@@ -81,3 +81,30 @@ def analyze_scope_vs_log(scope_items, daily_log_data, threshold=0.65):
         "scored_items": scored_items,
         "out_of_scope": out_of_scope[:10]
     }
+
+def parse_scope_file(file_path):
+    ext = os.path.splitext(file_path)[1].lower()
+
+    if ext == ".pdf":
+        import fitz  # PyMuPDF
+        doc = fitz.open(file_path)
+        text = "\n".join([page.get_text() for page in doc])
+        doc.close()
+        return text
+
+    elif ext == ".docx":
+        from docx import Document
+        doc = Document(file_path)
+        return "\n".join([p.text for p in doc.paragraphs])
+
+    elif ext in [".xls", ".xlsx"]:
+        import pandas as pd
+        df = pd.read_excel(file_path, engine="openpyxl")
+        return df.to_string(index=False)
+
+    elif ext == ".txt":
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+
+    else:
+        return "Unsupported file format"
