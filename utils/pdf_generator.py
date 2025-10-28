@@ -1,8 +1,7 @@
 import os
-import math
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
+    SimpleDocTemplate, Paragraph, Spacer, Image, Table, PageBreak
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
@@ -38,7 +37,7 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
     styles = getSampleStyleSheet()
     styles.add(ParagraphStyle(name='Bold', fontName='Helvetica-Bold'))
 
-    # Page 1: Title, Logo, Weather, Project Info
+    # --- Page 1: Header, Info, Notes ---
     if logo_path and os.path.exists(logo_path):
         fix_image_orientation(logo_path)
         elements.append(Image(logo_path, width=120, height=50))
@@ -58,26 +57,21 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
             elements.append(Paragraph(data[section], styles["Normal"]))
             elements.append(Spacer(1, 12))
 
-    doc.build(elements)
+    elements.append(PageBreak())
 
-    # Page 2: Job Site Photos
-    doc = SimpleDocTemplate(save_path, pagesize=letter)
-    elements = []
-
+    # --- Page 2: Jobsite Photos ---
     elements.append(Paragraph("<b>Job Site Photos</b>", styles["Heading2"]))
     elements.append(Spacer(1, 12))
-
-    from reportlab.platypus import Table
 
     photo_cells = []
     for idx, path in enumerate(image_paths):
         if os.path.exists(path):
             fix_image_orientation(path)
             photo_cells.append(Image(path, width=250, height=150))
-        if len(photo_cells) == 2:
-            elements.append(Table([photo_cells], colWidths=[270, 270]))
-            elements.append(Spacer(1, 12))
-            photo_cells = []
+            if len(photo_cells) == 2:
+                elements.append(Table([photo_cells], colWidths=[270, 270]))
+                elements.append(Spacer(1, 12))
+                photo_cells = []
 
     if photo_cells:
         elements.append(Table([photo_cells], colWidths=[270] * len(photo_cells)))
@@ -85,57 +79,56 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
 
     elements.append(PageBreak())
 
-    # Page 3: AI Scope Comparison
+    # --- Page 3: AI Scope Analysis ---
     elements.append(Paragraph("<b>AI Scope Analysis</b>", styles["Heading2"]))
     elements.append(Spacer(1, 12))
-    if progress_report:
-        percent = round(progress_report.get("percent_complete", 0), 1)
-        elements.append(Paragraph(f"<b>Completion:</b> {percent}%", styles["Normal"]))
-        elements.append(Spacer(1, 12))
 
-    if ai_analysis:
-        for section in ai_analysis:
-            section_title = section.get("section_title", "")
-            section_score = section.get("section_score")
-            if section_title:
-                header = f"<b>{section_title}"
-                if section_score is not None:
-                    header += f" – {round(section_score, 1)}%</b>"
-                else:
-                    header += "</b>"
-                elements.append(Paragraph(header, styles["Bold"]))
-            for item in section.get("items", []):
-                score = round(item.get("score", 0), 1)
-                label = item.get("text", "")
-                elements.append(Paragraph(f"• {label} – {score}%", styles["Normal"]))
+    if isinstance(progress_report, dict):
+        percent = progress_report.get("completion", 0)
+        try:
+            percent = round(float(percent), 1)
+            elements.append(Paragraph(f"<b>Completion:</b> {percent}%", styles["Normal"]))
+            elements.append(Spacer(1, 12))
+        except Exception:
+            elements.append(Paragraph("<b>Completion:</b> N/A", styles["Normal"]))
+
+        scored_items = progress_report.get("scored_items", [])
+        if scored_items:
+            for item in scored_items:
+                confidence = item.get("confidence", "N/A")
+                label = item.get("scope", "")
+                try:
+                    conf_value = round(float(confidence), 1)
+                except Exception:
+                    conf_value = "N/A"
+                elements.append(Paragraph(f"• {label} – {conf_value}%", styles["Normal"]))
             elements.append(Spacer(1, 8))
 
-        # Optional: Out-of-scope items
-        out_items = progress_report.get("out_of_scope_items", [])
+        out_items = progress_report.get("out_of_scope", [])
         if out_items:
             elements.append(Spacer(1, 12))
             elements.append(Paragraph("<b>Out-of-Scope Items:</b>", styles["Bold"]))
             for line in out_items:
                 elements.append(Paragraph(f"• {line}", styles["Normal"]))
-            elements.append(Spacer(1, 12))
 
     elements.append(PageBreak())
 
-    # Page 4: Safety Sheet
+    # --- Page 4: Safety Sheet ---
     if safety_sheet_path and os.path.exists(safety_sheet_path):
         elements.append(Paragraph("<b>Safety Sheet</b>", styles["Heading2"]))
         if safety_sheet_path.endswith(".pdf"):
             try:
                 reader = PdfReader(safety_sheet_path)
                 for page in reader.pages:
-                    elements.append(Paragraph(page.extract_text() or "Page unreadable", styles["Normal"]))
+                    text = page.extract_text()
+                    elements.append(Paragraph(text or "[Unreadable Page]", styles["Normal"]))
             except Exception as e:
                 elements.append(Paragraph(f"Error loading safety sheet PDF: {e}", styles["Normal"]))
         elif safety_sheet_path.lower().endswith((".jpg", ".jpeg", ".png")):
             fix_image_orientation(safety_sheet_path)
             elements.append(Image(safety_sheet_path, width=500, height=350))
 
-    # Final PDF compile
+    # --- Final build ---
     doc.build(elements, onFirstPage=_footer, onLaterPages=_footer)
 
 def _footer(canvas: Canvas, doc):
