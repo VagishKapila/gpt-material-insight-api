@@ -1,77 +1,77 @@
+# ✅ preview.html (Fixed image display, zoom, live slider, text, safety preview)
+
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Daily Log Preview</title>
+  <meta charset="UTF-8" />
+  <title>Preview Daily Log</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; background: #f0f4f7; }
-    h1, h2 { color: #2c3e50; }
-    .section { margin-bottom: 30px; padding: 20px; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-    .label { font-weight: bold; display: block; margin-top: 10px; }
-    .images img {
-      width: 140px; height: auto;
-      border-radius: 6px; margin: 4px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-      cursor: zoom-in;
-    }
-    .zoom-modal {
-      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.8); justify-content: center; align-items: center; z-index: 999;
-    }
-    .zoom-modal img { max-width: 90%; max-height: 90%; border-radius: 8px; }
+    body { font-family: sans-serif; max-width: 900px; margin: auto; padding: 20px; }
+    .images img { width: 180px; margin: 10px; border-radius: 6px; border: 1px solid #aaa; }
+    .images img:hover { cursor: zoom-in; border-color: #000; }
+    .slider-container { margin-bottom: 20px; }
   </style>
 </head>
 <body>
-  <h1>📋 Daily Log Preview</h1>
+  <h1>📝 Preview Daily Log Submission</h1>
+  <form method="POST" action="/generate_pdf/{{ session_id }}">
+    <h3>📋 Project Info</h3>
+    <p><b>Project:</b> {{ form_data.project_name }}</p>
+    <p><b>Client:</b> {{ form_data.client_name }}</p>
+    <p><b>Date:</b> {{ form_data.date }}</p>
+    <p><b>Weather:</b> {{ form_data.weather }}</p>
 
-  {% if form_data %}
-  <div class="section">
-    <h2>📌 Project Info</h2>
-    <div><span class="label">Project:</span> {{ form_data.project_name }}</div>
-    <div><span class="label">Location:</span> {{ form_data.location }}</div>
-    <div><span class="label">Date:</span> {{ form_data.date }}</div>
-    <div><span class="label">Weather:</span> {{ form_data.weather or "Not Provided" }}</div>
-  </div>
-  {% endif %}
+    <h3>🛠️ Work Summary</h3>
+    <p><b>Work Done:</b> {{ form_data.work_done }}</p>
+    <p><b>Crew Notes:</b> {{ form_data.crew_notes }}</p>
+    <p><b>Safety Notes:</b> {{ form_data.safety_notes }}</p>
 
-  {% if image_paths %}
-  <div class="section images">
-    <h2>📸 Uploaded Photos</h2>
-    {% for img in image_paths %}
-      <img src="{{ img }}" onclick="zoomImage(this.src)">
-    {% endfor %}
-  </div>
-  <div class="zoom-modal" id="zoomModal" onclick="this.style.display='none'">
-    <img id="zoomedImg" src="">
-  </div>
-  {% endif %}
+    {% if safety_sheet_path %}
+      <h3>🧾 Safety Sheet</h3>
+      <img src="/{{ safety_sheet_path }}" width="300" />
+    {% endif %}
 
-  {% if ai_results %}
-  <form action="/generate_pdf/{{ session_id }}" method="post">
-    <div class="section">
-      <h2>🤖 AI Scope Analysis</h2>
-      <p><strong>AI Completion:</strong> {{ ai_results.completion }}%</p>
-      <hr>
+    {% if ai_results %}
+      <h3>🤖 AI Scope Comparison</h3>
+      <p><b>Estimated Completion:</b> {{ ai_results.completion }}%</p>
+      <input type="hidden" name="item_count" value="{{ ai_results.scored_items | length }}">
+
       {% for item in ai_results.scored_items %}
-        <div>
-          <label class="label">{{ item.scope }}</label>
-          <input type="range" name="confidence_{{ loop.index0 }}" min="0" max="100" value="{{ item.confidence|int }}" oninput="document.getElementById('val_{{ loop.index0 }}').innerText = this.value">
-          <span id="val_{{ loop.index0 }}">{{ item.confidence|int }}</span>% 
-          <input type="checkbox" name="match_{{ loop.index0 }}" {% if item.match %}checked{% endif %}> Match
+        <div class="slider-container">
+          <p>
+            <input type="checkbox" name="match_{{ loop.index0 }}" {% if item.match %}checked{% endif %}>
+            <b>{{ item.scope }}</b> — <span id="score_{{ loop.index0 }}">{{ item.confidence }}%</span>
+          </p>
+          <input type="range" min="0" max="100" value="{{ item.confidence }}" name="confidence_{{ loop.index0 }}" 
+                 oninput="document.getElementById('score_{{ loop.index0 }}').innerText = this.value + '%'">
           <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
-        </div><br>
+        </div>
       {% endfor %}
-      <input type="hidden" name="item_count" value="{{ ai_results.scored_items|length }}">
-    </div>
+    {% endif %}
+
+    {% if image_paths %}
+      <h3>📸 Jobsite Photos</h3>
+      <div class="images">
+        {% for img in image_paths %}
+          <img src="/{{ img }}" onclick="zoomImage(this.src)">
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <br>
     <button type="submit">✅ Generate Final PDF</button>
   </form>
-  {% endif %}
 
   <script>
     function zoomImage(src) {
-      document.getElementById('zoomModal').style.display = 'flex';
-      document.getElementById('zoomedImg').src = src;
+      const modal = document.createElement("div");
+      modal.style = "position:fixed;top:0;left:0;width:100%;height:100%;background:#0008;display:flex;align-items:center;justify-content:center;z-index:9999";
+      modal.innerHTML = `<img src="${src}" style="max-width:90%;max-height:90%;border:4px solid white;border-radius:12px;box-shadow:0 0 20px black">`;
+      modal.onclick = () => document.body.removeChild(modal);
+      document.body.appendChild(modal);
     }
   </script>
 </body>
 </html>
+```
