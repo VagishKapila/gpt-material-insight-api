@@ -2,91 +2,93 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Daily Log Preview</title>
+    <title>Preview Daily Log</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-        h1 { color: #333; }
-        .section { background: #fff; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .photo-grid { display: flex; flex-wrap: wrap; gap: 10px; }
-        .photo-grid img { width: 300px; height: auto; border-radius: 6px; object-fit: cover; border: 1px solid #ccc; }
-        .field { margin-bottom: 8px; }
-        .bold { font-weight: bold; }
-        .submit-btn { padding: 12px 20px; background: #007bff; color: white; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; }
-        .submit-btn:hover { background: #0056b3; }
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        h2 {
+            margin-top: 30px;
+            color: #333;
+        }
+        .preview-section {
+            margin-bottom: 30px;
+        }
+        .images-preview img {
+            width: 300px;
+            height: auto;
+            margin: 10px;
+            border: 1px solid #ccc;
+        }
+        .form-field {
+            margin-bottom: 10px;
+        }
+        .score-input {
+            width: 60px;
+        }
     </style>
 </head>
 <body>
 
-    <h1>📝 Daily Log Preview</h1>
+    <h1>Preview Daily Log Submission</h1>
 
-    <form method="POST" action="/finalize_preview">
-        <input type="hidden" name="session_id" value="{{ session_id }}">
+    <div class="preview-section">
+        <h2>Project Info</h2>
+        <p><strong>Project:</strong> {{ data.project_name }}</p>
+        <p><strong>Client:</strong> {{ data.client_name }}</p>
+        <p><strong>Date:</strong> {{ data.date }}</p>
+        <p><strong>Location:</strong> {{ data.location }}</p>
+        <p><strong>Weather:</strong> {{ data.weather }}</p>
+    </div>
 
-        <div class="section">
-            <h2>Project Details</h2>
-            <div class="field"><span class="bold">Project:</span> {{ data.project_name }}</div>
-            <div class="field"><span class="bold">Client:</span> {{ data.client_name }}</div>
-            <div class="field"><span class="bold">Location:</span> {{ data.location }}</div>
-            <div class="field"><span class="bold">Date:</span> {{ data.date }}</div>
-            <div class="field"><span class="bold">Weather:</span> {{ data.weather }}</div>
-        </div>
+    <div class="preview-section">
+        <h2>Work Summary</h2>
+        <p><strong>Work Done:</strong> {{ data.work_done }}</p>
+        <p><strong>Crew Notes:</strong> {{ data.crew_notes }}</p>
+        <p><strong>Safety Notes:</strong> {{ data.safety_notes }}</p>
+    </div>
 
-        <div class="section">
-            <h2>Job Site Photos</h2>
-            {% if images %}
-                <div class="photo-grid">
-                    {% for img_path in images %}
-                        <img src="{{ img_path }}" alt="Photo {{ loop.index }}">
-                    {% endfor %}
-                </div>
-            {% else %}
-                <p>No photos uploaded.</p>
-            {% endif %}
-        </div>
+    {% if images %}
+    <div class="preview-section images-preview">
+        <h2>Uploaded Job Site Photos</h2>
+        {% for img in images %}
+            <img src="/{{ img }}" alt="Job photo">
+        {% endfor %}
+    </div>
+    {% endif %}
 
-        {% if logo %}
-        <div class="section">
-            <h2>Company Logo</h2>
-            <img src="{{ logo }}" alt="Logo" style="max-height: 100px;">
-        </div>
-        {% endif %}
+    {% if ai_analysis %}
+    <div class="preview-section">
+        <h2>AI Scope Analysis</h2>
+        <p><strong>Estimated Completion: {{ ai_analysis.completion | default(0) | round(0) }}%</strong></p>
 
-        {% if ai_analysis %}
-        <div class="section">
-            <h2>AI Scope Analysis</h2>
-
-            {% set completion = ai_analysis.completion if ai_analysis.completion is defined else 0 %}
-            <p><strong>Estimated Completion:</strong> {{ completion | float | round(0) }}%</p>
-
-            <h3>Scope Items & Confidence</h3>
-            <ul>
+        <form action="/finalize_preview" method="POST">
+            <input type="hidden" name="session_id" value="{{ session_id }}">
+            <h3>Matched Scope Items</h3>
             {% for item in ai_analysis.scored_items %}
-                <li>
-                    <label>
-                        <strong>{{ item.scope }}</strong> –
-                        Confidence: <input type="number" name="score_{{ item.scope[:75] }}" value="{{ item.confidence | round(1) }}" min="0" max="100">%
-                        (Match: {{ "✔️" if item.match else "❌" }})
+                <div class="form-field">
+                    <label><strong>{{ item.scope }}</strong> – 
+                        Confidence: 
+                        <input type="number" name="score_{{ item.scope[:75] }}" class="score-input" value="{{ item.confidence | round(0) }}">
+                        {% if item.match %} ✅ {% else %} ❌ {% endif %}
                     </label>
-                </li>
+                </div>
             {% endfor %}
-            </ul>
 
             {% if ai_analysis.out_of_scope %}
-            <h3>⚠️ Out-of-Scope Items</h3>
-            <ul>
-                {% for line in ai_analysis.out_of_scope %}
-                    <li>{{ line }}</li>
-                {% endfor %}
-            </ul>
+                <h3 style="margin-top: 20px;">Out-of-Scope Items</h3>
+                <ul>
+                    {% for line in ai_analysis.out_of_scope %}
+                        <li>{{ line }}</li>
+                    {% endfor %}
+                </ul>
             {% endif %}
 
-        </div>
-        {% endif %}
-
-        <div class="section" style="text-align: center;">
-            <button type="submit" class="submit-btn">✅ Generate Final PDF</button>
-        </div>
-    </form>
+            <button type="submit" style="margin-top: 20px; padding: 10px 20px;">✅ Generate Final PDF</button>
+        </form>
+    </div>
+    {% endif %}
 
 </body>
 </html>
