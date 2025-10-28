@@ -27,7 +27,7 @@ def clean_scope_text(text):
 def parse_scope_file(file_path):
     ext = os.path.splitext(file_path)[1].lower()
     if ext == ".pdf":
-        import fitz
+        import fitz  # PyMuPDF
         doc = fitz.open(file_path)
         text = "\n".join([page.get_text() for page in doc])
         doc.close()
@@ -52,7 +52,14 @@ def load_scope_for_project(project_id):
     with open(scope_path, "r", encoding="utf-8") as f:
         return [clean_scope_text(line) for line in f.readlines() if clean_scope_text(line)]
 
-def analyze_scope_vs_log(scope_items, daily_log_data, threshold=0.65):
+def analyze_scope_vs_log(scope_raw_text_or_list, daily_log_data, threshold=0.65):
+    # Handle both list or raw scope string
+    if isinstance(scope_raw_text_or_list, str):
+        raw_lines = scope_raw_text_or_list.split("\n")
+        scope_items = [clean_scope_text(line) for line in raw_lines if clean_scope_text(line)]
+    else:
+        scope_items = scope_raw_text_or_list
+
     work_done = daily_log_data.get("work_done", "")
     crew_notes = daily_log_data.get("crew_notes", "")
     safety_notes = daily_log_data.get("safety_notes", "")
@@ -65,15 +72,14 @@ def analyze_scope_vs_log(scope_items, daily_log_data, threshold=0.65):
             "out_of_scope": ["⚠️ Missing scope items or log data."]
         }
 
-    log_embedding = model.encode([full_log])  # shape: [1, 384]
-    scope_embeddings = model.encode(scope_items)  # shape: [N, 384]
+    log_embedding = model.encode([full_log])  # shape: (1, 384)
+    scope_embeddings = model.encode(scope_items)  # shape: (N, 384)
 
     matched = 0
     scored_items = []
 
     for item, scope_embed in zip(scope_items, scope_embeddings):
-        scope_embed_2d = scope_embed.reshape(1, -1)
-        cosine_score = cosine_similarity(scope_embed_2d, log_embedding)[0][0]
+        cosine_score = cosine_similarity(scope_embed.reshape(1, -1), log_embedding)[0][0]
         fuzzy_score = fuzz.partial_ratio(item.lower(), full_log.lower()) / 100
         final_score = max(cosine_score, fuzzy_score)
         is_match = final_score >= threshold
@@ -87,6 +93,7 @@ def analyze_scope_vs_log(scope_items, daily_log_data, threshold=0.65):
             "match": is_match
         })
 
+    # Detect out-of-scope items in the log
     known_ignore = ["ppe", "tailgate", "safety", "meeting"]
     log_lines = [line.strip() for line in full_log.split("\n") if line.strip()]
     out_of_scope = []
