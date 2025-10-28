@@ -1,5 +1,6 @@
 import os
 import re
+import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
 from fuzzywuzzy import fuzz
@@ -44,14 +45,18 @@ def analyze_scope_vs_log(scope_items, daily_log_data, threshold=0.65):
             "out_of_scope": ["⚠️ Missing scope items or log data."]
         }
 
-    log_embedding = model.encode([full_log])[0]
+    log_embedding = model.encode(full_log)
     scope_embeddings = model.encode(scope_items)
 
     matched = 0
     scored_items = []
 
     for item, scope_embed in zip(scope_items, scope_embeddings):
-        cosine_score = cosine_similarity([scope_embed], [log_embedding])[0][0]
+        cosine_score = cosine_similarity(
+            scope_embed.reshape(1, -1),
+            log_embedding.reshape(1, -1)
+        )[0][0]
+
         fuzzy_score = fuzz.partial_ratio(item.lower(), full_log.lower()) / 100
         final_score = max(cosine_score, fuzzy_score)
         is_match = final_score >= threshold
