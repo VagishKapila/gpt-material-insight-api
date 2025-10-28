@@ -104,7 +104,7 @@ def preview(session_id):
     try:
         with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "r") as f:
             data = json.load(f)
-        return render_template("preview.html", **data)
+        return render_template("preview.html", **data, enumerate=enumerate)
     except Exception as e:
         traceback.print_exc()
         return f"❌ Error: {e}", 500
