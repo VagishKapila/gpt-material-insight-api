@@ -11,7 +11,7 @@
     .label { font-weight: bold; color: #34495e; display: block; margin-top: 10px; }
     .value { color: #2c3e50; margin-left: 10px; }
     .images { display: flex; flex-wrap: wrap; gap: 10px; }
-    .images img { width: 30%; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); transition: transform 0.2s; }
+    .images img { max-width: 250px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); transition: transform 0.2s; }
     .images img:hover { cursor: zoom-in; transform: scale(1.05); }
     .score { margin: 6px 0; }
     .match { color: green; }
@@ -94,7 +94,7 @@
   </div>
   {% endif %}
 
-  <form method="POST" action="/generate_pdf">
+  <form method="POST" action="/generate_form">
     <button type="submit" class="button">Generate Final PDF</button>
   </form>
 
