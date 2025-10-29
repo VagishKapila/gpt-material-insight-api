@@ -1,104 +1,104 @@
-<!-- preview.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Preview Daily Log</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-  <style>
-    .photo-thumb {
-      width: 120px;
-      height: auto;
-      margin: 5px;
-      cursor: pointer;
-    }
-    .confidence-slider {
-      width: 200px;
-    }
-    .match-checkbox {
-      margin-left: 10px;
-    }
-    .progress {
-      max-width: 300px;
-    }
-    .img-section {
-      display: flex;
-      flex-wrap: wrap;
-      margin-bottom: 20px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>Preview Daily Log</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2rem; }
+        img.thumbnail { height: 100px; margin: 5px; cursor: pointer; }
+        .section { margin-bottom: 2rem; }
+        .slider-label { display: flex; justify-content: space-between; align-items: center; }
+        .slider-input { width: 100%; }
+        .bar-container { background: #f0f0f0; border-radius: 4px; margin-top: 4px; }
+        .bar { height: 10px; background-color: #4caf50; border-radius: 4px; }
+        .scope-item { margin-bottom: 1rem; }
+    </style>
+    <script>
+        function enlarge(imgSrc) {
+            const win = window.open();
+            win.document.write('<img src="' + imgSrc + '" style="width:100%">');
+        }
+        function updateTotal() {
+            const sliders = document.querySelectorAll('.scope-slider');
+            let sum = 0;
+            sliders.forEach(s => sum += parseFloat(s.value));
+            const avg = (sliders.length ? sum / sliders.length : 0).toFixed(1);
+            document.getElementById('completion-total').innerText = avg + '%';
+        }
+    </script>
 </head>
-<body class="container py-4">
-  <h2>Preview Your Daily Log</h2>
+<body>
+    <h2>Preview Your Daily Log</h2>
+    <div class="section">
+        <h3>Project Info</h3>
+        <p><strong>Project Name:</strong> {{ data.project_name }}</p>
+        <p><strong>Location:</strong> {{ data.location }}</p>
+        <p><strong>Date:</strong> {{ data.date }}</p>
+        <p><strong>General Contractor:</strong> {{ data.contractor }}</p>
+        <p><strong>Weather:</strong> {{ data.weather }}</p>
+    </div>
 
-  <!-- Project Metadata -->
-  <div class="mb-4">
-    <h5>Project Info</h5>
-    <ul>
-      {% for key, value in form_data.items() %}
-        {% if key not in ["work_done", "crew_notes", "safety_notes"] %}
-        <li><strong>{{ key.replace('_', ' ').title() }}:</strong> {{ value }}</li>
+    <div class="section">
+        <h3>Work Notes</h3>
+        <p><strong>Work Performed:</strong> {{ data.work_done }}</p>
+        <p><strong>Crew Notes:</strong> {{ data.crew_notes }}</p>
+        <p><strong>Safety Notes:</strong> {{ data.safety_notes }}</p>
+    </div>
+
+    <div class="section">
+        <h3>Jobsite Photos</h3>
+        {% if image_paths %}
+            {% for img in image_paths %}
+                <img src="{{ url_for('static', filename='uploads/' + img) }}" class="thumbnail" onclick="enlarge(this.src)" />
+            {% endfor %}
+        {% else %}
+            <p>No photos uploaded.</p>
         {% endif %}
-      {% endfor %}
-    </ul>
-  </div>
-
-  <!-- Work Notes -->
-  <div class="mb-4">
-    <h5>Work Notes</h5>
-    <p><strong>Work Done:</strong> {{ form_data.work_done }}</p>
-    <p><strong>Crew Notes:</strong> {{ form_data.crew_notes }}</p>
-    <p><strong>Safety Notes:</strong> {{ form_data.safety_notes }}</p>
-  </div>
-
-  <!-- Uploaded Photos -->
-  {% if image_paths %}
-  <div class="mb-4">
-    <h5>Jobsite Photos</h5>
-    <div class="img-section">
-      {% for path in image_paths %}
-      <a href="/{{ path }}" target="_blank">
-        <img src="/{{ path }}" class="photo-thumb" />
-      </a>
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- AI Scope Analysis -->
-  {% if ai_results %}
-  <form method="POST" action="/generate_pdf/{{ session_id }}">
-    <h5>AI Scope Comparison</h5>
-
-    <p>Estimated Completion: {{ ai_results.completion or 0 }}%</p>
-    <div class="progress mb-3">
-      <div class="progress-bar bg-success" style="width: {{ ai_results.completion or 0 }}%"></div>
     </div>
 
-    {% for i, item in enumerate(ai_results.scored_items) %}
-      <div class="mb-2">
-        <input type="hidden" name="scope_{{ i }}" value="{{ item.scope }}">
-        <label><strong>{{ item.scope }}</strong></label><br />
-        Confidence: <input class="confidence-slider" type="range" name="confidence_{{ i }}" min="0" max="100" value="{{ item.confidence|round(0) }}">
-        <span>{{ item.confidence|round(0) }}%</span>
-        <label class="match-checkbox"><input type="checkbox" name="match_{{ i }}" {% if item.match %}checked{% endif %}> Match</label>
-      </div>
-    {% endfor %}
+    <div class="section">
+        <h3>AI Scope Comparison</h3>
+        {% if ai_analysis %}
+            <p><strong>Estimated Completion:</strong> <span id="completion-total">{{ ai_analysis.completion }}%</span></p>
+            <div class="bar-container">
+                <div class="bar" style="width: {{ ai_analysis.completion }}%"></div>
+            </div>
+            <p><strong>Scope of Work Interpretation:</strong> {{ ai_analysis.scope_summary }}</p>
+            {% for item in ai_analysis.scored_items %}
+                <div class="scope-item">
+                    <div class="slider-label">
+                        <span><strong>{{ item.section }}:</strong> {{ item.item }}</span>
+                        <span>{{ item.score }}%</span>
+                    </div>
+                    <input type="range" min="0" max="100" value="{{ item.score }}" class="slider-input scope-slider" oninput="updateTotal()" />
+                </div>
+            {% endfor %}
 
-    <input type="hidden" name="item_count" value="{{ ai_results.scored_items|length }}">
-    <button type="submit" class="btn btn-primary mt-3">Generate Final PDF</button>
-  </form>
-  {% endif %}
+            {% if ai_analysis.out_of_scope %}
+                <h4>🔧 Flagged Items (Not in Original Scope)</h4>
+                <ul>
+                    {% for line in ai_analysis.out_of_scope %}
+                        <li>{{ line }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% else %}
+            <p>No AI analysis available.</p>
+        {% endif %}
+    </div>
 
-  <!-- Safety Sheet Preview -->
-  {% if safety_sheet_path %}
-  <div class="mt-5">
-    <h5>Safety Sheet</h5>
-    <a href="/{{ safety_sheet_path }}" target="_blank">
-      <img src="/{{ safety_sheet_path }}" class="photo-thumb" />
-    </a>
-  </div>
-  {% endif %}
+    <div class="section">
+        <h3>Safety Sheet</h3>
+        {% if safety_sheet_path %}
+            <img src="{{ url_for('static', filename='uploads/' + safety_sheet_path) }}" class="thumbnail" onclick="enlarge(this.src)" />
+        {% else %}
+            <p>No safety sheet uploaded.</p>
+        {% endif %}
+    </div>
 
+    <form action="/generate_pdf" method="POST">
+        <input type="hidden" name="session_id" value="{{ session_id }}">
+        <button type="submit">Generate Final PDF</button>
+    </form>
 </body>
 </html>
