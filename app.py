@@ -1,156 +1,101 @@
-import os
-import uuid
-import json
-import traceback
-from flask import Flask, request, render_template, send_file, redirect, url_for
-from werkzeug.utils import secure_filename
-from datetime import datetime
-from utils.compare_scope_vs_log import analyze_scope_vs_log, parse_scope_file, load_scope_for_project
-from utils.pdf_generator import create_daily_log_pdf
-from utils.weather_icon import get_weather_icon
-
-app = Flask(__name__)
-UPLOAD_FOLDER = "static/uploads"
-GENERATED_FOLDER = "static/generated"
-PREVIEW_FOLDER = "static/preview"
-SCOPE_FOLDER = "static/scope"
-
-for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, PREVIEW_FOLDER, SCOPE_FOLDER]:
-    os.makedirs(folder, exist_ok=True)
-
-@app.route("/")
-def index():
-    return "✅ Daily Log AI is running"
-
-@app.route("/form")
-def form():
-    return render_template("form.html")
-
-@app.route("/get_weather")
-def get_weather():
-    location = request.args.get("location", "")
-    icon_path = get_weather_icon(location)
-    return icon_path if icon_path else ("", 404)
-
-@app.route("/generate_form", methods=["POST"])
-def generate_form():
-    try:
-        form_data = request.form.to_dict()
-        session_id = uuid.uuid4().hex
-
-        def save_file(file_obj, folder):
-            if file_obj:
-                filename = secure_filename(file_obj.filename)
-                path = os.path.join(folder, f"{session_id}_{filename}")
-                file_obj.save(path)
-                return path
-            return None
-
-        logo_path = save_file(request.files.get("logo"), UPLOAD_FOLDER)
-        safety_path = save_file(request.files.get("safety_sheet"), UPLOAD_FOLDER)
-        scope_file = request.files.get("scope_doc")
-
-        image_paths = []
-        for photo in request.files.getlist("images"):
-            img_path = save_file(photo, UPLOAD_FOLDER)
-            if img_path:
-                image_paths.append(img_path)
-
-        project_id = form_data.get("project_name", "default").replace(" ", "_").lower()
-        scope_path = os.path.join(SCOPE_FOLDER, f"scope_{project_id}.txt")
-
-        if scope_file:
-            parsed = parse_scope_file(save_file(scope_file, SCOPE_FOLDER))
-            parsed_lines = [line.strip() for line in parsed.splitlines() if line.strip()]
-            with open(scope_path, "w", encoding="utf-8") as f:
-                f.write("\n".join(parsed_lines))
-
-        enable_ai = form_data.get("enable_ai", "off") == "on"
-        ai_results = None
-
-        if enable_ai:
-            scope_items = load_scope_for_project(project_id)
-            ai_results = analyze_scope_vs_log(
-                scope_items,
-                {
-                    "work_done": form_data.get("work_done", ""),
-                    "crew_notes": form_data.get("crew_notes", ""),
-                    "safety_notes": form_data.get("safety_notes", "")
-                },
-                image_paths=image_paths
-            )
-
-        preview_data = {
-            "session_id": session_id,
-            "form_data": form_data,
-            "image_paths": image_paths,
-            "logo_path": logo_path,
-            "safety_sheet_path": safety_path,
-            "ai_results": ai_results,
-            "project_id": project_id
+<!-- templates/preview.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preview Daily Log</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2rem; }
+        h2 { border-bottom: 2px solid #ccc; padding-bottom: 5px; }
+        img.thumbnail { max-height: 150px; cursor: pointer; margin-right: 10px; }
+        .ai-section, .photo-section, .safety-section { margin-top: 2rem; }
+        .slider-container { display: flex; align-items: center; margin: 10px 0; }
+        .slider-container input[type="range"] { margin: 0 10px; }
+        .slider-label { width: 60px; text-align: right; }
+        .generate-btn { margin-top: 2rem; }
+    </style>
+    <script>
+        function updateSliderValue(id, value) {
+            document.getElementById('slider-value-' + id).innerText = value + '%';
+            calculateOverallCompletion();
         }
 
-        with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "w") as f:
-            json.dump(preview_data, f, indent=2, default=str)
+        function calculateOverallCompletion() {
+            const sliders = document.querySelectorAll("input[type='range']");
+            let total = 0;
+            sliders.forEach(slider => {
+                total += parseInt(slider.value);
+            });
+            const average = sliders.length > 0 ? Math.round(total / sliders.length) : 0;
+            document.getElementById('overall-completion').innerText = average + '%';
+        }
 
-        return redirect(url_for("preview", session_id=session_id))
+        window.onload = calculateOverallCompletion;
+    </script>
+</head>
+<body>
+    <h1>Preview Your Daily Log</h1>
 
-    except Exception as e:
-        traceback.print_exc()
-        return f"❌ Error: {e}", 500
+    <h2>Project Info</h2>
+    <p><strong>Project Name:</strong> {{ data.project_name }}</p>
+    <p><strong>Client:</strong> {{ data.client_name }}</p>
+    <p><strong>Location:</strong> {{ data.project_location }}</p>
+    <p><strong>Date:</strong> {{ data.date }}</p>
 
-@app.route("/preview/<session_id>")
-def preview(session_id):
-    try:
-        with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "r") as f:
-            data = json.load(f)
-        return render_template("preview.html", **data, enumerate=enumerate)
-    except Exception as e:
-        traceback.print_exc()
-        return f"❌ Error: {e}", 500
+    <h2>Work Notes</h2>
+    <p><strong>Crew Notes:</strong> {{ data.crew_notes }}</p>
+    <p><strong>Work Performed:</strong> {{ data.work_done }}</p>
+    <p><strong>Safety Notes:</strong> {{ data.safety_notes }}</p>
 
-@app.route("/generate_pdf/<session_id>", methods=["POST"])
-def generate_pdf(session_id):
-    try:
-        with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "r") as f:
-            data = json.load(f)
+    <div class="photo-section">
+        <h2>Jobsite Photos</h2>
+        {% for i, image_url in enumerate(image_urls) %}
+            <a href="{{ image_url }}" target="_blank">
+                <img src="{{ image_url }}" class="thumbnail">
+            </a>
+        {% endfor %}
+    </div>
 
-        item_count = int(request.form.get("item_count", 0))
-        edited_items = []
+    <div class="ai-section">
+        <h2>AI Scope Comparison</h2>
+        <p><strong>Estimated Completion:</strong> <span id="overall-completion">0%</span></p>
 
-        for i in range(item_count):
-            scope = request.form.get(f"scope_{i}")
-            confidence = float(request.form.get(f"confidence_{i}", 0))
-            match = request.form.get(f"match_{i}") == "on"
-            edited_items.append({
-                "scope": scope,
-                "confidence": confidence,
-                "match": match
-            })
+        <p><strong>Scope of Work (Keywords, Not Exact):</strong></p>
+        <p>{{ ai_results.scope_summary }}</p>
 
-        if "ai_results" in data:
-            data["ai_results"]["scored_items"] = edited_items
-            avg = sum(item["confidence"] for item in edited_items) / max(1, len(edited_items))
-            data["ai_results"]["completion"] = round(avg)
+        {% for i, item in enumerate(ai_results.scored_items) %}
+        <div class="slider-container">
+            <span>{{ item.text }}</span>
+            <input type="range" min="0" max="100" value="{{ item.score }}" name="slider_{{ i }}" id="slider_{{ i }}" onchange="updateSliderValue('{{ i }}', this.value)">
+            <span class="slider-label" id="slider-value-{{ i }}">{{ item.score }}%</span>
+        </div>
+        {% endfor %}
 
-        save_path = os.path.join(GENERATED_FOLDER, f"{session_id}_daily_log.pdf")
+        <p><strong>Out of Scope Items (Review):</strong></p>
+        <ul>
+        {% for item in ai_results.out_of_scope %}
+            <li>{{ item }}</li>
+        {% endfor %}
+        </ul>
+    </div>
 
-        create_daily_log_pdf(
-            data=data["form_data"],
-            image_paths=data["image_paths"],
-            logo_path=data.get("logo_path"),
-            ai_analysis=data.get("ai_results"),
-            progress_report=data.get("ai_results"),
-            save_path=save_path,
-            weather_icon_path=None,
-            safety_sheet_path=data.get("safety_sheet_path")
-        )
+    <div class="safety-section">
+        <h2>Safety Sheet</h2>
+        {% if safety_sheet_url %}
+            <a href="{{ safety_sheet_url }}" target="_blank">
+                <img src="{{ safety_sheet_url }}" class="thumbnail">
+            </a>
+        {% else %}
+            <p>No safety sheet uploaded.</p>
+        {% endif %}
+    </div>
 
-        return send_file(save_path, as_attachment=True)
-
-    except Exception as e:
-        traceback.print_exc()
-        return f"❌ Error: {e}", 500
-
-if __name__ == "__main__":
-    app.run(debug=True)
+    <form action="/generate_pdf/{{ session_id }}" method="post">
+        <div class="generate-btn">
+            <button type="submit">Generate Final PDF</button>
+        </div>
+    </form>
+</body>
+</html>
