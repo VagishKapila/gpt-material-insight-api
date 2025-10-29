@@ -1,3 +1,4 @@
+<!-- ✅ preview.html (with hidden session_id field + working form) -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -12,83 +13,120 @@
     .images { display: flex; flex-wrap: wrap; gap: 10px; }
     .images img { width: 120px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: zoom-in; }
     .score { margin: 6px 0; }
-    .match { color: green; }
-    .no-match { color: red; }
     .out-of-scope { color: #c0392b; }
-    .debug { font-size: 13px; color: #999; margin-top: 10px; font-style: italic; }
     .button { margin-top: 30px; padding: 14px 28px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer; }
     .button:hover { background: #2980b9; }
   </style>
 </head>
 <body>
   <h1>📋 Daily Log Preview</h1>
-
   <form action="/submit_preview" method="POST">
-  {% if form_data %}
-  <div class="section">
-    <h2>📌 Project Information</h2>
-    <div><span class="label">Project:</span> {{ form_data.project_name }}</div>
-    <div><span class="label">Client:</span> {{ form_data.client_name or "—" }}</div>
-    <div><span class="label">Location:</span> {{ form_data.location }}</div>
-    <div><span class="label">Date:</span> {{ form_data.date }}</div>
-    <div><span class="label">Weather:</span> {{ form_data.weather or "Not Provided" }}</div>
-  </div>
+    <!-- ✅ Hidden Session ID -->
+    <input type="hidden" name="session_id" value="{{ session_id }}">
 
-  <div class="section">
-    <h2>🛠️ Work Log</h2>
-    <div><span class="label">Work Done:</span> {{ form_data.work_done }}</div>
-    <div><span class="label">Crew Notes:</span> {{ form_data.crew_notes or "—" }}</div>
-    <div><span class="label">Safety Notes:</span> {{ form_data.safety_notes or "—" }}</div>
-  </div>
-  {% else %}
     <div class="section">
-      <h2>⚠️ Debug: No form data found</h2>
-      <div class="debug">Please check that form submission saved correctly.</div>
+      <h2>📌 Project Info</h2>
+      <div><span class="label">Project:</span> {{ form_data.project_name }}</div>
+      <div><span class="label">Client:</span> {{ form_data.client_name or "—" }}</div>
+      <div><span class="label">Location:</span> {{ form_data.location }}</div>
+      <div><span class="label">Date:</span> {{ form_data.date }}</div>
+      <div><span class="label">Weather:</span> {{ form_data.weather or "Not Provided" }}</div>
     </div>
-  {% endif %}
 
- {% if image_paths %}
-<div class="section" id="debug-images-section">
-  <h2>📷 Uploaded Photos <span style="color: #888; font-size: 14px;">(Debug: Step 1 Image Preview)</span></h2>
-  <div class="images">
-    {% for img_path in image_paths %}
-      <div class="zoom-container">
-        <img src="/{{ img_path }}" alt="Job Site Photo" class="thumbnail" onclick="zoomImage(this)">
+    <div class="section">
+      <h2>🛠️ Work Log</h2>
+      <div><span class="label">Work Done:</span> {{ form_data.work_done }}</div>
+      <div><span class="label">Crew Notes:</span> {{ form_data.crew_notes or "—" }}</div>
+      <div><span class="label">Safety Notes:</span> {{ form_data.safety_notes or "—" }}</div>
+    </div>
+
+    {% if image_paths %}
+    <div class="section">
+      <h2>📷 Photos</h2>
+      <div class="images">
+        {% for img_path in image_paths %}
+          <img src="/{{ img_path }}" alt="Job Site Photo" onclick="zoomImage(this)">
+        {% endfor %}
       </div>
-    {% endfor %}
-  </div>
-</div>
-{% else %}
-  <div class="section"><strong>No images uploaded</strong></div>
-{% endif %}
+    </div>
+    {% endif %}
+
+    <div class="section">
+      <h2>🤖 AI Scope Comparison</h2>
+      <div><strong>Estimated Completion:</strong> <span id="completion-val">{{ ai_results.completion or 0 }}</span>%</div>
+      <hr>
+      {% for item in ai_results.scored_items %}
+        <div class="score">
+          <input type="checkbox" name="match_{{ loop.index0 }}" class="matchbox" {% if item.match %}checked{% endif %}>
+          <label>
+            {{ item.scope }} — 
+            <input type="range" class="slider" name="confidence_{{ loop.index0 }}" min="0" max="100" step="1" value="{{ item.confidence }}">
+            <span class="conf_val">{{ item.confidence }}</span>%
+          </label>
+          <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
+        </div>
+      {% endfor %}
+      <input type="hidden" name="total_items" value="{{ ai_results.scored_items|length }}">
+    </div>
+
+    {% if ai_results.out_of_scope %}
+    <div class="section out-of-scope">
+      <strong>Out-of-Scope Items:</strong>
+      <ul>
+        {% for line in ai_results.out_of_scope if line|length > 4 %}
+          <li>{{ line }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <button type="submit" class="button">✅ Generate Final PDF</button>
+  </form>
 
 <script>
+  const sliders = document.querySelectorAll(".slider");
+  const checkboxes = document.querySelectorAll(".matchbox");
+  const completionDisplay = document.getElementById("completion-val");
+
+  function updateCompletion() {
+    let total = 0;
+    let count = 0;
+    sliders.forEach((slider, i) => {
+      if (checkboxes[i].checked) {
+        total += parseInt(slider.value);
+        count++;
+      }
+    });
+    const percent = count ? Math.round(total / count) : 0;
+    completionDisplay.textContent = percent;
+  }
+
+  sliders.forEach(slider => {
+    slider.addEventListener("input", e => {
+      e.target.nextElementSibling.textContent = e.target.value;
+      updateCompletion();
+    });
+  });
+  checkboxes.forEach(cb => cb.addEventListener("change", updateCompletion));
+  updateCompletion();
+
   function zoomImage(img) {
     const isZoomed = img.classList.contains("zoomed");
     document.querySelectorAll(".zoomed").forEach(el => el.classList.remove("zoomed"));
     if (!isZoomed) img.classList.add("zoomed");
   }
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-      document.querySelectorAll(".zoomed").forEach(el => el.classList.remove("zoomed"));
-    }
+  document.addEventListener("keydown", e => {
+    if (e.key === 'Escape') document.querySelectorAll(".zoomed").forEach(el => el.classList.remove("zoomed"));
   });
-  document.addEventListener('click', function(e) {
-    if (!e.target.classList.contains("thumbnail") && !e.target.classList.contains("zoomed")) {
+  document.addEventListener("click", e => {
+    if (!e.target.classList.contains("zoomed") && !e.target.closest(".images")) {
       document.querySelectorAll(".zoomed").forEach(el => el.classList.remove("zoomed"));
     }
   });
 </script>
 
 <style>
-  .images img.thumbnail {
-    width: 120px;
-    cursor: zoom-in;
-    transition: transform 0.2s ease-in-out;
-    border-radius: 6px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-  }
-  .images img.zoomed {
+  .zoomed {
     width: auto !important;
     max-width: 90vw;
     max-height: 80vh;
@@ -102,72 +140,6 @@
     background: #fff;
     cursor: zoom-out;
   }
-  body.zoom-active {
-    overflow: hidden;
-  }
 </style>
-
-<div class="section">
-  <h2>🤖 AI Scope Comparison</h2>
-  <div><strong>Estimated Completion:</strong> <span id="completion-val">{{ ai_results.completion or 0 }}</span>%</div>
-  <hr>
-  {% for item in ai_results.scored_items %}
-    <div class="score">
-      <input type="checkbox" name="match_{{ loop.index0 }}" class="matchbox" {% if item.match %}checked{% endif %}>
-      <label>
-        {{ item.scope }} — 
-        <input type="range" class="slider" name="confidence_{{ loop.index0 }}" min="0" max="100" step="1" value="{{ item.confidence }}">
-        <span class="conf_val">{{ item.confidence }}</span>%
-      </label>
-      <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
-    </div>
-  {% endfor %}
-  <input type="hidden" name="total_items" value="{{ ai_results.scored_items|length }}">
-</div>
-
-{% if ai_results.out_of_scope %}
-<div class="section out-of-scope">
-  <strong>Out-of-Scope Items:</strong>
-  <ul>
-    {% for line in ai_results.out_of_scope if line|length > 4 %}
-      <li>{{ line }}</li>
-    {% endfor %}
-  </ul>
-</div>
-{% endif %}
-
-<button type="submit" class="button">✅ Generate Final PDF</button>
-</form>
-
-<script>
-  const sliders = document.querySelectorAll(".slider");
-  const checkboxes = document.querySelectorAll(".matchbox");
-  const completionDisplay = document.getElementById("completion-val");
-
-  function updateCompletion() {
-    let total = 0;
-    let count = 0;
-    sliders.forEach((slider, i) => {
-      const checked = checkboxes[i].checked;
-      if (checked) {
-        total += parseInt(slider.value);
-        count++;
-      }
-    });
-    const percent = count ? Math.round(total / count) : 0;
-    completionDisplay.textContent = percent;
-  }
-
-  sliders.forEach(slider => {
-    slider.addEventListener("input", (e) => {
-      e.target.nextElementSibling.textContent = e.target.value;
-      updateCompletion();
-    });
-  });
-  checkboxes.forEach(cb => {
-    cb.addEventListener("change", updateCompletion);
-  });
-  updateCompletion();
-</script>
 </body>
 </html>
