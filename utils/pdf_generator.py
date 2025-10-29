@@ -1,39 +1,42 @@
+
 import os
-from PIL import Image as PILImage, ExifTags
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.lib import colors
+from PIL import Image as PILImage, ExifTags
 from PyPDF2 import PdfReader
+
 
 def fix_orientation_and_compress(image_path):
     try:
         img = PILImage.open(image_path)
         img = img.convert("RGB")
 
-        # Fix EXIF orientation
         try:
             for orientation in ExifTags.TAGS.keys():
-                if ExifTags.TAGS[orientation] == "Orientation":
+                if ExifTags.TAGS[orientation] == 'Orientation':
                     break
-            exif = dict(img._getexif().items())
-            orientation_val = exif.get(orientation)
-            if orientation_val == 3:
-                img = img.rotate(180, expand=True)
-            elif orientation_val == 6:
-                img = img.rotate(270, expand=True)
-            elif orientation_val == 8:
-                img = img.rotate(90, expand=True)
-        except:
-            pass  # skip if no EXIF
+            exif = img._getexif()
+            if exif is not None:
+                orientation_value = exif.get(orientation)
+                if orientation_value == 3:
+                    img = img.rotate(180, expand=True)
+                elif orientation_value == 6:
+                    img = img.rotate(270, expand=True)
+                elif orientation_value == 8:
+                    img = img.rotate(90, expand=True)
+        except Exception:
+            pass  # skip if no EXIF or orientation fails
 
-        # Compress
-        img.thumbnail((800, 800))
+        img.thumbnail((800, 800))  # Resize to compress
         temp_path = image_path.replace(".jpg", "_compressed.jpg").replace(".png", "_compressed.png")
         img.save(temp_path, quality=70)
         return temp_path
-    except:
+    except Exception:
         return image_path
+
 
 def create_daily_log_pdf(
     data,
@@ -46,88 +49,78 @@ def create_daily_log_pdf(
     safety_sheet_path=None
 ):
     doc = SimpleDocTemplate(save_path, pagesize=letter)
-    styles = getSampleStyleSheet()
     elements = []
+    styles = getSampleStyleSheet()
+    normal = styles["Normal"]
+    title = styles["Title"]
+    header_style = styles["Heading2"]
 
-    # Logo
+    # --- Logo ---
     if logo_path and os.path.exists(logo_path):
-        elements.append(Image(logo_path, width=100, height=50))
+        elements.append(Image(logo_path, width=120, height=50))
+        elements.append(Spacer(1, 12))
 
-    # Title and metadata
-    elements.append(Paragraph("<b>DAILY LOG</b>", styles["Title"]))
+    # --- Daily Log Header ---
+    elements.append(Paragraph("<b>DAILY LOG</b>", title))
     elements.append(Spacer(1, 12))
-    for field in ["project_name", "client_name", "location", "date", "weather"]:
-        val = data.get(field, "Not Provided")
-        elements.append(Paragraph(f"<b>{field.replace('_', ' ').title()}:</b> {val}", styles["Normal"]))
-        elements.append(Spacer(1, 6))
+    for key in ["project_name", "client_name", "location", "date", "weather"]:
+        if key in data:
+            label = key.replace("_", " ").title()
+            elements.append(Paragraph(f"<b>{label}:</b> {data[key]}", normal))
+    elements.append(Spacer(1, 12))
 
-    # Work details
-    elements.append(Spacer(1, 12))
-    elements.append(Paragraph("<b>Work Done</b>", styles["Heading2"]))
-    elements.append(Paragraph(data.get("work_done", ""), styles["Normal"]))
-    elements.append(Spacer(1, 12))
-    elements.append(Paragraph("<b>Crew Notes</b>", styles["Heading2"]))
-    elements.append(Paragraph(data.get("crew_notes", ""), styles["Normal"]))
-    elements.append(Spacer(1, 12))
-    elements.append(Paragraph("<b>Safety Notes</b>", styles["Heading2"]))
-    elements.append(Paragraph(data.get("safety_notes", ""), styles["Normal"]))
-    elements.append(PageBreak())
+    # --- Notes Sections ---
+    for section in ["work_done", "crew_notes", "safety_notes"]:
+        if section in data:
+            elements.append(Paragraph(f"<b>{section.replace('_', ' ').title()}</b>", header_style))
+            items = data[section].split("\n")
+            for item in items:
+                elements.append(Paragraph(f"- {item.strip()}", normal))
+            elements.append(Spacer(1, 12))
 
-    # 📸 Jobsite Photos (2 per row)
+    # --- Page Break: Jobsite Photos ---
     if image_paths:
-        elements.append(Paragraph("<b>Jobsite Photos</b>", styles["Heading2"]))
-        elements.append(Spacer(1, 12))
-        row = []
-        for i, img in enumerate(image_paths):
-            if os.path.exists(img):
-                fixed = fix_orientation_and_compress(img)
-                row.append(Image(fixed, width=2.5*inch, height=2*inch))
-                if len(row) == 2:
-                    elements.append(Table([row], colWidths=[2.5*inch]*2))
-                    elements.append(Spacer(1, 12))
-                    row = []
-        if row:
-            elements.append(Table([row], colWidths=[2.5*inch]*2))
         elements.append(PageBreak())
+        elements.append(Paragraph("Jobsite Photos", header_style))
+        for img_path in image_paths:
+            fixed_path = fix_orientation_and_compress(img_path)
+            elements.append(Image(fixed_path, width=4*inch, height=3*inch))
+            elements.append(Spacer(1, 6))
 
-    # 🤖 AI Scope Analysis
-    if progress_report:
-        elements.append(Paragraph("<b>AI Scope Analysis</b>", styles["Heading2"]))
-        elements.append(Spacer(1, 6))
-        percent = int(round(progress_report.get("completion", 0)))
-        elements.append(Paragraph(f"<b>Total Completion:</b> {percent}% (user-edited)", styles["Normal"]))
-        elements.append(Spacer(1, 12))
-
-        if "scored_items" in progress_report:
-            for item in progress_report["scored_items"]:
-                match_symbol = "✔️" if item.get("match") else "❌"
-                text = item.get("scope", "")
-                score = int(round(item.get("confidence", 0)))
-                bullet = f"{match_symbol} {text} — <b>{score}%</b>"
-                elements.append(Paragraph(bullet, styles["Normal"]))
-                elements.append(Spacer(1, 6))
+    # --- Page Break: AI Scope Analysis ---
+    if ai_analysis:
         elements.append(PageBreak())
+        elements.append(Paragraph("AI Scope Analysis", header_style))
+        try:
+            completion = ai_analysis.get("completion", 0)
+            elements.append(Paragraph(f"<b>Total Completion:</b> {round(completion)}%", normal))
+            elements.append(Spacer(1, 6))
 
-    # ✅ Safety Sheet
+            for item in ai_analysis.get("scored_items", []):
+                text = item.get("item", "—")
+                matched = item.get("matched", False)
+                confidence = item.get("confidence", 0)
+                symbol = "✅" if matched else "❌"
+                percent = f"{round(confidence * 100)}%"
+                elements.append(Paragraph(f"{symbol} {text} — {percent}", normal))
+
+            if ai_analysis.get("out_of_scope"):
+                elements.append(Spacer(1, 12))
+                elements.append(Paragraph("<b>Flagged as Out-of-Scope:</b>", normal))
+                for oos in ai_analysis["out_of_scope"]:
+                    elements.append(Paragraph(f"⚠️ {oos}", normal))
+
+        except Exception as e:
+            elements.append(Paragraph(f"⚠️ Error rendering AI scope analysis: {str(e)}", normal))
+
+    # --- Page Break: Safety Sheet ---
     if safety_sheet_path and os.path.exists(safety_sheet_path):
-        ext = os.path.splitext(safety_sheet_path)[1].lower()
-        elements.append(Paragraph("<b>Safety Sheet</b>", styles["Heading2"]))
-        elements.append(Spacer(1, 6))
-
-        if ext == ".pdf":
-            try:
-                reader = PdfReader(safety_sheet_path)
-                page_text = reader.pages[0].extract_text()
-                elements.append(Paragraph(page_text or "First page could not be parsed.", styles["Normal"]))
-            except:
-                elements.append(Paragraph("Could not parse PDF safety sheet.", styles["Normal"]))
-        elif ext in [".jpg", ".jpeg", ".png"]:
-            elements.append(Image(safety_sheet_path, width=5*inch, height=4*inch))
+        elements.append(PageBreak())
+        elements.append(Paragraph("Safety Sheet", header_style))
+        if safety_sheet_path.lower().endswith((".jpg", ".jpeg", ".png")):
+            elements.append(Image(safety_sheet_path, width=5.5*inch, height=7*inch))
         else:
-            elements.append(Paragraph("Unsupported safety sheet format.", styles["Normal"]))
+            elements.append(Paragraph(f"Attached: {os.path.basename(safety_sheet_path)}", normal))
 
-    # Footer
-    elements.append(Spacer(1, 30))
-    elements.append(Paragraph("Confidential – Do Not Duplicate without written consent from BAINS Dev Comm", styles["Normal"]))
-
+    # --- Build PDF ---
     doc.build(elements)
