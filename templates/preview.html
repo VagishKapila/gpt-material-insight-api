@@ -10,7 +10,7 @@
     .label { font-weight: bold; color: #34495e; display: block; margin-top: 10px; }
     .value { color: #2c3e50; margin-left: 10px; }
     .images { display: flex; flex-wrap: wrap; gap: 10px; }
-    .images img { width: 30%; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+    .images img { width: 30%; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: zoom-in; }
     .score { margin: 6px 0; }
     .match { color: green; }
     .no-match { color: red; }
@@ -51,7 +51,7 @@
     <h2>📷 Uploaded Photos</h2>
     <div class="images">
       {% for img_path in image_paths %}
-        <img src="/{{ img_path }}" alt="Job Site Photo">
+        <img src="/{{ img_path }}" alt="Job Site Photo" onclick="window.open(this.src)">
       {% endfor %}
     </div>
   </div>
@@ -59,40 +59,43 @@
     <div class="section"><strong>No images uploaded</strong></div>
   {% endif %}
 
-  {% if ai_results %}
-  <div class="section">
-    <h2>🤖 AI Scope Comparison</h2>
-    <div><strong>Estimated Completion:</strong> {{ ai_results.completion or 0 }}%</div>
-    <hr>
-    {% for item in ai_results.scored_items %}
-      <div class="score">
-        {% if item.match %}
-          ✅ <span class="match">{{ item.scope }} – {{ item.confidence }}%</span>
-        {% else %}
-          ❌ <span class="no-match">{{ item.scope }} – {{ item.confidence }}%</span>
-        {% endif %}
-      </div>
-    {% endfor %}
+  <form action="/generate_pdf/{{ session_id }}" method="post">
+    {% if ai_results %}
+    <div class="section">
+      <h2>🤖 AI Scope Comparison</h2>
+      <div><strong>Estimated Completion:</strong> {{ ai_results.completion or 0 }}%</div>
+      <hr>
+      {% for item in ai_results.scored_items %}
+        <div class="score">
+          <input type="checkbox" name="match_{{ loop.index0 }}" {% if item.match %}checked{% endif %}>
+          <label>
+            {{ item.scope }} — 
+            <input type="range" name="confidence_{{ loop.index0 }}" min="0" max="100" step="1" value="{{ item.confidence }}">
+            {{ item.confidence }}%
+          </label>
+          <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
+        </div>
+      {% endfor %}
+      <input type="hidden" name="total_items" value="{{ ai_results.scored_items|length }}">
 
-    {% if ai_results.out_of_scope %}
+      {% if ai_results.out_of_scope %}
       <div class="out-of-scope">
         <strong>Out-of-Scope Items:</strong>
         <ul>
-        {% for line in ai_results.out_of_scope if line|length > 4 %}
-          <li>{{ line }}</li>
-        {% endfor %}
+          {% for line in ai_results.out_of_scope if line|length > 4 %}
+            <li>{{ line }}</li>
+          {% endfor %}
         </ul>
       </div>
-    {% endif %}
-  </div>
-  {% else %}
-    <div class="section">
-      <strong>⚠️ AI analysis not enabled or failed to load.</strong>
-      <div class="debug">Ensure AI was enabled during form submission and scope file was uploaded.</div>
+      {% endif %}
     </div>
-  {% endif %}
+    {% else %}
+      <div class="section">
+        <strong>⚠️ AI analysis not enabled or failed to load.</strong>
+        <div class="debug">Ensure AI was enabled during form submission and scope file was uploaded.</div>
+      </div>
+    {% endif %}
 
-  <form action="/generate_pdf/{{ session_id }}" method="post">
     <button type="submit" class="button">✅ Generate Final PDF</button>
   </form>
 </body>
