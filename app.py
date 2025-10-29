@@ -195,6 +195,24 @@ def serve_pdf(filename):
     if not os.path.exists(path):
         return f"❌ File not found: {filename}", 404
     return send_from_directory(GENERATED_FOLDER, filename)
+# Add this to your existing `app.py` bottom section, before the `if __name__ == "__main__"` block
 
+@app.route("/debug_sessions")
+def debug_sessions():
+    try:
+        session_files = os.listdir(SESSION_FOLDER)
+        session_links = []
+        for file in session_files:
+            if file.endswith(".json"):
+                session_id = file.replace(".json", "")
+                session_links.append(f'<li><a href="/preview/{session_id}">{session_id}</a></li>')
+        return f"""
+            <h2>🧠 Debug: Saved Sessions</h2>
+            <ul>
+                {''.join(session_links)}
+            </ul>
+        """
+    except Exception as e:
+        return f"Failed to load sessions: {str(e)}", 500
 if __name__ == "__main__":
     app.run(debug=True)
