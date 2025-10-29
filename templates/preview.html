@@ -9,10 +9,6 @@
       max-width: 900px;
     }
 
-    h1 {
-      text-align: center;
-    }
-
     .sticky-total {
       position: sticky;
       top: 0;
@@ -33,7 +29,6 @@
       width: 200px;
       height: auto;
       border-radius: 4px;
-      cursor: zoom-in;
     }
 
     .ai-item {
@@ -61,22 +56,16 @@
       border-radius: 6px;
       cursor: pointer;
     }
-
-    .generate-btn:hover {
-      background-color: #0d74d1;
-    }
   </style>
 </head>
 <body>
 
   <h1>Daily Log Preview</h1>
 
-  <!-- Sticky Completion Bar -->
   <div class="sticky-total">
     <p><strong>Total Completion:</strong> <span id="totalCompletion">60%</span></p>
   </div>
 
-  <!-- Project Info -->
   <h2>Project Info</h2>
   <p><strong>Project Name:</strong> 98 Upperoaks, San Rafael</p>
   <p><strong>Client:</strong> Duncan</p>
@@ -84,7 +73,6 @@
   <p><strong>Location:</strong> San Francisco</p>
   <p><strong>Weather:</strong> Sunny, 72°F</p>
 
-  <!-- Jobsite Photos -->
   <h2>Jobsite Photos</h2>
   <div class="photo-gallery">
     <img src="static/uploads/photo1.jpg" alt="Job Photo 1">
@@ -92,33 +80,52 @@
     <img src="static/uploads/photo3.jpg" alt="Job Photo 3">
   </div>
 
-  <!-- AI Scope Items -->
   <h2>AI Scope Analysis</h2>
 
   <div class="ai-item">
-    <p><strong>Install drainage pipe</strong> — Confidence: <span>85%</span></p>
-    <input type="range" min="0" max="100" value="85" class="slider">
-    <label><input type="checkbox" checked> Matched</label>
+    <p><strong>Install drainage pipe</strong> — Confidence: <span class="conf">85</span>%</p>
+    <input type="range" class="slider" value="85" min="0" max="100">
+    <label><input type="checkbox" class="matched" checked> Matched</label>
   </div>
 
   <div class="ai-item">
-    <p><strong>Backfill trench</strong> — Confidence: <span>90%</span></p>
-    <input type="range" min="0" max="100" value="90" class="slider">
-    <label><input type="checkbox" checked> Matched</label>
+    <p><strong>Backfill trench</strong> — Confidence: <span class="conf">90</span>%</p>
+    <input type="range" class="slider" value="90" min="0" max="100">
+    <label><input type="checkbox" class="matched" checked> Matched</label>
   </div>
 
   <div class="ai-item">
-    <p><strong>Install waterproof barrier</strong> — Confidence: <span>20%</span></p>
-    <input type="range" min="0" max="100" value="20" class="slider">
-    <label><input type="checkbox"> Matched</label>
+    <p><strong>Install waterproof barrier</strong> — Confidence: <span class="conf">20</span>%</p>
+    <input type="range" class="slider" value="20" min="0" max="100">
+    <label><input type="checkbox" class="matched"> Matched</label>
   </div>
 
-  <!-- Safety Sheet -->
   <h2 class="safety-sheet">Safety Sheet</h2>
-  <img src="static/uploads/safety_sheet.jpg" alt="Safety Sheet" style="max-width:100%; height:auto; border:1px solid #ccc; border-radius:4px;">
+  <img src="static/uploads/safety_sheet.jpg" style="max-width:100%; border:1px solid #ccc; border-radius:4px;">
 
-  <!-- Button -->
-  <button class="generate-btn">Generate Final PDF</button>
+  <button class="generate-btn" onclick="submitPDF()">Generate Final PDF</button>
+
+  <script>
+    const sliders = document.querySelectorAll(".slider");
+    const checkboxes = document.querySelectorAll(".matched");
+    const totalCompletion = document.getElementById("totalCompletion");
+
+    function updateTotal() {
+      let total = 0;
+      let count = 0;
+      sliders.forEach((slider, i) => {
+        if (checkboxes[i].checked) {
+          total += parseInt(slider.value);
+          count++;
+        }
+      });
+      const avg = count ? Math.round(total / count) : 0;
+      totalCompletion.textContent = `${avg}%`;
+    }
+
+    sliders.forEach(slider => slider.addEventListener("input", updateTotal));
+    checkboxes.forEach(box => box.addEventListener("change", updateTotal));
+  </script>
 
 </body>
 </html>
