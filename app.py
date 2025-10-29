@@ -1,4 +1,3 @@
-
 from flask import Flask, render_template, request, send_file, redirect, url_for
 import os
 import json
@@ -38,12 +37,12 @@ def preview(session_id):
         form_data=session_data.get("form_data", {}),
         image_paths=session_data.get("image_paths", []),
         ai_analysis=session_data.get("ai_analysis", {}),
-        safety_sheet_path=session_data.get("safety_sheet_path", "")
+        safety_sheet_path=session_data.get("safety_sheet_path", ""),
+        session_id=session_id  # ✅ Passes session ID to template
     )
 
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
-    # Load session_id from cookie or previous session
     session_id = request.args.get("session_id")
     if not session_id:
         return "Missing session ID", 400
