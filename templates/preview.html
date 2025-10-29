@@ -1,104 +1,127 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Preview Daily Log</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 2rem; }
-        img.thumbnail { height: 100px; margin: 5px; cursor: pointer; }
-        .section { margin-bottom: 2rem; }
-        .slider-label { display: flex; justify-content: space-between; align-items: center; }
-        .slider-input { width: 100%; }
-        .bar-container { background: #f0f0f0; border-radius: 4px; margin-top: 4px; }
-        .bar { height: 10px; background-color: #4caf50; border-radius: 4px; }
-        .scope-item { margin-bottom: 1rem; }
-    </style>
-    <script>
-        function enlarge(imgSrc) {
-            const win = window.open();
-            win.document.write('<img src="' + imgSrc + '" style="width:100%">');
-        }
-        function updateTotal() {
-            const sliders = document.querySelectorAll('.scope-slider');
-            let sum = 0;
-            sliders.forEach(s => sum += parseFloat(s.value));
-            const avg = (sliders.length ? sum / sliders.length : 0).toFixed(1);
-            document.getElementById('completion-total').innerText = avg + '%';
-        }
-    </script>
+  <meta charset="UTF-8">
+  <title>Daily Log Preview</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f4f6f8; color: #333; }
+    h2, h3 { color: #2c3e50; }
+    .section { background: #fff; padding: 20px; margin-bottom: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+
+    /* Image Grid */
+    .images { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; }
+    .images img { width: 180px; height: 120px; object-fit: cover; border-radius: 8px; cursor: zoom-in; transition: transform 0.2s ease; }
+    .images img:hover { transform: scale(1.03); }
+
+    /* Modal Zoom */
+    #imgModal { display: none; position: fixed; z-index: 1000; padding-top: 60px; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.85); }
+    #imgModal img { margin: auto; display: block; max-width: 90%; max-height: 90%; border-radius: 10px; }
+    #imgModal span { position: absolute; top: 20px; right: 35px; color: #fff; font-size: 35px; font-weight: bold; cursor: pointer; }
+
+    /* AI Section */
+    .ai-section { max-height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; border-radius: 8px; background: #fafafa; }
+    .scope-item { margin-bottom: 10px; }
+    .slider-label { display: flex; justify-content: space-between; font-size: 14px; }
+    .scope-slider { width: 100%; }
+
+    .button { margin-top: 20px; padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    .button:hover { background: #0056b3; }
+  </style>
 </head>
 <body>
-    <h2>Preview Your Daily Log</h2>
-    <div class="section">
-        <h3>Project Info</h3>
-        <p><strong>Project Name:</strong> {{ data.project_name }}</p>
-        <p><strong>Location:</strong> {{ data.location }}</p>
-        <p><strong>Date:</strong> {{ data.date }}</p>
-        <p><strong>General Contractor:</strong> {{ data.contractor }}</p>
-        <p><strong>Weather:</strong> {{ data.weather }}</p>
+
+  <h2>📋 Daily Log Preview</h2>
+
+  <!-- Project Info -->
+  <div class="section">
+    <h3>📌 Project Information</h3>
+    <p><strong>Project:</strong> {{ form_data.project_name }}</p>
+    <p><strong>Location:</strong> {{ form_data.location }}</p>
+    <p><strong>Date:</strong> {{ form_data.date }}</p>
+    <p><strong>Weather:</strong> {{ form_data.weather or "Not Provided" }}</p>
+  </div>
+
+  <!-- Work Notes -->
+  <div class="section">
+    <h3>🛠️ Work Summary</h3>
+    <p><strong>Work Done:</strong> {{ form_data.work_done }}</p>
+    <p><strong>Crew Notes:</strong> {{ form_data.crew_notes }}</p>
+    <p><strong>Safety Notes:</strong> {{ form_data.safety_notes }}</p>
+  </div>
+
+  <!-- Jobsite Photos ABOVE AI -->
+  {% if image_paths %}
+  <div class="section">
+    <h3>📷 Jobsite Photos</h3>
+    <div class="images">
+      {% for img_path in image_paths %}
+        <img src="/{{ img_path }}" onclick="openModal(this.src)">
+      {% endfor %}
     </div>
+  </div>
+  {% endif %}
 
-    <div class="section">
-        <h3>Work Notes</h3>
-        <p><strong>Work Performed:</strong> {{ data.work_done }}</p>
-        <p><strong>Crew Notes:</strong> {{ data.crew_notes }}</p>
-        <p><strong>Safety Notes:</strong> {{ data.safety_notes }}</p>
+  <!-- AI Scope Comparison BELOW Photos -->
+  {% if ai_results %}
+  <div class="section">
+    <h3>🤖 AI Scope Comparison</h3>
+    <div class="ai-section">
+      <p><strong>Total Estimated Completion:</strong> <span id="completion-total">{{ ai_results.completion or 0 }}%</span></p>
+      <hr>
+      {% for item in ai_results.scored_items %}
+      <div class="scope-item">
+        <div class="slider-label">
+          <span>{{ item.scope }}</span>
+          <span id="val_{{ loop.index0 }}">{{ item.confidence }}</span>%
+        </div>
+        <input type="range" min="0" max="100" value="{{ item.confidence }}" class="scope-slider"
+               oninput="updateTotal(); document.getElementById('val_{{ loop.index0 }}').innerText=this.value;">
+        <input type="checkbox" name="match_{{ loop.index0 }}" {% if item.match %}checked{% endif %}> Match
+        <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
+      </div>
+      {% endfor %}
     </div>
+  </div>
+  {% endif %}
 
-    <div class="section">
-        <h3>Jobsite Photos</h3>
-        {% if image_paths %}
-            {% for img in image_paths %}
-                <img src="{{ url_for('static', filename='uploads/' + img) }}" class="thumbnail" onclick="enlarge(this.src)" />
-            {% endfor %}
-        {% else %}
-            <p>No photos uploaded.</p>
-        {% endif %}
-    </div>
+  <!-- Safety Sheet ABOVE Generate PDF -->
+  {% if safety_sheet_path %}
+  <div class="section">
+    <h3>📄 Safety Sheet</h3>
+    <img src="/{{ safety_sheet_path }}" width="200" onclick="openModal(this.src)">
+  </div>
+  {% endif %}
 
-    <div class="section">
-        <h3>AI Scope Comparison</h3>
-        {% if ai_analysis %}
-            <p><strong>Estimated Completion:</strong> <span id="completion-total">{{ ai_analysis.completion }}%</span></p>
-            <div class="bar-container">
-                <div class="bar" style="width: {{ ai_analysis.completion }}%"></div>
-            </div>
-            <p><strong>Scope of Work Interpretation:</strong> {{ ai_analysis.scope_summary }}</p>
-            {% for item in ai_analysis.scored_items %}
-                <div class="scope-item">
-                    <div class="slider-label">
-                        <span><strong>{{ item.section }}:</strong> {{ item.item }}</span>
-                        <span>{{ item.score }}%</span>
-                    </div>
-                    <input type="range" min="0" max="100" value="{{ item.score }}" class="slider-input scope-slider" oninput="updateTotal()" />
-                </div>
-            {% endfor %}
+  <!-- Generate PDF -->
+  <form action="/generate_pdf/{{ session_id }}" method="post">
+    <input type="hidden" name="item_count" value="{{ ai_results.scored_items|length }}">
+    <button class="button" type="submit">✅ Generate Final PDF</button>
+  </form>
 
-            {% if ai_analysis.out_of_scope %}
-                <h4>🔧 Flagged Items (Not in Original Scope)</h4>
-                <ul>
-                    {% for line in ai_analysis.out_of_scope %}
-                        <li>{{ line }}</li>
-                    {% endfor %}
-                </ul>
-            {% endif %}
-        {% else %}
-            <p>No AI analysis available.</p>
-        {% endif %}
-    </div>
+  <!-- Modal -->
+  <div id="imgModal" onclick="closeModal()">
+    <span onclick="closeModal()">&times;</span>
+    <img id="modalImg">
+  </div>
 
-    <div class="section">
-        <h3>Safety Sheet</h3>
-        {% if safety_sheet_path %}
-            <img src="{{ url_for('static', filename='uploads/' + safety_sheet_path) }}" class="thumbnail" onclick="enlarge(this.src)" />
-        {% else %}
-            <p>No safety sheet uploaded.</p>
-        {% endif %}
-    </div>
+  <script>
+    function openModal(src) {
+      const modal = document.getElementById("imgModal");
+      const modalImg = document.getElementById("modalImg");
+      modal.style.display = "block";
+      modalImg.src = src;
+    }
+    function closeModal() {
+      document.getElementById("imgModal").style.display = "none";
+    }
+    function updateTotal() {
+      const sliders = document.querySelectorAll('.scope-slider');
+      let sum = 0;
+      sliders.forEach(s => sum += parseFloat(s.value));
+      const avg = (sliders.length ? sum / sliders.length : 0).toFixed(1);
+      document.getElementById('completion-total').innerText = avg + '%';
+    }
+  </script>
 
-    <form action="/generate_pdf" method="POST">
-        <input type="hidden" name="session_id" value="{{ session_id }}">
-        <button type="submit">Generate Final PDF</button>
-    </form>
 </body>
 </html>
