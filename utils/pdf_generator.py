@@ -1,103 +1,115 @@
 
 import os
-from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
-)
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import inch
-from PyPDF2 import PdfReader
+import re
+import numpy as np
+from fuzzywuzzy import fuzz
+from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
 
-def create_daily_log_pdf(
-    data,
-    image_paths,
-    logo_path,
-    ai_analysis,
-    progress_report,
-    save_path,
-    weather_icon_path=None,
-    safety_sheet_path=None
-):
-    doc = SimpleDocTemplate(save_path, pagesize=letter)
-    elements = []
-    styles = getSampleStyleSheet()
+SCOPE_DIR = "static/scope"  # Match app.py
+EXCLUSION_PHRASES = [
+    "no ", "not ", "do not", "does not", "will not", "excluded", "without",
+    "doesn't", "isn't", "wasn't", "aren't", "weren't", "cannot", "never"
+]
 
-    # --- Logo ---
-    if logo_path and os.path.exists(logo_path):
-        elements.append(Image(logo_path, width=100, height=50))
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
-    # --- Header Info ---
-    elements.append(Paragraph("<b>DAILY LOG</b>", styles["Title"]))
-    elements.append(Spacer(1, 12))
-    for field in ["project_name", "client_name", "location", "date", "weather"]:
-        val = data.get(field, "Not Provided")
-        elements.append(Paragraph(f"<b>{field.replace('_', ' ').title()}:</b> {val}", styles["Normal"]))
-        elements.append(Spacer(1, 6))
 
-    # --- Section 1: Notes ---
-    elements.append(Spacer(1, 12))
-    elements.append(Paragraph("<b>Work Done</b>", styles["Heading2"]))
-    elements.append(Paragraph(data.get("work_done", ""), styles["Normal"]))
-    elements.append(Spacer(1, 12))
-    elements.append(Paragraph("<b>Crew Notes</b>", styles["Heading2"]))
-    elements.append(Paragraph(data.get("crew_notes", ""), styles["Normal"]))
-    elements.append(Spacer(1, 12))
-    elements.append(Paragraph("<b>Safety Notes</b>", styles["Heading2"]))
-    elements.append(Paragraph(data.get("safety_notes", ""), styles["Normal"]))
-    elements.append(PageBreak())
+def clean_scope_text(text):
+    text = re.sub(r"[^\x00-\x7F]+", "", text).strip()
+    if len(text) < 5:
+        return ""
+    if text.lower().startswith((
+        "client", "project", "date", "prepared by", "include", "scope", "description", "location"
+    )):
+        return ""
+    if any(phrase in text.lower() for phrase in EXCLUSION_PHRASES):
+        return ""
+    return text
 
-    # --- Section 2: Jobsite Images (2 per row) ---
-    if image_paths:
-        elements.append(Paragraph("<b>Jobsite Photos</b>", styles["Heading2"]))
-        elements.append(Spacer(1, 12))
-        row = []
-        for i, img in enumerate(image_paths):
-            if os.path.exists(img):
-                row.append(Image(img, width=2.5*inch, height=2*inch))
-                if len(row) == 2:
-                    elements.append(Table([row], hAlign='LEFT', colWidths=[2.5*inch]*2))
-                    elements.append(Spacer(1, 12))
-                    row = []
-        if row:
-            elements.append(Table([row], hAlign='LEFT', colWidths=[2.5*inch]*2))
-        elements.append(PageBreak())
 
-    # --- Section 3: AI Analysis with Edited Scores ---
-    if progress_report:
-        elements.append(Paragraph("<b>AI Scope Analysis</b>", styles["Heading2"]))
-        elements.append(Spacer(1, 6))
-        percent = int(round(progress_report.get("completion", 0)))
-        elements.append(Paragraph(f"<b>Total Completion:</b> {percent}% (user-edited)", styles["Normal"]))
-        elements.append(Spacer(1, 12))
+def load_scope_for_project(project_id):
+    scope_path = os.path.join(SCOPE_DIR, f"{project_id}.txt")  # Match app.py naming
+    if not os.path.exists(scope_path):
+        return []
+    with open(scope_path, "r", encoding="utf-8") as f:
+        return [clean_scope_text(line) for line in f.readlines() if clean_scope_text(line)]
 
-        if "scored_items" in progress_report:
-            for item in progress_report["scored_items"]:
-                match_symbol = "✔️" if item.get("match") else "❌"
-                text = item.get("scope", "")
-                score = int(round(item.get("confidence", 0)))
-                bullet = f"{match_symbol} {text} — <b>{score}%</b>"
-                elements.append(Paragraph(bullet, styles["Normal"]))
-                elements.append(Spacer(1, 6))
-        elements.append(PageBreak())
 
-    # --- Section 4: Safety Sheet ---
-    if safety_sheet_path and os.path.exists(safety_sheet_path):
-        ext = os.path.splitext(safety_sheet_path)[1].lower()
-        elements.append(Paragraph("<b>Safety Sheet</b>", styles["Heading2"]))
-        elements.append(Spacer(1, 6))
+def analyze_scope_vs_log(scope_items, daily_log_text, threshold=0.65):
+    """
+    Compare scope items vs full daily log text (merged)
+    """
+    if not scope_items or not daily_log_text:
+        return {
+            "completion": 0,
+            "scored_items": [],
+            "out_of_scope": ["⚠️ Missing scope items or log data."]
+        }
 
-        if ext == ".pdf":
-            reader = PdfReader(safety_sheet_path)
-            page_text = reader.pages[0].extract_text()
-            elements.append(Paragraph(page_text or "First page could not be parsed.", styles["Normal"]))
-        elif ext in [".jpg", ".jpeg", ".png"]:
-            elements.append(Image(safety_sheet_path, width=5*inch, height=4*inch))
-        else:
-            elements.append(Paragraph("Unsupported safety sheet format.", styles["Normal"]))
+    log_embedding = model.encode([daily_log_text])[0].reshape(1, -1)
+    scope_embeddings = model.encode(scope_items)
 
-    # --- Footer ---
-    elements.append(Spacer(1, 30))
-    elements.append(Paragraph("Confidential – Do Not Duplicate without written consent from BAINS Dev Comm", styles["Normal"]))
+    matched = 0
+    scored_items = []
 
-    doc.build(elements)
+    for item, scope_embed in zip(scope_items, scope_embeddings):
+        scope_embed_2d = np.array(scope_embed).reshape(1, -1)
+        cosine_score = cosine_similarity(scope_embed_2d, log_embedding)[0][0]
+        fuzzy_score = fuzz.partial_ratio(item.lower(), daily_log_text.lower()) / 100
+        final_score = max(cosine_score, fuzzy_score)
+        is_match = final_score >= threshold
+
+        if is_match:
+            matched += 1
+
+        scored_items.append({
+            "scope": item,
+            "confidence": round(final_score * 100, 1),
+            "match": is_match
+        })
+
+    # Smarter out-of-scope logic
+    known_ignore = ["ppe", "tailgate", "safety", "meeting"]
+    log_lines = [line.strip() for line in daily_log_text.split("\n") if line.strip()]
+    out_of_scope = []
+    for line in log_lines:
+        if any(kw in line.lower() for kw in known_ignore):
+            continue
+        if all(fuzz.partial_ratio(line.lower(), item.lower()) < 60 for item in scope_items):
+            out_of_scope.append(line)
+
+    percent_complete = round((matched / len(scope_items)) * 100, 1) if scope_items else 0
+    return {
+        "completion": percent_complete,
+        "scored_items": scored_items,
+        "out_of_scope": out_of_scope[:10]
+    }
+
+
+def parse_scope_file(file_path):
+    ext = os.path.splitext(file_path)[1].lower()
+
+    if ext == ".pdf":
+        import fitz  # PyMuPDF
+        doc = fitz.open(file_path)
+        text = "\n".join([page.get_text() for page in doc])
+        doc.close()
+        return text
+
+    elif ext == ".docx":
+        from docx import Document
+        doc = Document(file_path)
+        return "\n".join([p.text for p in doc.paragraphs])
+
+    elif ext in [".xls", ".xlsx"]:
+        import pandas as pd
+        df = pd.read_excel(file_path, engine="openpyxl")
+        return df.to_string(index=False)
+
+    elif ext == ".txt":
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+
+    else:
+        return "Unsupported file format"
