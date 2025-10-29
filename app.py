@@ -43,9 +43,13 @@ def preview(session_id):
 
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
+    # 🔹 Pull session_id from POST or GET
     session_id = request.form.get("session_id") or request.args.get("session_id")
     if not session_id:
         return "Missing session ID", 400
+
+    # 🔹 Bonus Debug Line (for your console/logs)
+    print("✅ GENERATE_FORM session_id =", session_id)
 
     session_path = f"static/sessions/{session_id}.json"
     if not os.path.exists(session_path):
@@ -70,6 +74,8 @@ def generate_form():
         save_path=save_path,
         safety_sheet_path=safety_sheet_path
     )
+
+    return redirect(url_for("serve_pdf", filename=f"{session_id}_final_log.pdf"))
 
     return redirect(url_for("serve_pdf", filename=f"{session_id}_final_log.pdf"))
 
