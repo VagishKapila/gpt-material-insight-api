@@ -1,156 +1,82 @@
+
+from flask import Flask, render_template, request, send_file, redirect, url_for
 import os
-import uuid
 import json
-import traceback
-from flask import Flask, request, render_template, send_file, redirect, url_for
-from werkzeug.utils import secure_filename
-from datetime import datetime
-from utils.compare_scope_vs_log import analyze_scope_vs_log, parse_scope_file, load_scope_for_project
 from utils.pdf_generator import create_daily_log_pdf
-from utils.weather_icon import get_weather_icon
+from utils.compare_scope_vs_log import analyze_scope_vs_log
+from werkzeug.utils import secure_filename
+import uuid
 
 app = Flask(__name__)
-UPLOAD_FOLDER = "static/uploads"
-GENERATED_FOLDER = "static/generated"
-PREVIEW_FOLDER = "static/preview"
-SCOPE_FOLDER = "static/scope"
+UPLOAD_FOLDER = 'static/uploads'
+GENERATED_FOLDER = 'static/generated'
+SCOPE_FOLDER = 'static/scope'
 
-for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, PREVIEW_FOLDER, SCOPE_FOLDER]:
-    os.makedirs(folder, exist_ok=True)
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(GENERATED_FOLDER, exist_ok=True)
+os.makedirs(SCOPE_FOLDER, exist_ok=True)
 
 @app.route("/")
 def index():
-    return "✅ Daily Log AI is running"
+    return "🛠️ Nails & Notes Daily Log AI is running."
 
 @app.route("/form")
 def form():
     return render_template("form.html")
 
-@app.route("/get_weather")
-def get_weather():
-    location = request.args.get("location", "")
-    icon_path = get_weather_icon(location)
-    return icon_path if icon_path else ("", 404)
+@app.route("/preview/<session_id>")
+def preview(session_id):
+    session_path = f"static/sessions/{session_id}.json"
+    if not os.path.exists(session_path):
+        return "Session not found.", 404
+
+    with open(session_path) as f:
+        session_data = json.load(f)
+
+    return render_template(
+        "preview.html",
+        form_data=session_data.get("form_data", {}),
+        image_paths=session_data.get("image_paths", []),
+        ai_analysis=session_data.get("ai_analysis", {}),
+        safety_sheet_path=session_data.get("safety_sheet_path", "")
+    )
 
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
-    try:
-        form_data = request.form.to_dict()
-        session_id = uuid.uuid4().hex
+    # Load session_id from cookie or previous session
+    session_id = request.args.get("session_id")
+    if not session_id:
+        return "Missing session ID", 400
 
-        def save_file(file_obj, folder):
-            if file_obj:
-                filename = secure_filename(file_obj.filename)
-                path = os.path.join(folder, f"{session_id}_{filename}")
-                file_obj.save(path)
-                return path
-            return None
+    session_path = f"static/sessions/{session_id}.json"
+    if not os.path.exists(session_path):
+        return "Session not found", 404
 
-        logo_path = save_file(request.files.get("logo"), UPLOAD_FOLDER)
-        safety_path = save_file(request.files.get("safety_sheet"), UPLOAD_FOLDER)
-        scope_file = request.files.get("scope_doc")
+    with open(session_path) as f:
+        session_data = json.load(f)
 
-        image_paths = []
-        for photo in request.files.getlist("images"):
-            img_path = save_file(photo, UPLOAD_FOLDER)
-            if img_path:
-                image_paths.append(img_path)
+    form_data = session_data.get("form_data", {})
+    image_paths = session_data.get("image_paths", [])
+    logo_path = session_data.get("logo_path", "")
+    safety_sheet_path = session_data.get("safety_sheet_path", "")
+    ai_analysis = session_data.get("ai_analysis", {})
+    save_path = os.path.join(GENERATED_FOLDER, f"{session_id}_final_log.pdf")
 
-        project_id = form_data.get("project_name", "default").replace(" ", "_").lower()
-        scope_path = os.path.join(SCOPE_FOLDER, f"scope_{project_id}.txt")
+    create_daily_log_pdf(
+        form_data,
+        image_paths,
+        logo_path,
+        ai_analysis,
+        progress_report=None,
+        save_path=save_path,
+        safety_sheet_path=safety_sheet_path
+    )
 
-        if scope_file:
-            parsed = parse_scope_file(save_file(scope_file, SCOPE_FOLDER))
-            parsed_lines = [line.strip() for line in parsed.splitlines() if line.strip()]
-            with open(scope_path, "w", encoding="utf-8") as f:
-                f.write("\n".join(parsed_lines))
+    return redirect(url_for("serve_pdf", filename=f"{session_id}_final_log.pdf"))
 
-        enable_ai = form_data.get("enable_ai", "off") == "on"
-        ai_results = None
-
-        if enable_ai:
-            scope_items = load_scope_for_project(project_id)
-            ai_results = analyze_scope_vs_log(
-                scope_items,
-                {
-                    "work_done": form_data.get("work_done", ""),
-                    "crew_notes": form_data.get("crew_notes", ""),
-                    "safety_notes": form_data.get("safety_notes", "")
-                },
-                image_paths=image_paths
-            )
-
-        preview_data = {
-            "session_id": session_id,
-            "form_data": form_data,
-            "image_paths": image_paths,
-            "logo_path": logo_path,
-            "safety_sheet_path": safety_path,
-            "ai_results": ai_results,
-            "project_id": project_id
-        }
-
-        with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "w") as f:
-            json.dump(preview_data, f, indent=2, default=str)
-
-        return redirect(url_for("preview", session_id=session_id))
-
-    except Exception as e:
-        traceback.print_exc()
-        return f"❌ Error: {e}", 500
-
-@app.route("/preview/<session_id>")
-def preview(session_id):
-    try:
-        with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "r") as f:
-            data = json.load(f)
-        return render_template("preview.html", **data, enumerate=enumerate)
-    except Exception as e:
-        traceback.print_exc()
-        return f"❌ Error: {e}", 500
-
-@app.route("/generate_pdf/<session_id>", methods=["POST"])
-def generate_pdf(session_id):
-    try:
-        with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "r") as f:
-            data = json.load(f)
-
-        item_count = int(request.form.get("item_count", 0))
-        edited_items = []
-
-        for i in range(item_count):
-            scope = request.form.get(f"scope_{i}")
-            confidence = float(request.form.get(f"confidence_{i}", 0))
-            match = request.form.get(f"match_{i}") == "on"
-            edited_items.append({
-                "scope": scope,
-                "confidence": confidence,
-                "match": match
-            })
-
-        if "ai_results" in data:
-            data["ai_results"]["scored_items"] = edited_items
-            avg = sum(item["confidence"] for item in edited_items) / max(1, len(edited_items))
-            data["ai_results"]["completion"] = round(avg)
-
-        save_path = os.path.join(GENERATED_FOLDER, f"{session_id}_daily_log.pdf")
-
-        create_daily_log_pdf(
-            data=data["form_data"],
-            image_paths=data["image_paths"],
-            logo_path=data.get("logo_path"),
-            ai_analysis=data.get("ai_results"),
-            progress_report=data.get("ai_results"),
-            save_path=save_path,
-            weather_icon_path=None,
-            safety_sheet_path=data.get("safety_sheet_path")
-        )
-
-        return send_file(save_path, as_attachment=True)
-
-    except Exception as e:
-        traceback.print_exc()
-        return f"❌ Error: {e}", 500
+@app.route("/generated/<filename>")
+def serve_pdf(filename):
+    return send_file(os.path.join(GENERATED_FOLDER, filename), as_attachment=True)
 
 if __name__ == "__main__":
     app.run(debug=True)
