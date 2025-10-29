@@ -1,104 +1,156 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Preview Daily Log</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 2rem; }
-        img.thumbnail { height: 100px; margin: 5px; cursor: pointer; }
-        .section { margin-bottom: 2rem; }
-        .slider-label { display: flex; justify-content: space-between; align-items: center; }
-        .slider-input { width: 100%; }
-        .bar-container { background: #f0f0f0; border-radius: 4px; margin-top: 4px; }
-        .bar { height: 10px; background-color: #4caf50; border-radius: 4px; }
-        .scope-item { margin-bottom: 1rem; }
-    </style>
-    <script>
-        function enlarge(imgSrc) {
-            const win = window.open();
-            win.document.write('<img src="' + imgSrc + '" style="width:100%">');
+import os
+import uuid
+import json
+import traceback
+from flask import Flask, request, render_template, send_file, redirect, url_for
+from werkzeug.utils import secure_filename
+from datetime import datetime
+from utils.compare_scope_vs_log import analyze_scope_vs_log, parse_scope_file, load_scope_for_project
+from utils.pdf_generator import create_daily_log_pdf
+from utils.weather_icon import get_weather_icon
+
+app = Flask(__name__)
+UPLOAD_FOLDER = "static/uploads"
+GENERATED_FOLDER = "static/generated"
+PREVIEW_FOLDER = "static/preview"
+SCOPE_FOLDER = "static/scope"
+
+for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, PREVIEW_FOLDER, SCOPE_FOLDER]:
+    os.makedirs(folder, exist_ok=True)
+
+@app.route("/")
+def index():
+    return "✅ Daily Log AI is running"
+
+@app.route("/form")
+def form():
+    return render_template("form.html")
+
+@app.route("/get_weather")
+def get_weather():
+    location = request.args.get("location", "")
+    icon_path = get_weather_icon(location)
+    return icon_path if icon_path else ("", 404)
+
+@app.route("/generate_form", methods=["POST"])
+def generate_form():
+    try:
+        form_data = request.form.to_dict()
+        session_id = uuid.uuid4().hex
+
+        def save_file(file_obj, folder):
+            if file_obj:
+                filename = secure_filename(file_obj.filename)
+                path = os.path.join(folder, f"{session_id}_{filename}")
+                file_obj.save(path)
+                return path
+            return None
+
+        logo_path = save_file(request.files.get("logo"), UPLOAD_FOLDER)
+        safety_path = save_file(request.files.get("safety_sheet"), UPLOAD_FOLDER)
+        scope_file = request.files.get("scope_doc")
+
+        image_paths = []
+        for photo in request.files.getlist("images"):
+            img_path = save_file(photo, UPLOAD_FOLDER)
+            if img_path:
+                image_paths.append(img_path)
+
+        project_id = form_data.get("project_name", "default").replace(" ", "_").lower()
+        scope_path = os.path.join(SCOPE_FOLDER, f"scope_{project_id}.txt")
+
+        if scope_file:
+            parsed = parse_scope_file(save_file(scope_file, SCOPE_FOLDER))
+            parsed_lines = [line.strip() for line in parsed.splitlines() if line.strip()]
+            with open(scope_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(parsed_lines))
+
+        enable_ai = form_data.get("enable_ai", "off") == "on"
+        ai_results = None
+
+        if enable_ai:
+            scope_items = load_scope_for_project(project_id)
+            ai_results = analyze_scope_vs_log(
+                scope_items,
+                {
+                    "work_done": form_data.get("work_done", ""),
+                    "crew_notes": form_data.get("crew_notes", ""),
+                    "safety_notes": form_data.get("safety_notes", "")
+                },
+                image_paths=image_paths
+            )
+
+        preview_data = {
+            "session_id": session_id,
+            "form_data": form_data,
+            "image_paths": image_paths,
+            "logo_path": logo_path,
+            "safety_sheet_path": safety_path,
+            "ai_results": ai_results,
+            "project_id": project_id
         }
-        function updateTotal() {
-            const sliders = document.querySelectorAll('.scope-slider');
-            let sum = 0;
-            sliders.forEach(s => sum += parseFloat(s.value));
-            const avg = (sliders.length ? sum / sliders.length : 0).toFixed(1);
-            document.getElementById('completion-total').innerText = avg + '%';
-        }
-    </script>
-</head>
-<body>
-    <h2>Preview Your Daily Log</h2>
-    <div class="section">
-        <h3>Project Info</h3>
-        <p><strong>Project Name:</strong> {{ data.project_name }}</p>
-        <p><strong>Location:</strong> {{ data.location }}</p>
-        <p><strong>Date:</strong> {{ data.date }}</p>
-        <p><strong>General Contractor:</strong> {{ data.contractor }}</p>
-        <p><strong>Weather:</strong> {{ data.weather }}</p>
-    </div>
 
-    <div class="section">
-        <h3>Work Notes</h3>
-        <p><strong>Work Performed:</strong> {{ data.work_done }}</p>
-        <p><strong>Crew Notes:</strong> {{ data.crew_notes }}</p>
-        <p><strong>Safety Notes:</strong> {{ data.safety_notes }}</p>
-    </div>
+        with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "w") as f:
+            json.dump(preview_data, f, indent=2, default=str)
 
-    <div class="section">
-        <h3>Jobsite Photos</h3>
-        {% if image_paths %}
-            {% for img in image_paths %}
-                <img src="{{ url_for('static', filename='uploads/' + img) }}" class="thumbnail" onclick="enlarge(this.src)" />
-            {% endfor %}
-        {% else %}
-            <p>No photos uploaded.</p>
-        {% endif %}
-    </div>
+        return redirect(url_for("preview", session_id=session_id))
 
-    <div class="section">
-        <h3>AI Scope Comparison</h3>
-        {% if ai_analysis %}
-            <p><strong>Estimated Completion:</strong> <span id="completion-total">{{ ai_analysis.completion }}%</span></p>
-            <div class="bar-container">
-                <div class="bar" style="width: {{ ai_analysis.completion }}%"></div>
-            </div>
-            <p><strong>Scope of Work Interpretation:</strong> {{ ai_analysis.scope_summary }}</p>
-            {% for item in ai_analysis.scored_items %}
-                <div class="scope-item">
-                    <div class="slider-label">
-                        <span><strong>{{ item.section }}:</strong> {{ item.item }}</span>
-                        <span>{{ item.score }}%</span>
-                    </div>
-                    <input type="range" min="0" max="100" value="{{ item.score }}" class="slider-input scope-slider" oninput="updateTotal()" />
-                </div>
-            {% endfor %}
+    except Exception as e:
+        traceback.print_exc()
+        return f"❌ Error: {e}", 500
 
-            {% if ai_analysis.out_of_scope %}
-                <h4>🔧 Flagged Items (Not in Original Scope)</h4>
-                <ul>
-                    {% for line in ai_analysis.out_of_scope %}
-                        <li>{{ line }}</li>
-                    {% endfor %}
-                </ul>
-            {% endif %}
-        {% else %}
-            <p>No AI analysis available.</p>
-        {% endif %}
-    </div>
+@app.route("/preview/<session_id>")
+def preview(session_id):
+    try:
+        with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "r") as f:
+            data = json.load(f)
+        return render_template("preview.html", **data, enumerate=enumerate)
+    except Exception as e:
+        traceback.print_exc()
+        return f"❌ Error: {e}", 500
 
-    <div class="section">
-        <h3>Safety Sheet</h3>
-        {% if safety_sheet_path %}
-            <img src="{{ url_for('static', filename='uploads/' + safety_sheet_path) }}" class="thumbnail" onclick="enlarge(this.src)" />
-        {% else %}
-            <p>No safety sheet uploaded.</p>
-        {% endif %}
-    </div>
+@app.route("/generate_pdf/<session_id>", methods=["POST"])
+def generate_pdf(session_id):
+    try:
+        with open(os.path.join(PREVIEW_FOLDER, f"{session_id}.json"), "r") as f:
+            data = json.load(f)
 
-    <form action="/generate_pdf" method="POST">
-        <input type="hidden" name="session_id" value="{{ session_id }}">
-        <button type="submit">Generate Final PDF</button>
-    </form>
-</body>
-</html>
+        item_count = int(request.form.get("item_count", 0))
+        edited_items = []
+
+        for i in range(item_count):
+            scope = request.form.get(f"scope_{i}")
+            confidence = float(request.form.get(f"confidence_{i}", 0))
+            match = request.form.get(f"match_{i}") == "on"
+            edited_items.append({
+                "scope": scope,
+                "confidence": confidence,
+                "match": match
+            })
+
+        if "ai_results" in data:
+            data["ai_results"]["scored_items"] = edited_items
+            avg = sum(item["confidence"] for item in edited_items) / max(1, len(edited_items))
+            data["ai_results"]["completion"] = round(avg)
+
+        save_path = os.path.join(GENERATED_FOLDER, f"{session_id}_daily_log.pdf")
+
+        create_daily_log_pdf(
+            data=data["form_data"],
+            image_paths=data["image_paths"],
+            logo_path=data.get("logo_path"),
+            ai_analysis=data.get("ai_results"),
+            progress_report=data.get("ai_results"),
+            save_path=save_path,
+            weather_icon_path=None,
+            safety_sheet_path=data.get("safety_sheet_path")
+        )
+
+        return send_file(save_path, as_attachment=True)
+
+    except Exception as e:
+        traceback.print_exc()
+        return f"❌ Error: {e}", 500
+
+if __name__ == "__main__":
+    app.run(debug=True)
