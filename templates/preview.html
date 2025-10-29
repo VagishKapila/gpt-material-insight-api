@@ -10,29 +10,22 @@
     .label { font-weight: bold; color: #34495e; display: block; margin-top: 10px; }
     .value { color: #2c3e50; margin-left: 10px; }
     .images { display: flex; flex-wrap: wrap; gap: 10px; }
-    .images img { max-width: 250px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); transition: transform 0.2s; }
-    .images img:hover { cursor: zoom-in; transform: scale(1.05); }
+    .images img { width: 30%; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
     .score { margin: 6px 0; }
     .match { color: green; }
     .no-match { color: red; }
     .out-of-scope { color: #c0392b; }
-    .slider { margin-top: 10px; width: 100%; }
+    .debug { font-size: 13px; color: #999; margin-top: 10px; font-style: italic; }
     .button { margin-top: 30px; padding: 14px 28px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer; }
     .button:hover { background: #2980b9; }
-    .sticky-total { position: sticky; top: 0; background: white; z-index: 1000; padding: 10px; border-bottom: 1px solid #ccc; }
   </style>
 </head>
 <body>
   <h1>📋 Daily Log Preview</h1>
 
-  <div class="sticky-total">
-    <strong>Total Completion:</strong> <span id="totalCompletion">
-      {% if ai_analysis and ai_analysis.completion %}{{ ai_analysis.completion|round|int }}{% else %}0{% endif %}%</span>
-  </div>
-
   {% if form_data %}
   <div class="section">
-    <h2>📌 Project Info</h2>
+    <h2>📌 Project Information</h2>
     <div><span class="label">Project:</span> {{ form_data.project_name }}</div>
     <div><span class="label">Client:</span> {{ form_data.client_name or "—" }}</div>
     <div><span class="label">Location:</span> {{ form_data.location }}</div>
@@ -41,90 +34,66 @@
   </div>
 
   <div class="section">
-    <h2>🛠️ Work Summary</h2>
+    <h2>🛠️ Work Log</h2>
     <div><span class="label">Work Done:</span> {{ form_data.work_done }}</div>
     <div><span class="label">Crew Notes:</span> {{ form_data.crew_notes or "—" }}</div>
     <div><span class="label">Safety Notes:</span> {{ form_data.safety_notes or "—" }}</div>
   </div>
+  {% else %}
+    <div class="section">
+      <h2>⚠️ Debug: No form data found</h2>
+      <div class="debug">Please check that form submission saved correctly.</div>
+    </div>
   {% endif %}
 
   {% if image_paths %}
   <div class="section">
-    <h2>📷 Job Site Photos</h2>
+    <h2>📷 Uploaded Photos</h2>
     <div class="images">
       {% for img_path in image_paths %}
-        <img src="/{{ img_path }}" alt="Photo">
+        <img src="/{{ img_path }}" alt="Job Site Photo">
       {% endfor %}
     </div>
   </div>
+  {% else %}
+    <div class="section"><strong>No images uploaded</strong></div>
   {% endif %}
 
-  {% if ai_analysis %}
+  {% if ai_results %}
   <div class="section">
-    <h2>🧠 AI Scope Analysis</h2>
+    <h2>🤖 AI Scope Comparison</h2>
+    <div><strong>Estimated Completion:</strong> {{ ai_results.completion or 0 }}%</div>
+    <hr>
+    {% for item in ai_results.scored_items %}
+      <div class="score">
+        {% if item.match %}
+          ✅ <span class="match">{{ item.scope }} – {{ item.confidence }}%</span>
+        {% else %}
+          ❌ <span class="no-match">{{ item.scope }} – {{ item.confidence }}%</span>
+        {% endif %}
+      </div>
+    {% endfor %}
 
-    {% if ai_analysis.scored_items %}
-      {% for item in ai_analysis.scored_items %}
-        <div class="score">
-          <span class="{{ 'match' if item.matched else 'no-match' }}">
-            {{ "✅" if item.matched else "❌" }}
-            {{ item.scope }} — {{ (item.confidence)|round|int }}%
-          </span>
-          <input type="range" min="0" max="100" value="{{ (item.confidence)|round|int }}" class="slider">
-          <label style="margin-left: 10px;">
-            <input type="checkbox" class="matched" {% if item.matched %}checked{% endif %}> Matched
-          </label>
-        </div>
-      {% endfor %}
-    {% else %}
-      <p style="color: #c0392b;">⚠️ No scope items were matched or loaded.</p>
-    {% endif %}
-
-    {% if ai_analysis.out_of_scope %}
-    <div class="out-of-scope">
-      <strong>🚧 Out-of-Scope Items:</strong>
-      <ul>
-        {% for oos in ai_analysis.out_of_scope %}
-          <li>⚠️ {{ oos }}</li>
+    {% if ai_results.out_of_scope %}
+      <div class="out-of-scope">
+        <strong>Out-of-Scope Items:</strong>
+        <ul>
+        {% for line in ai_results.out_of_scope if line|length > 4 %}
+          <li>{{ line }}</li>
         {% endfor %}
-      </ul>
-    </div>
+        </ul>
+      </div>
     {% endif %}
   </div>
+  {% else %}
+    <div class="section">
+      <strong>⚠️ AI analysis not enabled or failed to load.</strong>
+      <div class="debug">Ensure AI was enabled during form submission and scope file was uploaded.</div>
+    </div>
   {% endif %}
 
-  {% if safety_sheet_path %}
-  <div class="section">
-    <h2>📋 Safety Sheet</h2>
-    <img src="/{{ safety_sheet_path }}" style="max-width:100%; border:1px solid #ccc; border-radius:6px;">
-  </div>
-  {% endif %}
-
- <form method="POST" action="/generate_form">
-  <input type="hidden" name="session_id" value="{{ session_id }}">
-  <button type="submit" class="button">Generate Final PDF</button>
-</form>
-
-  <script>
-    const sliders = document.querySelectorAll(".slider");
-    const checkboxes = document.querySelectorAll(".matched");
-    const totalCompletion = document.getElementById("totalCompletion");
-
-    function updateTotal() {
-      let total = 0;
-      let count = 0;
-      sliders.forEach((slider, i) => {
-        if (checkboxes[i].checked) {
-          total += parseInt(slider.value);
-          count++;
-        }
-      });
-      const avg = count ? Math.round(total / count) : 0;
-      totalCompletion.textContent = avg + "%";
-    }
-
-    sliders.forEach(slider => slider.addEventListener("input", updateTotal));
-    checkboxes.forEach(box => box.addEventListener("change", updateTotal));
-  </script>
+  <form action="/generate_pdf/{{ session_id }}" method="post">
+    <button type="submit" class="button">✅ Generate Final PDF</button>
+  </form>
 </body>
 </html>
