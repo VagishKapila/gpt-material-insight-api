@@ -42,7 +42,7 @@
       <input type="text" name="location" required>
 
       <label>Date:</label>
-      <input type="date" name="date" value="{{ datetime.utcnow().date() }}" required>
+      <input type="date" name="date" value="{{ current_date if current_date else '' }}" required>
 
       <label>Weather:</label>
       <input type="text" name="weather" placeholder="Sunny, 75°F">
