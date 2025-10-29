@@ -1,109 +1,102 @@
+
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
   <title>Daily Log Preview</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 30px;
-      max-width: 900px;
-    }
-
-    .sticky-total {
-      position: sticky;
-      top: 0;
-      background-color: white;
-      z-index: 1000;
-      padding: 10px 15px;
-      border-bottom: 1px solid #ccc;
-      box-shadow: 0px 2px 6px rgba(0, 0, 0, 0.05);
-    }
-
-    .photo-gallery {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-
-    .photo-gallery img {
-      width: 200px;
-      height: auto;
-      border-radius: 4px;
-    }
-
-    .ai-item {
-      margin-bottom: 15px;
-      border-bottom: 1px dashed #ccc;
-      padding-bottom: 10px;
-    }
-
-    .slider {
-      width: 100%;
-    }
-
-    .safety-sheet {
-      margin-top: 40px;
-    }
-
-    .generate-btn {
-      display: block;
-      margin: 30px auto;
-      padding: 10px 25px;
-      background-color: #1e90ff;
-      color: white;
-      font-size: 16px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-    }
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f0f4f7; }
+    h1, h2 { color: #2c3e50; }
+    .section { margin-bottom: 30px; padding: 20px; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .label { font-weight: bold; color: #34495e; display: block; margin-top: 10px; }
+    .value { color: #2c3e50; margin-left: 10px; }
+    .images { display: flex; flex-wrap: wrap; gap: 10px; }
+    .images img { width: 30%; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); transition: transform 0.2s; }
+    .images img:hover { cursor: zoom-in; transform: scale(1.05); }
+    .score { margin: 6px 0; }
+    .match { color: green; }
+    .no-match { color: red; }
+    .out-of-scope { color: #c0392b; }
+    .slider { margin-top: 10px; width: 100%; }
+    .button { margin-top: 30px; padding: 14px 28px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    .button:hover { background: #2980b9; }
+    .sticky-total { position: sticky; top: 0; background: white; z-index: 1000; padding: 10px; border-bottom: 1px solid #ccc; }
   </style>
 </head>
 <body>
-
-  <h1>Daily Log Preview</h1>
+  <h1>📋 Daily Log Preview</h1>
 
   <div class="sticky-total">
-    <p><strong>Total Completion:</strong> <span id="totalCompletion">60%</span></p>
+    <strong>Total Completion:</strong> <span id="totalCompletion">
+      {% if ai_analysis and ai_analysis.completion %}{{ ai_analysis.completion|round|int }}{% else %}0{% endif %}%</span>
   </div>
 
-  <h2>Project Info</h2>
-  <p><strong>Project Name:</strong> 98 Upperoaks, San Rafael</p>
-  <p><strong>Client:</strong> Duncan</p>
-  <p><strong>Date:</strong> 28-10-2025</p>
-  <p><strong>Location:</strong> San Francisco</p>
-  <p><strong>Weather:</strong> Sunny, 72°F</p>
-
-  <h2>Jobsite Photos</h2>
-  <div class="photo-gallery">
-    <img src="static/uploads/photo1.jpg" alt="Job Photo 1">
-    <img src="static/uploads/photo2.jpg" alt="Job Photo 2">
-    <img src="static/uploads/photo3.jpg" alt="Job Photo 3">
+  {% if form_data %}
+  <div class="section">
+    <h2>📌 Project Info</h2>
+    <div><span class="label">Project:</span> {{ form_data.project_name }}</div>
+    <div><span class="label">Client:</span> {{ form_data.client_name or "—" }}</div>
+    <div><span class="label">Location:</span> {{ form_data.location }}</div>
+    <div><span class="label">Date:</span> {{ form_data.date }}</div>
+    <div><span class="label">Weather:</span> {{ form_data.weather or "Not Provided" }}</div>
   </div>
 
-  <h2>AI Scope Analysis</h2>
-
-  <div class="ai-item">
-    <p><strong>Install drainage pipe</strong> — Confidence: <span class="conf">85</span>%</p>
-    <input type="range" class="slider" value="85" min="0" max="100">
-    <label><input type="checkbox" class="matched" checked> Matched</label>
+  <div class="section">
+    <h2>🛠️ Work Summary</h2>
+    <div><span class="label">Work Done:</span> {{ form_data.work_done }}</div>
+    <div><span class="label">Crew Notes:</span> {{ form_data.crew_notes or "—" }}</div>
+    <div><span class="label">Safety Notes:</span> {{ form_data.safety_notes or "—" }}</div>
   </div>
+  {% endif %}
 
-  <div class="ai-item">
-    <p><strong>Backfill trench</strong> — Confidence: <span class="conf">90</span>%</p>
-    <input type="range" class="slider" value="90" min="0" max="100">
-    <label><input type="checkbox" class="matched" checked> Matched</label>
+  {% if image_paths %}
+  <div class="section">
+    <h2>📷 Job Site Photos</h2>
+    <div class="images">
+      {% for img_path in image_paths %}
+        <img src="/{{ img_path }}" alt="Photo">
+      {% endfor %}
+    </div>
   </div>
+  {% endif %}
 
-  <div class="ai-item">
-    <p><strong>Install waterproof barrier</strong> — Confidence: <span class="conf">20</span>%</p>
-    <input type="range" class="slider" value="20" min="0" max="100">
-    <label><input type="checkbox" class="matched"> Matched</label>
+  {% if ai_analysis %}
+  <div class="section">
+    <h2>🧠 AI Scope Analysis</h2>
+    {% for item in ai_analysis.scored_items %}
+      <div class="score">
+        <span class="{{ 'match' if item.matched else 'no-match' }}">
+          {{ "✅" if item.matched else "❌" }}
+          {{ item.item }} — {{ (item.confidence * 100)|round|int }}%
+        </span>
+        <input type="range" min="0" max="100" value="{{ (item.confidence * 100)|round|int }}" class="slider">
+        <label><input type="checkbox" class="matched" {% if item.matched %}checked{% endif %}> Matched</label>
+      </div>
+    {% endfor %}
+
+    {% if ai_analysis.out_of_scope %}
+      <div class="out-of-scope">
+        <strong>🚧 Out-of-Scope Items:</strong>
+        <ul>
+          {% for oos in ai_analysis.out_of_scope %}
+            <li>⚠️ {{ oos }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
   </div>
+  {% endif %}
 
-  <h2 class="safety-sheet">Safety Sheet</h2>
-  <img src="static/uploads/safety_sheet.jpg" style="max-width:100%; border:1px solid #ccc; border-radius:4px;">
+  {% if safety_sheet_path %}
+  <div class="section">
+    <h2>📋 Safety Sheet</h2>
+    <img src="/{{ safety_sheet_path }}" style="max-width:100%; border:1px solid #ccc; border-radius:6px;">
+  </div>
+  {% endif %}
 
-  <button class="generate-btn" onclick="submitPDF()">Generate Final PDF</button>
+  <form method="POST" action="/generate_pdf">
+    <button type="submit" class="button">Generate Final PDF</button>
+  </form>
 
   <script>
     const sliders = document.querySelectorAll(".slider");
@@ -120,12 +113,11 @@
         }
       });
       const avg = count ? Math.round(total / count) : 0;
-      totalCompletion.textContent = `${avg}%`;
+      totalCompletion.textContent = avg + "%";
     }
 
     sliders.forEach(slider => slider.addEventListener("input", updateTotal));
     checkboxes.forEach(box => box.addEventListener("change", updateTotal));
   </script>
-
 </body>
 </html>
