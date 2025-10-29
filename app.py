@@ -2,15 +2,14 @@ import os
 import json
 import uuid
 from flask import Flask, request, render_template, send_from_directory, redirect, url_for
-from werkzeug.utils import secure_filename
 from datetime import datetime
+from werkzeug.utils import secure_filename
 
 from utils.pdf_generator import create_daily_log_pdf
-from utils.compare_scope_vs_log import analyze_scope_vs_log
+from utils.compare_scope_vs_log import analyze_scope_vs_log, parse_scope_file
 
 app = Flask(__name__)
 
-# Folder paths
 UPLOAD_FOLDER = "static/uploads"
 GENERATED_FOLDER = "static/generated"
 SCOPE_FOLDER = "static/scope"
@@ -18,7 +17,6 @@ SAFETY_FOLDER = "static/safety"
 LOGO_FOLDER = "static/logo"
 SESSION_FOLDER = "session_data"
 
-# Create folders if not exist
 for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER, SAFETY_FOLDER, LOGO_FOLDER, SESSION_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
@@ -32,7 +30,6 @@ def form():
 
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
-    # Parse form fields
     form_data = {
         "project_name": request.form.get("project_name"),
         "client_name": request.form.get("client_name"),
@@ -44,56 +41,57 @@ def generate_form():
         "safety_notes": request.form.get("safety_notes")
     }
 
-    # Handle image uploads
-    image_paths = []
-    for img_file in request.files.getlist("images"):
-        if img_file and img_file.filename:
-            filename = secure_filename(img_file.filename)
-            save_path = os.path.join(UPLOAD_FOLDER, filename)
-            img_file.save(save_path)
-            image_paths.append(save_path)
-
-    # Handle scope file
-    scope_path = None
-    scope_file = request.files.get("scope_doc")
-    if scope_file and scope_file.filename:
-        filename = secure_filename(scope_file.filename)
-        scope_path = os.path.join(SCOPE_FOLDER, filename)
-        scope_file.save(scope_path)
-
-    # Handle safety sheet
-    safety_path = None
-    safety_file = request.files.get("safety_sheet")
-    if safety_file and safety_file.filename:
-        filename = secure_filename(safety_file.filename)
-        safety_path = os.path.join(SAFETY_FOLDER, filename)
-        safety_file.save(safety_path)
-
-    # Handle logo
-    logo_path = None
-    logo_file = request.files.get("logo")
-    if logo_file and logo_file.filename:
-        filename = secure_filename(logo_file.filename)
-        logo_path = os.path.join(LOGO_FOLDER, filename)
-        logo_file.save(logo_path)
-
-    # Run AI analysis (optional)
-    ai_enabled = "enable_ai" in request.form
-    ai_results = {}
-    if ai_enabled and scope_path:
-        ai_results = analyze_scope_vs_log(scope_path, form_data, image_paths)
-
-    # Save session data for preview
     session_id = str(uuid.uuid4())
+    image_paths = []
+    scope_path = None
+    safety_path = None
+    logo_path = None
+
+    # Handle multiple image uploads
+    if "images" in request.files:
+        for img in request.files.getlist("images"):
+            if img.filename:
+                filename = secure_filename(img.filename)
+                save_path = os.path.join(UPLOAD_FOLDER, f"{session_id}_{filename}")
+                img.save(save_path)
+                image_paths.append(save_path)
+
+    # Handle optional uploads
+    if "scope_doc" in request.files and request.files["scope_doc"].filename:
+        scope = request.files["scope_doc"]
+        filename = secure_filename(scope.filename)
+        scope_path = os.path.join(SCOPE_FOLDER, f"{session_id}_{filename}")
+        scope.save(scope_path)
+
+    if "safety_sheet" in request.files and request.files["safety_sheet"].filename:
+        safety = request.files["safety_sheet"]
+        filename = secure_filename(safety.filename)
+        safety_path = os.path.join(SAFETY_FOLDER, f"{session_id}_{filename}")
+        safety.save(safety_path)
+
+    if "logo" in request.files and request.files["logo"].filename:
+        logo = request.files["logo"]
+        filename = secure_filename(logo.filename)
+        logo_path = os.path.join(LOGO_FOLDER, f"{session_id}_{filename}")
+        logo.save(logo_path)
+
+    ai_results = {}
+    progress_report = {}
+    if request.form.get("enable_ai") and scope_path:
+        try:
+            ai_results = analyze_scope_vs_log(scope_path, form_data, image_paths)
+        except Exception as e:
+            ai_results = {"error": str(e)}
+
+    # Save session data
     session_data = {
-        "session_id": session_id,
         "form_data": form_data,
         "image_paths": image_paths,
         "logo_path": logo_path,
-        "safety_sheet_path": safety_path,
-        "weather_icon_path": None,
         "ai_results": ai_results,
-        "progress_report": None
+        "progress_report": progress_report,
+        "weather_icon_path": None,
+        "safety_sheet_path": safety_path
     }
 
     with open(os.path.join(SESSION_FOLDER, f"{session_id}.json"), "w") as f:
@@ -110,11 +108,14 @@ def preview(session_id):
     with open(json_path, "r") as f:
         data = json.load(f)
 
-    return render_template("preview.html", **data)
+    return render_template("preview.html", session_id=session_id, **data)
 
 @app.route("/submit_preview", methods=["POST"])
 def submit_preview():
     session_id = request.form.get("session_id")
+    if not session_id:
+        return "Missing session ID", 400
+
     json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
     if not os.path.exists(json_path):
         return "Session not found.", 404
@@ -122,7 +123,6 @@ def submit_preview():
     with open(json_path, "r") as f:
         data = json.load(f)
 
-    # Update AI results from form
     try:
         total_items = int(request.form.get("total_items", 0))
         scored_items = []
@@ -132,34 +132,34 @@ def submit_preview():
             match = f"match_{i}" in request.form
             scored_items.append({"scope": scope, "confidence": confidence, "match": match})
 
-        # Calculate updated completion %
-        matched = [item["confidence"] for item in scored_items if item["match"]]
-        completion = round(sum(matched) / len(scored_items), 1) if scored_items else 0
-
+        estimated_completion = sum(i["confidence"] for i in scored_items if i["match"]) / max(len(scored_items), 1)
         data["ai_results"] = {
-            "completion": completion,
+            "completion": round(estimated_completion, 1),
             "scored_items": scored_items,
             "out_of_scope": data.get("ai_results", {}).get("out_of_scope", [])
         }
     except Exception as e:
-        return f"Error processing AI updates: {str(e)}", 500
+        return f"Failed to process AI results: {str(e)}", 500
 
-    # Generate PDF
-    pdf_filename = f"{session_id}_daily_log.pdf"
-    save_path = os.path.join(GENERATED_FOLDER, pdf_filename)
+    # Save updated session data
+    with open(json_path, "w") as f:
+        json.dump(data, f)
+
+    pdf_name = f"{session_id}_daily_log.pdf"
+    save_path = os.path.join(GENERATED_FOLDER, pdf_name)
 
     create_daily_log_pdf(
-        data=data["form_data"],
-        image_paths=data["image_paths"],
-        logo_path=data["logo_path"],
-        ai_analysis=data["ai_results"],
+        data=data.get("form_data", {}),
+        image_paths=data.get("image_paths", []),
+        logo_path=data.get("logo_path"),
+        ai_analysis=data.get("ai_results"),
         progress_report=data.get("progress_report"),
         save_path=save_path,
         weather_icon_path=data.get("weather_icon_path"),
         safety_sheet_path=data.get("safety_sheet_path")
     )
 
-    return redirect(url_for("serve_pdf", filename=pdf_filename))
+    return redirect(url_for("serve_pdf", filename=pdf_name))
 
 @app.route("/generated/<filename>")
 def serve_pdf(filename):
