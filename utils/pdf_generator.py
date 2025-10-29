@@ -1,121 +1,146 @@
 import os
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import inch
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.pdfgen.canvas import Canvas
+from PyPDF2 import PdfReader
 from PIL import Image as PILImage, ExifTags
 
-def fix_orientation_and_compress(image_path):
+def fix_image_orientation(img_path):
     try:
-        img = PILImage.open(image_path)
-        img = img.convert("RGB")
+        img = PILImage.open(img_path)
+        for orientation in ExifTags.TAGS.keys():
+            if ExifTags.TAGS[orientation] == 'Orientation':
+                break
+        exif = img._getexif()
+        if exif is not None:
+            orientation_value = exif.get(orientation, None)
+            if orientation_value == 3:
+                img = img.rotate(180, expand=True)
+            elif orientation_value == 6:
+                img = img.rotate(270, expand=True)
+            elif orientation_value == 8:
+                img = img.rotate(90, expand=True)
+            img.save(img_path)
+            img.close()
+    except Exception as e:
+        print(f"Orientation fix failed: {e}")
 
-        try:
-            for orientation in ExifTags.TAGS.keys():
-                if ExifTags.TAGS[orientation] == 'Orientation':
-                    break
-            exif = img._getexif()
-            if exif is not None:
-                orientation_value = exif.get(orientation)
-                if orientation_value == 3:
-                    img = img.rotate(180, expand=True)
-                elif orientation_value == 6:
-                    img = img.rotate(270, expand=True)
-                elif orientation_value == 8:
-                    img = img.rotate(90, expand=True)
-        except Exception:
-            pass
+def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_report,
+                         save_path, weather_icon_path=None, safety_sheet_path=None):
 
-        img.thumbnail((800, 800))
-        temp_path = image_path.replace(".jpg", "_compressed.jpg").replace(".png", "_compressed.png")
-        img.save(temp_path, quality=70)
-        return temp_path
-    except Exception:
-        return image_path
-
-def create_daily_log_pdf(
-    data,
-    image_paths,
-    logo_path,
-    ai_analysis,
-    progress_report,
-    save_path,
-    weather_icon_path=None,
-    safety_sheet_path=None
-):
     doc = SimpleDocTemplate(save_path, pagesize=letter)
     elements = []
     styles = getSampleStyleSheet()
-    normal = styles["Normal"]
-    title = styles["Title"]
-    header_style = styles["Heading2"]
+    styles.add(ParagraphStyle(name='Bold', fontName='Helvetica-Bold'))
 
-    # Logo
+    # Page 1: Title and Info
     if logo_path and os.path.exists(logo_path):
+        fix_image_orientation(logo_path)
         elements.append(Image(logo_path, width=120, height=50))
-        elements.append(Spacer(1, 12))
 
-    # Header
-    elements.append(Paragraph("<b>DAILY LOG</b>", title))
+    elements.append(Paragraph("<b>DAILY LOG</b>", styles["Title"]))
     elements.append(Spacer(1, 12))
-    for key in ["project_name", "client_name", "location", "date", "weather"]:
+
+    for key in ["Project", "Date", "Location", "Weather"]:
         if key in data:
-            label = key.replace("_", " ").title()
-            elements.append(Paragraph(f"<b>{label}:</b> {data[key]}", normal))
+            elements.append(Paragraph(f"<b>{key}:</b> {data[key]}", styles["Normal"]))
     elements.append(Spacer(1, 12))
 
-    # Work, Crew, Safety Notes
-    for section in ["work_done", "crew_notes", "safety_notes"]:
-        if section in data:
-            elements.append(Paragraph(f"<b>{section.replace('_', ' ').title()}</b>", header_style))
-            items = data[section].split("\n")
-            for item in items:
-                elements.append(Paragraph(f"- {item.strip()}", normal))
+    for section in ["Work Done", "Crew Notes", "Safety Notes"]:
+        if section in data and data[section].strip():
+            elements.append(Paragraph(f"<b>{section}:</b>", styles["Bold"]))
+            elements.append(Paragraph(data[section], styles["Normal"]))
             elements.append(Spacer(1, 12))
 
-    # Jobsite Photos
-    if image_paths:
-        elements.append(PageBreak())
-        elements.append(Paragraph("Jobsite Photos", header_style))
-        for img_path in image_paths:
-            fixed_path = fix_orientation_and_compress(img_path)
-            elements.append(Image(fixed_path, width=4*inch, height=3*inch))
-            elements.append(Spacer(1, 6))
+    elements.append(PageBreak())
 
-    # AI Scope Analysis
+    # Page 2: Photos Grid (6 per page)
+    elements.append(Paragraph("<b>Job Site Photos</b>", styles["Heading2"]))
+    elements.append(Spacer(1, 12))
+
+    photo_rows = []
+    row = []
+
+    for idx, path in enumerate(image_paths):
+        if os.path.exists(path):
+            fix_image_orientation(path)
+            row.append(Image(path, width=250, height=150))
+            if len(row) == 2:
+                photo_rows.append(row)
+                row = []
+            if len(photo_rows) == 3:
+                elements.append(Table(photo_rows, colWidths=[270, 270]))
+                elements.append(PageBreak())
+                photo_rows = []
+
+    if row:
+        photo_rows.append(row)
+    if photo_rows:
+        elements.append(Table(photo_rows, colWidths=[270, 270]))
+        elements.append(PageBreak())
+
+    # Page 3: AI Scope Comparison
+    elements.append(Paragraph("<b>AI Scope Analysis</b>", styles["Heading2"]))
+    elements.append(Spacer(1, 12))
+
+    try:
+        percent = int(round(progress_report.get("completion", 0)))
+    except:
+        percent = 0
+
+    elements.append(Paragraph(f"<b>Completion:</b> {percent}%", styles["Normal"]))
+    elements.append(Spacer(1, 12))
+
     if ai_analysis:
-        elements.append(PageBreak())
-        elements.append(Paragraph("AI Scope Analysis", header_style))
-        try:
-            completion = ai_analysis.get("completion", 0)
-            elements.append(Paragraph(f"<b>Total Completion:</b> {round(completion)}%", normal))
-            elements.append(Spacer(1, 6))
+        for item in ai_analysis.get("scored_items", []):
+            score = item.get("confidence", 0)
+            label = item.get("scope", "")
+            match_icon = "✅" if item.get("match") else "❌"
+            try:
+                score_int = int(round(score))
+            except:
+                score_int = 0
+            elements.append(Paragraph(f"{match_icon} {label} – {score_int}%", styles["Normal"]))
+        elements.append(Spacer(1, 12))
 
-            for item in ai_analysis.get("scored_items", []):
-                text = item.get("scope", "—")
-                matched = item.get("match", False)
-                confidence = item.get("confidence", 0)
-                symbol = "✅" if matched else "❌"
-                percent = f"{round(confidence)}%"
-                elements.append(Paragraph(f"{symbol} {text} — {percent}", normal))
+        # Filter out short out-of-scope lines
+        out_items = ai_analysis.get("out_of_scope", [])
+        filtered = [line for line in out_items if len(line.split()) > 4]
+        if filtered:
+            elements.append(Paragraph("<b>Out-of-Scope Items:</b>", styles["Bold"]))
+            for line in filtered:
+                elements.append(Paragraph(f"• {line}", styles["Normal"]))
+            elements.append(Spacer(1, 12))
 
-            if ai_analysis.get("out_of_scope"):
-                elements.append(Spacer(1, 12))
-                elements.append(Paragraph("<b>Flagged as Out-of-Scope:</b>", normal))
-                for oos in ai_analysis["out_of_scope"]:
-                    elements.append(Paragraph(f"⚠️ {oos}", normal))
+    elements.append(PageBreak())
 
-        except Exception as e:
-            elements.append(Paragraph(f"⚠️ Error rendering AI scope analysis: {str(e)}", normal))
-
-    # Safety Sheet
+    # Page 4: Safety Sheet
     if safety_sheet_path and os.path.exists(safety_sheet_path):
-        elements.append(PageBreak())
-        elements.append(Paragraph("Safety Sheet", header_style))
-        if safety_sheet_path.lower().endswith((".jpg", ".jpeg", ".png")):
-            elements.append(Image(safety_sheet_path, width=5.5*inch, height=7*inch))
-        else:
-            elements.append(Paragraph(f"Attached: {os.path.basename(safety_sheet_path)}", normal))
+        elements.append(Paragraph("<b>Safety Sheet</b>", styles["Heading2"]))
+        if safety_sheet_path.endswith(".pdf"):
+            try:
+                reader = PdfReader(safety_sheet_path)
+                for page in reader.pages:
+                    text = page.extract_text() or "Page unreadable"
+                    elements.append(Paragraph(text, styles["Normal"]))
+            except Exception as e:
+                elements.append(Paragraph(f"Error loading safety sheet PDF: {e}", styles["Normal"]))
+        elif safety_sheet_path.lower().endswith((".jpg", ".jpeg", ".png")):
+            fix_image_orientation(safety_sheet_path)
+            elements.append(Image(safety_sheet_path, width=500, height=350))
 
-    # Build PDF
-    doc.build(elements)
+    # Compile PDF
+    doc.build(elements, onFirstPage=_footer, onLaterPages=_footer)
+
+def _footer(canvas: Canvas, doc):
+    footer_text = "Confidential – Do Not Duplicate without written consent from BAINS Dev Comm"
+    canvas.saveState()
+    canvas.setFont('Helvetica', 8)
+    canvas.setFillColor(colors.grey)
+    canvas.drawString(30, 30, footer_text)
+    canvas.drawRightString(letter[0] - 30, 30, f"Page {doc.page}")
+    canvas.restoreState()
