@@ -43,7 +43,7 @@ def preview(session_id):
 
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
-    session_id = request.args.get("session_id")
+    session_id = request.form.get("session_id") or request.args.get("session_id")
     if not session_id:
         return "Missing session ID", 400
 
