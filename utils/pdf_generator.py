@@ -1,9 +1,7 @@
-# ✅ pdf_generator.py (rotate + compress)
 import os
-from PIL import Image as PILImage
+from PIL import Image as PILImage, ExifTags
 from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from PyPDF2 import PdfReader
@@ -12,11 +10,29 @@ def fix_orientation_and_compress(image_path):
     try:
         img = PILImage.open(image_path)
         img = img.convert("RGB")
-        img.thumbnail((800, 800))  # Resize to compress
+
+        # Fix EXIF orientation
+        try:
+            for orientation in ExifTags.TAGS.keys():
+                if ExifTags.TAGS[orientation] == "Orientation":
+                    break
+            exif = dict(img._getexif().items())
+            orientation_val = exif.get(orientation)
+            if orientation_val == 3:
+                img = img.rotate(180, expand=True)
+            elif orientation_val == 6:
+                img = img.rotate(270, expand=True)
+            elif orientation_val == 8:
+                img = img.rotate(90, expand=True)
+        except:
+            pass  # skip if no EXIF
+
+        # Compress
+        img.thumbnail((800, 800))
         temp_path = image_path.replace(".jpg", "_compressed.jpg").replace(".png", "_compressed.png")
         img.save(temp_path, quality=70)
         return temp_path
-    except Exception:
+    except:
         return image_path
 
 def create_daily_log_pdf(
@@ -30,12 +46,14 @@ def create_daily_log_pdf(
     safety_sheet_path=None
 ):
     doc = SimpleDocTemplate(save_path, pagesize=letter)
-    elements = []
     styles = getSampleStyleSheet()
+    elements = []
 
+    # Logo
     if logo_path and os.path.exists(logo_path):
         elements.append(Image(logo_path, width=100, height=50))
 
+    # Title and metadata
     elements.append(Paragraph("<b>DAILY LOG</b>", styles["Title"]))
     elements.append(Spacer(1, 12))
     for field in ["project_name", "client_name", "location", "date", "weather"]:
@@ -43,6 +61,7 @@ def create_daily_log_pdf(
         elements.append(Paragraph(f"<b>{field.replace('_', ' ').title()}:</b> {val}", styles["Normal"]))
         elements.append(Spacer(1, 6))
 
+    # Work details
     elements.append(Spacer(1, 12))
     elements.append(Paragraph("<b>Work Done</b>", styles["Heading2"]))
     elements.append(Paragraph(data.get("work_done", ""), styles["Normal"]))
@@ -54,14 +73,15 @@ def create_daily_log_pdf(
     elements.append(Paragraph(data.get("safety_notes", ""), styles["Normal"]))
     elements.append(PageBreak())
 
+    # 📸 Jobsite Photos (2 per row)
     if image_paths:
         elements.append(Paragraph("<b>Jobsite Photos</b>", styles["Heading2"]))
         elements.append(Spacer(1, 12))
         row = []
         for i, img in enumerate(image_paths):
             if os.path.exists(img):
-                compressed = fix_orientation_and_compress(img)
-                row.append(Image(compressed, width=2.5*inch, height=2*inch))
+                fixed = fix_orientation_and_compress(img)
+                row.append(Image(fixed, width=2.5*inch, height=2*inch))
                 if len(row) == 2:
                     elements.append(Table([row], colWidths=[2.5*inch]*2))
                     elements.append(Spacer(1, 12))
@@ -70,6 +90,7 @@ def create_daily_log_pdf(
             elements.append(Table([row], colWidths=[2.5*inch]*2))
         elements.append(PageBreak())
 
+    # 🤖 AI Scope Analysis
     if progress_report:
         elements.append(Paragraph("<b>AI Scope Analysis</b>", styles["Heading2"]))
         elements.append(Spacer(1, 6))
@@ -87,20 +108,26 @@ def create_daily_log_pdf(
                 elements.append(Spacer(1, 6))
         elements.append(PageBreak())
 
+    # ✅ Safety Sheet
     if safety_sheet_path and os.path.exists(safety_sheet_path):
         ext = os.path.splitext(safety_sheet_path)[1].lower()
         elements.append(Paragraph("<b>Safety Sheet</b>", styles["Heading2"]))
         elements.append(Spacer(1, 6))
 
         if ext == ".pdf":
-            reader = PdfReader(safety_sheet_path)
-            page_text = reader.pages[0].extract_text()
-            elements.append(Paragraph(page_text or "First page could not be parsed.", styles["Normal"]))
+            try:
+                reader = PdfReader(safety_sheet_path)
+                page_text = reader.pages[0].extract_text()
+                elements.append(Paragraph(page_text or "First page could not be parsed.", styles["Normal"]))
+            except:
+                elements.append(Paragraph("Could not parse PDF safety sheet.", styles["Normal"]))
         elif ext in [".jpg", ".jpeg", ".png"]:
             elements.append(Image(safety_sheet_path, width=5*inch, height=4*inch))
         else:
             elements.append(Paragraph("Unsupported safety sheet format.", styles["Normal"]))
 
+    # Footer
     elements.append(Spacer(1, 30))
     elements.append(Paragraph("Confidential – Do Not Duplicate without written consent from BAINS Dev Comm", styles["Normal"]))
+
     doc.build(elements)
