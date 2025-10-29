@@ -1,105 +1,79 @@
 import os
 import re
+import json
+import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
 from fuzzywuzzy import fuzz
 
-model = SentenceTransformer('all-MiniLM-L6-v2')
+model = SentenceTransformer("all-MiniLM-L6-v2")
 
-SCOPE_DIR = "static/scope"
-EXCLUSION_PHRASES = [
-    "no ", "not ", "do not", "does not", "will not", "excluded", "without",
-    "doesn't", "isn't", "wasn't", "aren't", "weren't", "cannot", "never"
-]
+def clean_text(text):
+    return re.sub(r"[^\x00-\x7F]+", "", text.strip())
 
-def clean_scope_text(text):
-    text = re.sub(r"[^\x00-\x7F]+", "", text).strip()
-    if len(text) < 5:
-        return ""
-    if text.lower().startswith((
-        "client", "project", "date", "prepared by", "include", "scope", "description", "location"
-    )):
-        return ""
-    if any(phrase in text.lower() for phrase in EXCLUSION_PHRASES):
-        return ""
-    return text
+def embed_texts(texts):
+    return model.encode([clean_text(t) for t in texts], convert_to_numpy=True)
 
-def parse_scope_file(file_path):
-    ext = os.path.splitext(file_path)[1].lower()
-    if ext == ".pdf":
-        import fitz
-        doc = fitz.open(file_path)
-        text = "\n".join([page.get_text() for page in doc])
-        doc.close()
-        return text
-    elif ext == ".docx":
-        from docx import Document
-        doc = Document(file_path)
-        return "\n".join([p.text for p in doc.paragraphs])
-    elif ext in [".xls", ".xlsx"]:
-        import pandas as pd
-        df = pd.read_excel(file_path, engine="openpyxl")
-        return df.to_string(index=False)
-    elif ext == ".txt":
-        with open(file_path, "r", encoding="utf-8") as f:
-            return f.read()
-    return ""
+def analyze_scope_vs_log(scope_file_path, form_data, image_paths):
+    try:
+        with open(scope_file_path, "r", encoding="utf-8") as f:
+            scope_lines = [clean_text(line) for line in f if len(line.strip()) > 4]
+    except Exception as e:
+        return {"error": f"Could not read scope file: {str(e)}"}
 
-def load_scope_for_project(project_id):
-    scope_path = os.path.join(SCOPE_DIR, f"scope_{project_id}.txt")
-    if not os.path.exists(scope_path):
-        return []
-    with open(scope_path, "r", encoding="utf-8") as f:
-        return [clean_scope_text(line) for line in f.readlines() if clean_scope_text(line)]
+    combined_log = " ".join([
+        form_data.get("work_done", ""),
+        form_data.get("crew_notes", ""),
+        form_data.get("safety_notes", "")
+    ]).strip()
 
-def analyze_scope_vs_log(scope_items, daily_log_data, threshold=0.65):
-    work_done = daily_log_data.get("work_done", "")
-    crew_notes = daily_log_data.get("crew_notes", "")
-    safety_notes = daily_log_data.get("safety_notes", "")
-    full_log = f"{work_done}\n{crew_notes}\n{safety_notes}".strip()
+    log_embedding = embed_texts([combined_log])
+    scope_embeddings = embed_texts(scope_lines)
 
-    if not scope_items or not full_log:
-        return {
-            "completion": 0,
-            "scored_items": [],
-            "out_of_scope": ["⚠️ Missing scope items or log data."]
-        }
+    # Ensure log embedding is 2D
+    if log_embedding.ndim == 1:
+        log_embedding = log_embedding.reshape(1, -1)
 
-    log_embedding = model.encode([full_log])  # shape: [1, 384]
-    scope_embeddings = model.encode(scope_items)  # shape: [N, 384]
-
-    matched = 0
     scored_items = []
+    out_of_scope = []
 
-    for item, scope_embed in zip(scope_items, scope_embeddings):
-        scope_embed_2d = scope_embed.reshape(1, -1)
-        cosine_score = cosine_similarity(scope_embed_2d, log_embedding)[0][0]
-        fuzzy_score = fuzz.partial_ratio(item.lower(), full_log.lower()) / 100
-        final_score = max(cosine_score, fuzzy_score)
-        is_match = final_score >= threshold
+    for i, line in enumerate(scope_lines):
+        scope_embed = scope_embeddings[i].reshape(1, -1)
+        try:
+            cosine_score = float(cosine_similarity(scope_embed, log_embedding)[0][0])
+        except Exception as e:
+            cosine_score = 0.0
 
-        if is_match:
-            matched += 1
+        fuzzy_score = fuzz.partial_ratio(line.lower(), combined_log.lower()) / 100.0
+        hybrid_score = (cosine_score + fuzzy_score) / 2.0
 
+        match = hybrid_score > 0.45
         scored_items.append({
-            "scope": item,
-            "confidence": round(final_score * 100, 1),
-            "match": is_match
+            "scope": line,
+            "confidence": int(round(hybrid_score * 100)),
+            "match": match
         })
 
-    known_ignore = ["ppe", "tailgate", "safety", "meeting"]
-    log_lines = [line.strip() for line in full_log.split("\n") if line.strip()]
-    out_of_scope = []
-    for line in log_lines:
-        if any(kw in line.lower() for kw in known_ignore):
-            continue
-        if all(fuzz.partial_ratio(line.lower(), item.lower()) < 60 for item in scope_items):
+        if not match:
             out_of_scope.append(line)
 
-    percent_complete = round((matched / len(scope_items)) * 100, 1) if scope_items else 0
+    # Estimated completion only includes matched items
+    matched = [item["confidence"] for item in scored_items if item["match"]]
+    completion = round(sum(matched) / len(scope_lines), 1) if scope_lines else 0
+
+    # ✅ Bonus Logging for Debugging
+    print(f"\n--- Scope AI Debug ---")
+    print(f"Total Scope Items: {len(scope_lines)}")
+    print(f"Log text (first 120 chars): {combined_log[:120]}")
+    print(f"Log embedding shape: {log_embedding.shape}")
+    print(f"First scope line: {scope_lines[0] if scope_lines else 'None'}")
+    print(f"First cosine similarity: {scored_items[0]['confidence'] if scored_items else 'N/A'}%")
+    print(f"Estimated Completion: {completion}%")
+    print(f"Out-of-scope count: {len(out_of_scope)}")
+    print(f"----------------------\n")
 
     return {
-        "completion": percent_complete,
+        "completion": completion,
         "scored_items": scored_items,
-        "out_of_scope": out_of_scope[:10]
+        "out_of_scope": out_of_scope
     }
