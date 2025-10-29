@@ -67,7 +67,7 @@
       <div class="score">
         <span class="{{ 'match' if item.matched else 'no-match' }}">
           {{ "✅" if item.matched else "❌" }}
-          {{ item.item }} — {{ (item.confidence * 100)|round|int }}%
+          {{ item.scope }} — {{ (item.confidence)|round|int }}%
         </span>
         <input type="range" min="0" max="100" value="{{ (item.confidence * 100)|round|int }}" class="slider">
         <label><input type="checkbox" class="matched" {% if item.matched %}checked{% endif %}> Matched</label>
