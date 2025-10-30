@@ -80,7 +80,7 @@ def create_daily_log_pdf(
             elements.append(Table(photo_table, hAlign='LEFT'))
             elements.append(PageBreak())
 
-        # --- Page 3: AI Scope Analysis with Images ---
+               # --- Page 3: AI Scope Analysis with Images ---
         if ai_analysis:
             add_paragraph("🤖 AI Scope Comparison", "Heading2")
             completion = ai_analysis.get("completion", 0)
@@ -93,11 +93,15 @@ def create_daily_log_pdf(
                 match = item.get("match", False)
                 matched_image = item.get("matched_image")
 
-                text_block = f"<b>Scope:</b> {scope}<br/><b>Confidence:</b> {conf}%<br/><b>Match:</b> {'✅' if match else '❌'}"
+                text_block = (
+                    f"<b>Scope:</b> {scope}<br/>"
+                    f"<b>Confidence:</b> {conf}%<br/>"
+                    f"<b>Match:</b> {'✅' if match else '❌'}"
+                )
                 add_paragraph(text_block)
                 elements.append(Spacer(1, 6))
 
-        if match and matched_image:
+                if match and matched_image:
                     possible_paths = [
                         os.path.join("static/uploads", matched_image),
                         os.path.join("static/uploads", matched_image.replace("_compressed", "")),
@@ -106,7 +110,11 @@ def create_daily_log_pdf(
                     for path in possible_paths:
                         if os.path.exists(path):
                             try:
-                                img = Image(fix_orientation_and_compress(path), width=2.5*inch, height=2.5*inch)
+                                img = Image(
+                                    fix_orientation_and_compress(path),
+                                    width=2.5 * inch,
+                                    height=2.5 * inch
+                                )
                                 elements.append(img)
                                 image_found = True
                                 break
@@ -118,6 +126,14 @@ def create_daily_log_pdf(
                     add_paragraph('<font color="gray">(No matched image provided)</font>')
                 elements.append(Spacer(1, 12))
 
+            # Out-of-scope
+            out_items = ai_analysis.get("out_of_scope", [])
+            if out_items:
+                add_paragraph("<b>Out-of-Scope Items:</b>", "Heading3")
+                for line in out_items:
+                    add_paragraph(f"<font color='red'>• {line}</font>")
+
+            elements.append(PageBreak())
             # Out-of-scope
             out_items = ai_analysis.get("out_of_scope", [])
             if out_items:
