@@ -43,17 +43,17 @@
     {% if image_paths %}
     <div class="section">
       <h2>📷 Job Site Photos</h2>
-      <form action="/update_images/{{ session_id }}" method="POST" enctype="multipart/form-data">
+      <form id="photoForm" action="/update_images/{{ session_id }}" method="POST" enctype="multipart/form-data">
         <div class="images">
           {% for img_path in image_paths %}
           <div class="image-wrapper">
             <img src="/{{ img_path }}" alt="Job Site Photo" onclick="zoomImage(this)">
-            <button type="submit" formaction="/delete_image/{{ session_id }}" formmethod="POST" class="delete-btn" name="delete_image" value="{{ img_path }}" title="Delete">×</button>
+            <button class="delete-btn" type="submit" name="delete_image" value="{{ img_path }}" title="Delete">×</button>
           </div>
           {% endfor %}
         </div>
         <br>
-        <label>Add More Photos: <input type="file" name="new_images" multiple onchange="this.form.submit()"></label>
+        <label>Add More Photos: <input type="file" name="new_images" multiple onchange="document.getElementById('photoForm').submit();"></label>
       </form>
     </div>
     {% endif %}
