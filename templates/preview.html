@@ -1,82 +1,157 @@
-<!-- ✅ preview.html – Stable, Lazy, Download PDF if available -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Preview Daily Log</title>
+  <title>Daily Log Preview</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    img.jobsite { width: 300px; height: auto; margin: 10px; border: 1px solid #ccc; }
-    .scope-item { border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; }
-    .scope-item label { display: block; margin: 5px 0; }
-    .hidden { display: none; }
-    .download-link { background: #4caf50; color: white; padding: 10px; text-decoration: none; border-radius: 5px; margin-top: 10px; display: inline-block; }
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f0f4f7; }
+    h1, h2 { color: #2c3e50; }
+    .section { margin-bottom: 30px; padding: 20px; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .label { font-weight: bold; color: #34495e; display: block; margin-top: 10px; }
+    .images { display: flex; flex-wrap: wrap; gap: 10px; }
+    .images img { width: 120px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: zoom-in; }
+    .score { margin: 12px 0; }
+    .out-of-scope { color: #c0392b; }
+    .button { margin-top: 30px; padding: 14px 28px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    .button:hover { background: #2980b9; }
+    .dropdown { margin-top: 6px; font-size: 14px; }
   </style>
 </head>
 <body>
-  <h1>📝 Preview Daily Log</h1>
-
-  {% if pdf_exists %}
-    <p><a href="/generated/{{ pdf_filename }}" class="download-link" target="_blank">📄 Download Previous PDF</a></p>
-  {% endif %}
-
+  <h1>📋 Daily Log Preview</h1>
   <form action="/submit_preview" method="POST">
     <input type="hidden" name="session_id" value="{{ session_id }}">
 
-    <h2>🗂 Project Info</h2>
-    <ul>
-      {% for k, v in form_data.items() %}
-        <li><strong>{{ k.replace('_', ' ').title() }}</strong>: {{ v }}</li>
-      {% endfor %}
-    </ul>
-
-    <h2>📸 Jobsite Images</h2>
-    <div id="jobsite_photos">
-      {% for img in image_paths %}
-        <img loading="lazy" class="jobsite" src="/{{ img }}">
-      {% endfor %}
+    <div class="section">
+      <h2>📌 Project Info</h2>
+      <div><span class="label">Project:</span> {{ form_data.project_name }}</div>
+      <div><span class="label">Client:</span> {{ form_data.client_name or "—" }}</div>
+      <div><span class="label">Location:</span> {{ form_data.location }}</div>
+      <div><span class="label">Date:</span> {{ form_data.date }}</div>
+      <div><span class="label">Weather:</span> {{ form_data.weather or "Not Provided" }}</div>
     </div>
 
-    <h2>🔍 AI Scope Analysis</h2>
-    {% if ai_results and ai_results.scored_items %}
-      <input type="hidden" name="total_items" value="{{ ai_results.scored_items | length }}">
-      {% for i, item in enumerate(ai_results.scored_items) %}
-        <div class="scope-item {{ 'hidden' if i >= 10 }}" data-scope-index="{{ i }}">
-          <label>Scope:<br>
-            <input type="text" name="scope_{{ i }}" value="{{ item.scope }}" readonly>
-          </label>
-          <label>Match:
-            <input type="checkbox" name="match_{{ i }}" {% if item.match %}checked{% endif %}>
-          </label>
-          <label>Confidence:
-            <input type="range" name="confidence_{{ i }}" min="0" max="100" value="{{ item.confidence }}">
-          </label>
-          {% if item.matched_image %}
-            <img loading="lazy" class="jobsite" src="/{{ item.matched_image }}">
-            <input type="hidden" name="matched_image_{{ i }}" value="{{ item.matched_image }}">
-          {% endif %}
-        </div>
-      {% endfor %}
-      {% if ai_results.scored_items | length > 10 %}
-        <button type="button" onclick="showMoreScope()">Show More</button>
-      {% endif %}
-    {% else %}
-      <p>Click "Run AI Scope Match" to analyze against your uploaded scope.</p>
+    <div class="section">
+      <h2>🛠️ Work Log</h2>
+      <div><span class="label">Work Done:</span> {{ form_data.work_done }}</div>
+      <div><span class="label">Crew Notes:</span> {{ form_data.crew_notes or "—" }}</div>
+      <div><span class="label">Safety Notes:</span> {{ form_data.safety_notes or "—" }}</div>
+    </div>
+
+    {% if image_paths %}
+    <div class="section">
+      <h2>📷 Job Site Photos</h2>
+      <div class="images">
+        {% for img_path in image_paths %}
+          <img src="/{{ img_path }}" alt="Job Site Photo" onclick="zoomImage(this)">
+        {% endfor %}
+      </div>
+    </div>
     {% endif %}
 
-    <br><br>
-    <button type="submit">✅ Submit and Generate PDF</button>
+    <div class="section">
+      <h2>🤖 AI Scope Comparison</h2>
+      <div><strong>Estimated Completion:</strong> <span id="completion-val">{{ ai_results.completion or 0 }}</span>%</div>
+      <hr>
+      {% for item in ai_results.scored_items %}
+        <div class="score">
+          <input type="checkbox" name="match_{{ loop.index0 }}" class="matchbox" {% if item.match %}checked{% endif %}>
+          <label>
+            {{ item.scope }} — 
+            <input type="range" class="slider" name="confidence_{{ loop.index0 }}" min="0" max="100" step="1" value="{{ item.confidence }}">
+            <span class="conf_val">{{ item.confidence }}</span>%
+          </label>
+          <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
+
+          <!-- 🔄 Dropdown to override matched image -->
+          <div class="dropdown">
+            Matched Image:
+            <select name="matched_image_{{ loop.index0 }}">
+              <option value="">(No match)</option>
+              {% for img_path in image_paths %}
+                {% set filename = img_path.split('/')[-1] %}
+                <option value="{{ filename }}" {% if item.matched_image == filename %}selected{% endif %}>{{ filename }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      {% endfor %}
+      <input type="hidden" name="total_items" value="{{ ai_results.scored_items|length }}">
+    </div>
+
+    {% if ai_results.out_of_scope %}
+    <div class="section out-of-scope">
+      <strong>Out-of-Scope Items:</strong>
+      <ul>
+        {% for line in ai_results.out_of_scope if line|length > 4 %}
+          <li>{{ line }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <button type="submit" class="button">✅ Generate Final PDF</button>
   </form>
 
-  <br>
-  <form action="/analyze_scope/{{ session_id }}" method="post">
-    <button type="submit">🧠 Run AI Scope Match</button>
-  </form>
+<script>
+  const sliders = document.querySelectorAll(".slider");
+  const checkboxes = document.querySelectorAll(".matchbox");
+  const completionDisplay = document.getElementById("completion-val");
 
-  <script>
-    function showMoreScope() {
-      document.querySelectorAll('.scope-item.hidden').forEach(el => el.classList.remove('hidden'));
+  function updateCompletion() {
+    let total = 0;
+    let count = 0;
+    sliders.forEach((slider, i) => {
+      if (checkboxes[i].checked) {
+        total += parseInt(slider.value);
+        count++;
+      }
+    });
+    const percent = count ? Math.round(total / count) : 0;
+    completionDisplay.textContent = percent;
+  }
+
+  sliders.forEach(slider => {
+    slider.addEventListener("input", e => {
+      e.target.nextElementSibling.textContent = e.target.value;
+      updateCompletion();
+    });
+  });
+  checkboxes.forEach(cb => cb.addEventListener("change", updateCompletion));
+  updateCompletion();
+
+  function zoomImage(img) {
+    const isZoomed = img.classList.contains("zoomed");
+    document.querySelectorAll(".zoomed").forEach(el => el.classList.remove("zoomed"));
+    if (!isZoomed) img.classList.add("zoomed");
+  }
+
+  document.addEventListener("keydown", e => {
+    if (e.key === 'Escape') document.querySelectorAll(".zoomed").forEach(el => el.classList.remove("zoomed"));
+  });
+
+  document.addEventListener("click", e => {
+    if (!e.target.classList.contains("zoomed") && !e.target.closest(".images")) {
+      document.querySelectorAll(".zoomed").forEach(el => el.classList.remove("zoomed"));
     }
-  </script>
+  });
+</script>
+
+<style>
+  .zoomed {
+    width: auto !important;
+    max-width: 90vw;
+    max-height: 80vh;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(1.2);
+    z-index: 9999;
+    border: 4px solid #fff;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    background: #fff;
+    cursor: zoom-out;
+  }
+</style>
 </body>
 </html>
