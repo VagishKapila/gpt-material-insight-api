@@ -1,74 +1,59 @@
-# scope_parser.py
-# Phase 2B: Scope Parser for PDF, DOCX, XLSX, PPTX formats
-
+# utils/scope_parser.py
 import os
-import json
-import fitz  # PyMuPDF
 import docx
+import fitz  # PyMuPDF
 import openpyxl
-from pptx import Presentation
-from typing import List
+import pptx
 
-def clean_text(text: str) -> List[str]:
-    lines = [line.strip("-• ") for line in text.split("\n") if len(line.strip()) > 5]
-    return list(dict.fromkeys(lines))  # Remove duplicates, preserve order
+def parse_txt(file_path):
+    with open(file_path, 'r', encoding='utf-8') as f:
+        return [line.strip() for line in f if line.strip()]
 
-def extract_pdf_scope(path: str) -> List[str]:
-    text = ""
-    with fitz.open(path) as doc:
-        for page in doc:
-            text += page.get_text()
-    return clean_text(text)
+def parse_pdf(file_path):
+    doc = fitz.open(file_path)
+    lines = []
+    for page in doc:
+        lines.extend(page.get_text().splitlines())
+    return [line.strip() for line in lines if line.strip()]
 
-def extract_docx_scope(path: str) -> List[str]:
-    doc = docx.Document(path)
-    full_text = "\n".join(p.text for p in doc.paragraphs)
-    return clean_text(full_text)
+def parse_docx(file_path):
+    doc = docx.Document(file_path)
+    return [para.text.strip() for para in doc.paragraphs if para.text.strip()]
 
-def extract_xlsx_scope(path: str) -> List[str]:
-    wb = openpyxl.load_workbook(path)
-    text = ""
-    for sheet in wb.worksheets:
-        for row in sheet.iter_rows(values_only=True):
-            for cell in row:
-                if cell and isinstance(cell, str) and len(cell.strip()) > 3:
-                    text += str(cell) + "\n"
-    return clean_text(text)
+def parse_xlsx(file_path):
+    wb = openpyxl.load_workbook(file_path)
+    sheet = wb.active
+    lines = []
+    for row in sheet.iter_rows(values_only=True):
+        for cell in row:
+            if cell and isinstance(cell, str):
+                lines.append(cell.strip())
+    return lines
 
-def extract_pptx_scope(path: str) -> List[str]:
-    prs = Presentation(path)
-    text = ""
+def parse_pptx(file_path):
+    prs = pptx.Presentation(file_path)
+    lines = []
     for slide in prs.slides:
         for shape in slide.shapes:
             if hasattr(shape, "text"):
-                text += shape.text + "\n"
-    return clean_text(text)
+                lines.append(shape.text.strip())
+    return [line for line in lines if line]
 
-def parse_scope_file(file_path: str, project_id: str) -> dict:
-    ext = os.path.splitext(file_path)[1].lower()
-    if ext.endswith(".pdf"):
-        checklist = extract_pdf_scope(file_path)
-    elif ext.endswith(".docx"):
-        checklist = extract_docx_scope(file_path)
-    elif ext.endswith(".xlsx"):
-        checklist = extract_xlsx_scope(file_path)
-    elif ext.endswith(".pptx"):
-        checklist = extract_pptx_scope(file_path)
-    else:
-        raise ValueError("Unsupported scope file format")
-
-    # Filter out generic items
-    ignore_phrases = ["project management", "superintendent", "contracts administration", "cleanup"]
-    checklist = [item for item in checklist if not any(x.lower() in item.lower() for x in ignore_phrases)]
-
-    result = {
-        "project_id": project_id,
-        "checklist": checklist
-    }
-    os.makedirs("scope_data", exist_ok=True)
-    with open(f"scope_data/{project_id}.json", "w") as f:
-        json.dump(result, f, indent=2)
-    return result
-
-if __name__ == "__main__":
-    print("Run from app.py with file path and project_id.")
+def parse_scope_file(path):
+    ext = os.path.splitext(path)[1].lower()
+    try:
+        if ext == ".txt":
+            return parse_txt(path)
+        elif ext == ".pdf":
+            return parse_pdf(path)
+        elif ext == ".docx":
+            return parse_docx(path)
+        elif ext == ".xlsx":
+            return parse_xlsx(path)
+        elif ext == ".pptx":
+            return parse_pptx(path)
+        else:
+            return []
+    except Exception as e:
+        print(f"❌ Failed to parse {ext}: {e}")
+        return []
