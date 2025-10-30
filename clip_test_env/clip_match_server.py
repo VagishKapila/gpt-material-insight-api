@@ -1,56 +1,39 @@
-
-import torch
-import clip
-from PIL import Image
 import os
+import json
+from flask import Flask, request, jsonify
+from clip_matcher import run_clip_match_test
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model, preprocess = clip.load("ViT-B/32", device=device)
+app = Flask(__name__)
 
-def run_clip_match_test(scope_path, image_paths):
+@app.route("/")
+def health():
+    return "✅ CLIP Matcher Server is running!"
+
+@app.route("/debug_env")
+def debug_env():
+    return jsonify({
+        "cwd": os.getcwd(),
+        "files": os.listdir(),
+        "python_version": os.sys.version,
+        "env": dict(os.environ)
+    })
+
+@app.route("/run_test", methods=["POST"])
+def run_test():
     try:
-        # Read scope items from the file
-        with open(scope_path, 'r') as f:
-            scope_items = [line.strip() for line in f if line.strip()]
+        data = request.get_json()
+        scope_file = data.get("scope_file")
+        image_files = data.get("image_files", [])
+
+        if not scope_file or not image_files:
+            return jsonify({"error": "Missing 'scope_file' or 'image_files' in request"}), 400
+
+        result = run_clip_match_test(scope_file, image_files)
+        return jsonify(result)
+
     except Exception as e:
-        return {"error": f"Failed to read scope file: {e}"}
+        return jsonify({"error": str(e)}), 500
 
-    results = []
-
-    for scope_item in scope_items:
-        try:
-            scope_tokens = clip.tokenize([scope_item]).to(device)
-        except Exception as e:
-            results.append({
-                "scope_item": scope_item,
-                "error": f"Tokenization error: {e}"
-            })
-            continue
-
-        best_score = 0
-        best_image = None
-
-        for image_path in image_paths:
-            try:
-                image = preprocess(Image.open(image_path)).unsqueeze(0).to(device)
-
-                with torch.no_grad():
-                    image_features = model.encode_image(image)
-                    text_features = model.encode_text(scope_tokens)
-                    similarity = (image_features @ text_features.T).item()
-
-                    if similarity > best_score:
-                        best_score = similarity
-                        best_image = os.path.basename(image_path)
-
-            except Exception as e:
-                print(f"⚠️ Error processing {image_path}: {e}")
-                continue
-
-        results.append({
-            "scope_item": scope_item,
-            "best_image_match": best_image,
-            "similarity_score": round(best_score, 4)
-        })
-
-    return results
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(debug=True, host="0.0.0.0", port=port)
