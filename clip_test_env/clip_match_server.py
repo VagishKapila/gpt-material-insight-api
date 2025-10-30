@@ -34,7 +34,7 @@ def run_test():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ✅ BONUS: Testable in browser (GET)
+# ✅ Bonus: GET route for easy browser test
 @app.route("/test_browser")
 def test_browser():
     scope_file = "scope_98_upperoaks_san_rafael.txt"
