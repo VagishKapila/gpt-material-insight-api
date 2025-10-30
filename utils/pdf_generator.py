@@ -144,4 +144,4 @@ def create_daily_log_pdf(
 
     except Exception as e:
         print(f"❌ PDF generation error: {e}")
-        traceback.print_exc() yeah it's time for you to separate yourself rest show up right
+        traceback.print_exc()
