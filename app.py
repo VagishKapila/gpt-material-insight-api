@@ -1,7 +1,5 @@
-import os
-import json
-import uuid
-import traceback
+# ✅ app.py (Stable + Preview Fixes + CLIP guard)
+import os, json, uuid, traceback
 from datetime import datetime
 from flask import Flask, request, render_template, send_from_directory, redirect, url_for, jsonify
 from werkzeug.utils import secure_filename
@@ -129,14 +127,10 @@ def analyze_scope(session_id):
 def add_image(session_id):
     try:
         json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
-        if not os.path.exists(json_path):
-            return jsonify({"error": "Session not found"}), 404
-
         with open(json_path, "r") as f:
             data = json.load(f)
 
-        new_images = request.files.getlist("new_images")
-        for img in new_images:
+        for img in request.files.getlist("new_images"):
             if img.filename:
                 filename = secure_filename(img.filename)
                 path = os.path.join(UPLOAD_FOLDER, f"{session_id}_{filename}")
@@ -156,9 +150,6 @@ def add_image(session_id):
 def remove_image(session_id):
     try:
         json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
-        if not os.path.exists(json_path):
-            return jsonify({"error": "Session not found"}), 404
-
         with open(json_path, "r") as f:
             data = json.load(f)
 
@@ -180,12 +171,7 @@ def remove_image(session_id):
 @app.route("/submit_preview", methods=["POST"])
 def submit_preview():
     session_id = request.form.get("session_id")
-    if not session_id:
-        return "Missing session ID", 400
-
     json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
-    if not os.path.exists(json_path):
-        return f"❌ Session not found: {session_id}", 404
 
     try:
         with open(json_path, "r") as f:
@@ -195,22 +181,19 @@ def submit_preview():
         scored_items = []
 
         for i in range(total_items):
-            scope = request.form.get(f"scope_{i}", "")
-            confidence = int(request.form.get(f"confidence_{i}", 0))
-            match = f"match_{i}" in request.form
-            matched_image = request.form.get(f"matched_image_{i}", "").strip() or None
-
             scored_items.append({
-                "scope": scope,
-                "confidence": confidence,
-                "match": match,
-                "matched_image": matched_image
+                "scope": request.form.get(f"scope_{i}"),
+                "confidence": int(request.form.get(f"confidence_{i}")),
+                "match": f"match_{i}" in request.form,
+                "matched_image": request.form.get(f"matched_image_{i}") or None
             })
 
-        estimated_completion = sum(i["confidence"] for i in scored_items if i["match"]) / max(len(scored_items), 1)
+        completion = round(
+            sum(i["confidence"] for i in scored_items if i["match"]) / max(len(scored_items), 1), 1
+        )
 
         data["ai_results"] = {
-            "completion": round(estimated_completion, 1),
+            "completion": completion,
             "scored_items": scored_items,
             "out_of_scope": data.get("ai_results", {}).get("out_of_scope", [])
         }
@@ -241,22 +224,11 @@ def submit_preview():
 @app.route("/generated/<filename>")
 def serve_pdf(filename):
     path = os.path.join(GENERATED_FOLDER, filename)
-    if not os.path.exists(path):
-        return f"❌ File not found: {filename}", 404
-    return send_from_directory(GENERATED_FOLDER, filename)
+    return send_from_directory(GENERATED_FOLDER, filename) if os.path.exists(path) else f"❌ File not found: {filename}", 404
 
 @app.route("/debug_sessions")
 def debug_sessions():
     try:
-        session_files = os.listdir(SESSION_FOLDER)
-        session_links = []
-        for file in session_files:
-            if file.endswith(".json"):
-                session_id = file.replace(".json", "")
-                session_links.append(f'<li><a href="/preview/{session_id}">{session_id}</a></li>')
-        return f"<h2>🧠 Debug: Saved Sessions</h2><ul>{''.join(session_links)}</ul>"
-    except Exception as e:
-        return f"Failed to load sessions: {str(e)}", 500
-
-if __name__ == "__main__":
-    app.run(debug=True)
+        session_ids = [f.split(".json")[0] for f in os.listdir(SESSION_FOLDER) if f.endswith(".json")]
+        links = [f'<li><a href="/preview/{sid}">{sid}</a></li>' for sid in session_ids]
+        return f"<h2>
