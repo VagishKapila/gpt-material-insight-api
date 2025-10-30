@@ -1,15 +1,18 @@
-<!-- ✅ preview.html (Fixed Version) -->
+<!-- ✅ preview.html (Live Sliders & Recalculated Completion) -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Preview Daily Log</title>
+  <style>
+    .slider-label { font-weight: bold; }
+  </style>
   <script>
     async function deleteImage(sessionId, imagePath) {
       const response = await fetch(`/remove_image/${sessionId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: imagePath })  // ✅ FIXED
+        body: JSON.stringify({ image_path: imagePath })
       });
       if (response.ok) location.reload();
       else alert("❌ Failed to delete image.");
@@ -28,6 +31,29 @@
       if (response.ok) location.reload();
       else alert("❌ Failed to upload image.");
     }
+
+    function updateSlider(index) {
+      const slider = document.getElementById(`confidence_${index}`);
+      const label = document.getElementById(`confidence_label_${index}`);
+      label.innerText = slider.value + "%";
+      updateTotal();
+    }
+
+    function updateTotal() {
+      const total = parseInt(document.getElementById("total_items").value);
+      let sum = 0;
+      let count = 0;
+      for (let i = 0; i < total; i++) {
+        const match = document.getElementById(`match_${i}`).checked;
+        const val = parseInt(document.getElementById(`confidence_${i}`).value);
+        if (match) {
+          sum += val;
+          count++;
+        }
+      }
+      const avg = count > 0 ? (sum / count).toFixed(1) : 0;
+      document.getElementById("completion_display").innerText = avg + "% estimated completion";
+    }
   </script>
 </head>
 <body>
@@ -39,24 +65,25 @@
     <ul>
       {% for path in image_paths %}
         <li>
-          <a href="/{{ path }}" target="_blank">
-            <img src="/{{ path }}" width="150">
-          </a><br>
+          <img src="/{{ path }}" width="150"><br>
           <button type="button" onclick="deleteImage('{{ session_id }}', '{{ path }}')">❌ Delete</button>
         </li>
       {% endfor %}
     </ul>
 
     <h3>Add More Photos:</h3>
-    <input type="file" id="new_images" name="new_images" multiple accept="image/*" onchange="addImages('{{ session_id }}')">
+    <input type="file" id="new_images" name="new_images" multiple onchange="addImages('{{ session_id }}')">
 
     <h2>🔍 Scope Match Review</h2>
     {% set scored = ai_results.get("scored_items", []) %}
+    <div id="completion_display">{{ ai_results.get("completion", 0) }}% estimated completion</div>
     {% for item in scored %}
       <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
-      Scope: <b>{{ item.scope }}</b><br>
-      Match? <input type="checkbox" name="match_{{ loop.index0 }}" {% if item.match %}checked{% endif %}><br>
-      Confidence: <input type="number" name="confidence_{{ loop.index0 }}" value="{{ item.confidence }}" min="0" max="100">%<br>
+      <p><b>Scope:</b> {{ item.scope }}</p>
+      Match? <input type="checkbox" name="match_{{ loop.index0 }}" id="match_{{ loop.index0 }}" {% if item.match %}checked{% endif %} onchange="updateTotal()"><br>
+      Confidence:
+      <input type="range" name="confidence_{{ loop.index0 }}" id="confidence_{{ loop.index0 }}" value="{{ item.confidence }}" min="0" max="100" oninput="updateSlider({{ loop.index0 }})">
+      <span class="slider-label" id="confidence_label_{{ loop.index0 }}">{{ item.confidence }}%</span><br>
       Matched Image:
       <select name="matched_image_{{ loop.index0 }}">
         <option value="">None</option>
@@ -66,8 +93,9 @@
       </select>
       <hr>
     {% endfor %}
-    <input type="hidden" name="total_items" value="{{ scored | length }}">
+    <input type="hidden" name="total_items" id="total_items" value="{{ scored | length }}">
     <button type="submit">✅ Generate PDF</button>
   </form>
+  <script>updateTotal()</script>
 </body>
 </html>
