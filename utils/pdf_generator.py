@@ -12,7 +12,6 @@ def fix_orientation(image_path):
     """Auto-rotate and compress image for PDF embedding"""
     try:
         img = PILImage.open(image_path)
-        # Fix rotation based on EXIF data
         for orientation in ExifTags.TAGS.keys():
             if ExifTags.TAGS[orientation] == "Orientation":
                 break
@@ -45,6 +44,7 @@ def create_daily_log_pdf(
         doc = SimpleDocTemplate(save_path, pagesize=letter)
         elements = []
         styles = getSampleStyleSheet()
+        temp_files_to_delete = []
 
         def add_footer(canvas, doc):
             footer_text = "Confidential – Do Not Duplicate without written consent from BAINS Dev Comm"
@@ -94,6 +94,8 @@ def create_daily_log_pdf(
             if not os.path.exists(img_path):
                 continue
             fixed = fix_orientation(img_path)
+            if fixed != img_path:
+                temp_files_to_delete.append(fixed)
             try:
                 photo = Image(fixed, width=2.7 * inch, height=2 * inch)
                 photo_row.append(photo)
@@ -151,14 +153,22 @@ def create_daily_log_pdf(
             try:
                 if safety_sheet_path.lower().endswith((".jpg", ".jpeg", ".png")):
                     fixed = fix_orientation(safety_sheet_path)
+                    if fixed != safety_sheet_path:
+                        temp_files_to_delete.append(fixed)
                     elements.append(Image(fixed, width=6*inch, height=7*inch))
                 else:
                     elements.append(Paragraph("Safety sheet attached separately.", styles["Normal"]))
             except Exception:
                 elements.append(Paragraph("⚠️ Unable to display safety sheet.", styles["Normal"]))
 
-        # --- Build PDF ---
+        # --- Build PDF and Clean ---
         doc.build(elements, onLaterPages=add_footer, onFirstPage=add_footer)
+
+        for f in temp_files_to_delete:
+            try:
+                os.remove(f)
+            except Exception:
+                pass
 
     except Exception as e:
         print(f"❌ Error generating PDF: {e}")
