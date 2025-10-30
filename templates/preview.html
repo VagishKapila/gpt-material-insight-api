@@ -1,167 +1,71 @@
+<!-- ✅ preview.html (Async Photo Add/Delete Enabled) -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Daily Log Preview</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; background: #f0f4f7; }
-    h1, h2 { color: #2c3e50; }
-    .section { margin-bottom: 30px; padding: 20px; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-    .label { font-weight: bold; color: #34495e; display: block; margin-top: 10px; }
-    .images { display: flex; flex-wrap: wrap; gap: 10px; }
-    .image-wrapper { position: relative; display: inline-block; }
-    .images img { width: 120px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: zoom-in; }
-    .delete-btn { position: absolute; top: -6px; right: -6px; background: #e74c3c; color: white; border: none; border-radius: 50%; width: 22px; height: 22px; cursor: pointer; font-size: 14px; }
-    .score { margin: 12px 0; }
-    .out-of-scope { color: #c0392b; }
-    .button { margin-top: 30px; padding: 14px 28px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer; }
-    .button:hover { background: #2980b9; }
-    .dropdown { margin-top: 6px; font-size: 14px; }
-  </style>
+  <title>Preview Daily Log</title>
+  <script>
+    async function deleteImage(sessionId, imagePath) {
+      const response = await fetch(`/remove_image/${sessionId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_path: imagePath })
+      });
+      if (response.ok) location.reload();
+      else alert("❌ Failed to delete image.");
+    }
+
+    async function addImages(sessionId) {
+      const input = document.getElementById("new_images");
+      const files = input.files;
+      const formData = new FormData();
+      for (const file of files) formData.append("new_images", file);
+
+      const response = await fetch(`/add_image/${sessionId}`, {
+        method: "POST",
+        body: formData
+      });
+      if (response.ok) location.reload();
+      else alert("❌ Failed to upload image.");
+    }
+  </script>
 </head>
 <body>
-  <h1>📋 Daily Log Preview</h1>
-  <form action="/submit_preview" method="POST">
+  <h1>🧠 Preview Daily Log</h1>
+  <form action="/submit_preview" method="post">
     <input type="hidden" name="session_id" value="{{ session_id }}">
 
-    <div class="section">
-      <h2>📌 Project Info</h2>
-      <div><span class="label">Project:</span> {{ form_data.project_name }}</div>
-      <div><span class="label">Client:</span> {{ form_data.client_name or "—" }}</div>
-      <div><span class="label">Location:</span> {{ form_data.location }}</div>
-      <div><span class="label">Date:</span> {{ form_data.date }}</div>
-      <div><span class="label">Weather:</span> {{ form_data.weather or "Not Provided" }}</div>
-    </div>
-
-    <div class="section">
-      <h2>🛠️ Work Log</h2>
-      <div><span class="label">Work Done:</span> {{ form_data.work_done }}</div>
-      <div><span class="label">Crew Notes:</span> {{ form_data.crew_notes or "—" }}</div>
-      <div><span class="label">Safety Notes:</span> {{ form_data.safety_notes or "—" }}</div>
-    </div>
-
-    {% if image_paths %}
-    <div class="section">
-      <h2>📷 Job Site Photos</h2>
-      <form id="photoForm" action="/update_images/{{ session_id }}" method="POST" enctype="multipart/form-data">
-        <div class="images">
-          {% for img_path in image_paths %}
-          <div class="image-wrapper">
-            <img src="/{{ img_path }}" alt="Job Site Photo" onclick="zoomImage(this)">
-            <button class="delete-btn" type="submit" name="delete_image" value="{{ img_path }}" title="Delete">×</button>
-          </div>
-          {% endfor %}
-        </div>
-        <br>
-        <label>Add More Photos: <input type="file" name="new_images" multiple onchange="document.getElementById('photoForm').submit();"></label>
-      </form>
-    </div>
-    {% endif %}
-
-    <div class="section">
-      <h2>🤖 AI Scope Comparison</h2>
-      <div><strong>Estimated Completion:</strong> <span id="completion-val">{{ ai_results.completion or 0 }}</span>%</div>
-      <hr>
-      {% for item in ai_results.scored_items %}
-        <div class="score">
-          <input type="checkbox" name="match_{{ loop.index0 }}" class="matchbox" {% if item.match %}checked{% endif %}>
-          <label>
-            {{ item.scope }} — 
-            <input type="range" class="slider" name="confidence_{{ loop.index0 }}" min="0" max="100" step="1" value="{{ item.confidence }}">
-            <span class="conf_val">{{ item.confidence }}</span>%
-          </label>
-          <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
-
-          {% if item.match %}
-          <div class="dropdown">
-            Matched Image:
-            <select name="matched_image_{{ loop.index0 }}">
-              <option value="">(No match)</option>
-              {% for img_path in image_paths %}
-                {% set filename = img_path.split('/')[-1] %}
-                <option value="{{ filename }}" {% if item.matched_image == filename %}selected{% endif %}>{{ filename }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          {% endif %}
-        </div>
+    <h2>📸 Jobsite Photos</h2>
+    <ul>
+      {% for path in image_paths %}
+        <li>
+          <img src="/{{ path }}" width="150"><br>
+          <button type="button" onclick="deleteImage('{{ session_id }}', '{{ path }}')">❌ Delete</button>
+        </li>
       {% endfor %}
-      <input type="hidden" name="total_items" value="{{ ai_results.scored_items|length }}">
-    </div>
+    </ul>
 
-    {% if ai_results.out_of_scope %}
-    <div class="section out-of-scope">
-      <strong>Out-of-Scope Items:</strong>
-      <ul>
-        {% for line in ai_results.out_of_scope if line|length > 4 %}
-          <li>{{ line }}</li>
+    <h3>Add More Photos:</h3>
+    <input type="file" id="new_images" name="new_images" multiple onchange="addImages('{{ session_id }}')">
+
+    <h2>🔍 Scope Match Review</h2>
+    {% set scored = ai_results.get("scored_items", []) %}
+    {% for item in scored %}
+      <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
+      Scope: <b>{{ item.scope }}</b><br>
+      Match? <input type="checkbox" name="match_{{ loop.index0 }}" {% if item.match %}checked{% endif %}><br>
+      Confidence: <input type="number" name="confidence_{{ loop.index0 }}" value="{{ item.confidence }}" min="0" max="100">%<br>
+      Matched Image:
+      <select name="matched_image_{{ loop.index0 }}">
+        <option value="">None</option>
+        {% for img in image_paths %}
+          <option value="{{ img }}" {% if img == item.matched_image %}selected{% endif %}>{{ img.split('/')[-1] }}</option>
         {% endfor %}
-      </ul>
-    </div>
-    {% endif %}
-
-    <button type="submit" class="button">✅ Generate Final PDF</button>
+      </select>
+      <hr>
+    {% endfor %}
+    <input type="hidden" name="total_items" value="{{ scored | length }}">
+    <button type="submit">✅ Generate PDF</button>
   </form>
-
-<script>
-  const sliders = document.querySelectorAll(".slider");
-  const checkboxes = document.querySelectorAll(".matchbox");
-  const completionDisplay = document.getElementById("completion-val");
-
-  function updateCompletion() {
-    let total = 0;
-    let count = 0;
-    sliders.forEach((slider, i) => {
-      if (checkboxes[i].checked) {
-        total += parseInt(slider.value);
-        count++;
-      }
-    });
-    const percent = count ? Math.round(total / count) : 0;
-    completionDisplay.textContent = percent;
-  }
-
-  sliders.forEach(slider => {
-    slider.addEventListener("input", e => {
-      e.target.nextElementSibling.textContent = e.target.value;
-      updateCompletion();
-    });
-  });
-  checkboxes.forEach(cb => cb.addEventListener("change", updateCompletion));
-  updateCompletion();
-
-  function zoomImage(img) {
-    const isZoomed = img.classList.contains("zoomed");
-    document.querySelectorAll(".zoomed").forEach(el => el.classList.remove("zoomed"));
-    if (!isZoomed) img.classList.add("zoomed");
-  }
-
-  document.addEventListener("keydown", e => {
-    if (e.key === 'Escape') document.querySelectorAll(".zoomed").forEach(el => el.classList.remove("zoomed"));
-  });
-
-  document.addEventListener("click", e => {
-    if (!e.target.classList.contains("zoomed") && !e.target.closest(".images")) {
-      document.querySelectorAll(".zoomed").forEach(el => el.classList.remove("zoomed"));
-    }
-  });
-</script>
-
-<style>
-  .zoomed {
-    width: auto !important;
-    max-width: 90vw;
-    max-height: 80vh;
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) scale(1.2);
-    z-index: 9999;
-    border: 4px solid #fff;
-    box-shadow: 0 0 20px rgba(0,0,0,0.5);
-    background: #fff;
-    cursor: zoom-out;
-  }
-</style>
 </body>
 </html>
