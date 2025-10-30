@@ -1,3 +1,5 @@
+# utils/pdf_generator.py
+
 import os
 from PIL import Image as PILImage
 from reportlab.lib.pagesizes import letter
@@ -5,9 +7,8 @@ from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
 )
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import inch
 from reportlab.lib import colors
-from PyPDF2 import PdfReader
+from reportlab.lib.units import inch
 
 def fix_orientation_and_compress(image_path):
     try:
@@ -34,99 +35,95 @@ def create_daily_log_pdf(
     elements = []
     styles = getSampleStyleSheet()
 
-    def header_footer(canvas, doc):
-        canvas.saveState()
-        footer = "Confidential – Do Not Duplicate without written consent from BAINS Dev Comm"
-        canvas.setFont("Helvetica", 9)
-        canvas.drawString(inch, 0.5 * inch, footer)
-        canvas.drawRightString(7.5 * inch, 0.5 * inch, f"Page {doc.page}")
-        canvas.restoreState()
-
-    # --- Page 1: Basic Info ---
+    # --- Page 1: Metadata ---
     if logo_path and os.path.exists(logo_path):
-        elements.append(Image(logo_path, width=120, height=50))
-
-    elements.append(Paragraph("<b>DAILY LOG</b>", styles["Title"]))
+        elements.append(Image(logo_path, width=100, height=50))
+    elements.append(Paragraph("<b>DAILY LOG REPORT</b>", styles["Title"]))
     elements.append(Spacer(1, 12))
 
-    def add_paragraph(label, value):
-        text = f"<b>{label}:</b> {value or '—'}"
-        elements.append(Paragraph(text, styles["Normal"]))
-        elements.append(Spacer(1, 6))
+    for label, val in {
+        "Project Name": data.get("project_name", "—"),
+        "Client Name": data.get("client_name", "—"),
+        "Location": data.get("location", "—"),
+        "Date": data.get("date", "—"),
+        "Weather": data.get("weather", "—")
+    }.items():
+        elements.append(Paragraph(f"<b>{label}:</b> {val}", styles["Normal"]))
+    elements.append(Spacer(1, 12))
 
-    add_paragraph("Project Name", data.get("project_name"))
-    add_paragraph("Client Name", data.get("client_name"))
-    add_paragraph("Location", data.get("location"))
-    add_paragraph("Date", data.get("date"))
-    add_paragraph("Weather", data.get("weather"))
-
-    elements.append(Spacer(1, 10))
-    add_paragraph("Work Done", data.get("work_done"))
-    add_paragraph("Crew Notes", data.get("crew_notes"))
-    add_paragraph("Safety Notes", data.get("safety_notes"))
+    for label, val in {
+        "Work Done": data.get("work_done", "—"),
+        "Crew Notes": data.get("crew_notes", "—"),
+        "Safety Notes": data.get("safety_notes", "—")
+    }.items():
+        elements.append(Paragraph(f"<b>{label}:</b><br/>{val}", styles["Normal"]))
+        elements.append(Spacer(1, 8))
 
     elements.append(PageBreak())
 
-    # --- Page 2: Photos ---
-    if image_paths:
-        elements.append(Paragraph("<b>📷 Job Site Photos</b>", styles["Heading2"]))
-        photo_table = []
-        row = []
-
-        for i, img_path in enumerate(image_paths):
+    # --- Page 2: Jobsite Photos ---
+    elements.append(Paragraph("<b>📸 Job Site Photos</b>", styles["Heading2"]))
+    table_data = []
+    row = []
+    for i, img_path in enumerate(image_paths):
+        try:
             compressed = fix_orientation_and_compress(img_path)
-            img = Image(compressed, width=3*inch, height=2.25*inch)
+            img = Image(compressed, width=2.5*inch, height=2.5*inch)
             row.append(img)
             if len(row) == 2:
-                photo_table.append(row)
+                table_data.append(row)
                 row = []
-
-        if row:
-            photo_table.append(row)
-
-        table = Table(photo_table, hAlign="LEFT", colWidths=[3.1*inch]*2)
+        except Exception as e:
+            print(f"Failed to add photo {img_path}: {e}")
+    if row:
+        table_data.append(row)
+    if table_data:
+        table = Table(table_data, hAlign='LEFT')
+        table.setStyle(TableStyle([("BOTTOMPADDING", (0,0), (-1,-1), 12)]))
         elements.append(table)
-        elements.append(PageBreak())
+    else:
+        elements.append(Paragraph("No photos uploaded.", styles["Normal"]))
+    elements.append(PageBreak())
 
-    # --- Page 3: AI Scope Analysis ---
-    if ai_analysis:
-        elements.append(Paragraph("<b>🤖 AI Scope Analysis</b>", styles["Heading2"]))
-        completion = ai_analysis.get("completion", 0)
-        elements.append(Paragraph(f"<b>Estimated Completion:</b> {completion}%", styles["Normal"]))
-        elements.append(Spacer(1, 10))
+    # --- Page 3: AI Analysis ---
+    elements.append(Paragraph("<b>🤖 AI Scope Analysis</b>", styles["Heading2"]))
+    completion = ai_analysis.get("completion", 0)
+    elements.append(Paragraph(f"<b>Estimated Completion:</b> {completion}%", styles["Normal"]))
+    elements.append(Spacer(1, 10))
 
-        scored_items = ai_analysis.get("scored_items", [])
-        for item in scored_items:
-            label = "✅" if item.get("match") else "❌"
-            text = f"{label} <b>{item.get('scope')}</b> — Confidence: {item.get('confidence')}%"
-            elements.append(Paragraph(text, styles["Normal"]))
-            elements.append(Spacer(1, 4))
+    scored_items = ai_analysis.get("scored_items", [])
+    for item in scored_items:
+        scope_text = item.get("scope", "")
+        confidence = item.get("confidence", 0)
+        match = item.get("match", False)
+        img = item.get("matched_image", "(No match found)")
+        mark = "✅" if match else "❌"
+        line = f"{mark} <b>{scope_text}</b><br/>Confidence: {confidence}%"
+        if img:
+            line += f"<br/>Matched Image: <i>{img}</i>"
+        elements.append(Paragraph(line, styles["Normal"]))
+        elements.append(Spacer(1, 6))
 
-        out_of_scope = ai_analysis.get("out_of_scope", [])
-        if out_of_scope:
-            elements.append(Spacer(1, 12))
-            elements.append(Paragraph("<b>🚨 Out-of-Scope Items:</b>", styles["Heading3"]))
-            for line in out_of_scope:
-                elements.append(Paragraph(f"- {line}", styles["Normal"]))
-                elements.append(Spacer(1, 2))
+    out = ai_analysis.get("out_of_scope", [])
+    if out:
+        elements.append(Spacer(1, 12))
+        elements.append(Paragraph("<b>⚠️ Out-of-Scope Items:</b>", styles["Heading3"]))
+        for line in out:
+            if len(line.strip()) > 4:
+                elements.append(Paragraph(f"• {line}", styles["Normal"]))
 
-        elements.append(PageBreak())
+    elements.append(PageBreak())
 
     # --- Page 4: Safety Sheet ---
     if safety_sheet_path and os.path.exists(safety_sheet_path):
-        ext = os.path.splitext(safety_sheet_path)[1].lower()
-        elements.append(Paragraph("<b>📄 Safety Sheet</b>", styles["Heading2"]))
-        if ext in [".jpg", ".jpeg", ".png"]:
-            img = fix_orientation_and_compress(safety_sheet_path)
-            elements.append(Image(img, width=6*inch, height=7*inch))
-        elif ext == ".pdf":
-            try:
-                reader = PdfReader(safety_sheet_path)
-                page = reader.pages[0]
-                text = page.extract_text()
-                for line in text.splitlines():
-                    elements.append(Paragraph(line, styles["Normal"]))
-            except Exception:
-                elements.append(Paragraph("⚠️ Unable to read PDF safety sheet.", styles["Normal"]))
+        try:
+            if safety_sheet_path.lower().endswith(".pdf"):
+                elements.append(Paragraph("<b>Safety Sheet (PDF Attached Separately)</b>", styles["Normal"]))
+            else:
+                elements.append(Paragraph("<b>Safety Sheet</b>", styles["Heading2"]))
+                img = fix_orientation_and_compress(safety_sheet_path)
+                elements.append(Image(img, width=400, height=400))
+        except Exception as e:
+            elements.append(Paragraph(f"❌ Failed to add safety sheet: {e}", styles["Normal"]))
 
-    doc.build(elements, onFirstPage=header_footer, onLaterPages=header_footer)
+    doc.build(elements)
