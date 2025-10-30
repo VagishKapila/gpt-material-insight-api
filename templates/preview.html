@@ -48,15 +48,12 @@
           {% for img_path in image_paths %}
           <div class="image-wrapper">
             <img src="/{{ img_path }}" alt="Job Site Photo" onclick="zoomImage(this)">
-            <label style="position: absolute; top: -10px; left: 0; font-size: 10px; background: white; border-radius: 4px; padding: 2px;">
-              <input type="checkbox" name="remove_images" value="{{ img_path.split('/')[-1] }}"> Remove
-            </label>
+            <button type="submit" formaction="/delete_image/{{ session_id }}" formmethod="POST" class="delete-btn" name="delete_image" value="{{ img_path }}" title="Delete">×</button>
           </div>
           {% endfor %}
         </div>
         <br>
-        <label>Add More Photos: <input type="file" name="new_images" multiple></label>
-        <button type="submit" class="button">Update Photos</button>
+        <label>Add More Photos: <input type="file" name="new_images" multiple onchange="this.form.submit()"></label>
       </form>
     </div>
     {% endif %}
