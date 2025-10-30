@@ -1,4 +1,3 @@
-# ✅ app.py — Stable Sync Version (Preview + AI + PDF + No Syntax Errors)
 import os, json, uuid, traceback
 from datetime import datetime
 from flask import Flask, request, render_template, send_from_directory, redirect, url_for, jsonify
@@ -25,12 +24,12 @@ for f in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER, SAFETY_FOLDER, LOGO_FOL
 def health():
     return "✅ Nails & Notes AI Log is running!"
 
-# --- Form ---
+# --- Form Route ---
 @app.route("/form")
 def form():
     return render_template("form.html", datetime=datetime)
 
-# --- Form Submit ---
+# --- Handle Form Submission ---
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
     try:
@@ -89,29 +88,40 @@ def generate_form():
         traceback.print_exc()
         return f"❌ Error generating form: {str(e)}", 500
 
-
-# --- Preview ---
+# --- Preview Page ---
 @app.route("/preview/<session_id>")
 def preview(session_id):
     try:
         path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
         if not os.path.exists(path):
             return f"❌ Session not found: {session_id}", 404
+
         with open(path) as f:
             data = json.load(f)
-        return render_template("preview.html", session_id=session_id, **data)
+
+        pdf_filename = f"{session_id}_daily_log.pdf"
+        pdf_path = os.path.join(GENERATED_FOLDER, pdf_filename)
+        pdf_exists = os.path.exists(pdf_path)
+
+        return render_template(
+            "preview.html",
+            session_id=session_id,
+            pdf_filename=pdf_filename,
+            pdf_exists=pdf_exists,
+            **data
+        )
     except Exception as e:
         traceback.print_exc()
         return f"❌ Failed to load preview: {str(e)}", 500
 
-
-# --- AI Analysis ---
+# --- AI Scope Analysis ---
 @app.route("/analyze_scope/<session_id>", methods=["POST"])
 def analyze_scope(session_id):
     try:
         path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
         if not os.path.exists(path):
             return jsonify({"error": "Session not found"}), 404
+
         with open(path) as f:
             data = json.load(f)
 
@@ -127,13 +137,11 @@ def analyze_scope(session_id):
             json.dump(data, f, indent=2)
 
         return jsonify({"success": True})
-
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-
-# --- Add / Remove Images ---
+# --- Add Image ---
 @app.route("/add_image/<session_id>", methods=["POST"])
 def add_image(session_id):
     try:
@@ -153,7 +161,7 @@ def add_image(session_id):
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-
+# --- Remove Image ---
 @app.route("/remove_image/<session_id>", methods=["POST"])
 def remove_image(session_id):
     try:
@@ -172,8 +180,7 @@ def remove_image(session_id):
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-
-# --- Submit + Generate PDF ---
+# --- Final Submission + Generate PDF ---
 @app.route("/submit_preview", methods=["POST"])
 def submit_preview():
     try:
@@ -224,18 +231,15 @@ def submit_preview():
         traceback.print_exc()
         return f"❌ Failed to generate PDF: {str(e)}", 500
 
-
-# --- Serve Generated PDFs ---
+# --- Serve PDFs ---
 @app.route("/generated/<filename>")
 def serve_pdf(filename):
     pdf_path = os.path.join(GENERATED_FOLDER, filename)
     if not os.path.exists(pdf_path):
         return f"❌ File not found: {filename}", 404
-    # ✅ Serve correctly as PDF (forces download or inline view)
     return send_from_directory(GENERATED_FOLDER, filename, mimetype="application/pdf")
 
-
-# --- Debug: Saved Sessions ---
+# --- Debug Route ---
 @app.route("/debug_sessions")
 def debug_sessions():
     try:
@@ -249,7 +253,6 @@ def debug_sessions():
     except Exception as e:
         return f"Failed to load sessions: {str(e)}", 500
 
-
-# --- Entry Point ---
+# --- Start Server ---
 if __name__ == "__main__":
     app.run(debug=True)
