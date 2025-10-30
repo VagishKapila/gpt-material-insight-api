@@ -1,99 +1,75 @@
+<!-- ✅ preview.html with memory-fix, lazy loading, and capped scope items -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Preview Daily Log</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    img.jobsite { width: 300px; height: auto; margin: 10px; border: 1px solid #ccc; }
+    .scope-item { border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; }
+    .scope-item label { display: block; margin: 5px 0; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>📝 Preview Daily Log</h1>
+  <form action="/submit_preview" method="POST">
+    <input type="hidden" name="session_id" value="{{ session_id }}">
+    <h2>🗂 Project Info</h2>
+    <ul>
+      {% for k, v in form_data.items() %}
+        <li><strong>{{ k.replace('_', ' ').title() }}</strong>: {{ v }}</li>
+      {% endfor %}
+    </ul>
 
-import os
-from PIL import Image as PILImage, ExifTags
-from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
-)
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import inch
+    <h2>📸 Jobsite Images</h2>
+    <div id="jobsite_photos">
+      {% for img in image_paths %}
+        <img loading="lazy" class="jobsite" src="/{{ img }}">
+      {% endfor %}
+    </div>
 
-def fix_orientation_and_compress(image_path):
-    try:
-        img = PILImage.open(image_path)
-        img = img.convert("RGB")
-        try:
-            for orientation in ExifTags.TAGS.keys():
-                if ExifTags.TAGS[orientation] == 'Orientation':
-                    break
-            exif = img._getexif()
-            if exif and orientation in exif:
-                if exif[orientation] == 3:
-                    img = img.rotate(180, expand=True)
-                elif exif[orientation] == 6:
-                    img = img.rotate(270, expand=True)
-                elif exif[orientation] == 8:
-                    img = img.rotate(90, expand=True)
-        except:
-            pass
-        img.thumbnail((800, 800))
-        temp_path = image_path.replace(".jpg", "_compressed.jpg").replace(".png", "_compressed.png")
-        img.save(temp_path, quality=70)
-        return temp_path
-    except Exception:
-        return image_path
+    <h2>🔍 AI Scope Analysis</h2>
+    {% if ai_results and ai_results.scored_items %}
+      <input type="hidden" name="total_items" value="{{ ai_results.scored_items | length }}">
+      {% for i, item in enumerate(ai_results.scored_items) %}
+        <div class="scope-item {{ 'hidden' if i >= 10 }}" data-scope-index="{{ i }}">
+          <label>Scope:<br>
+            <input type="text" name="scope_{{ i }}" value="{{ item.scope }}" readonly>
+          </label>
+          <label>Match:
+            <input type="checkbox" name="match_{{ i }}" {% if item.match %}checked{% endif %}>
+          </label>
+          <label>Confidence:
+            <input type="range" name="confidence_{{ i }}" min="0" max="100" value="{{ item.confidence }}">
+          </label>
+          {% if item.matched_image %}
+            <img loading="lazy" class="jobsite" src="/{{ item.matched_image }}">
+            <input type="hidden" name="matched_image_{{ i }}" value="{{ item.matched_image }}">
+          {% endif %}
+        </div>
+      {% endfor %}
+      {% if ai_results.scored_items | length > 10 %}
+        <button type="button" onclick="showMoreScope()">Show More</button>
+      {% endif %}
+    {% else %}
+      <p>Click "Run AI Scope Match" to analyze against your uploaded scope.</p>
+    {% endif %}
 
-def create_daily_log_pdf(
-    data,
-    image_paths,
-    logo_path,
-    ai_analysis,
-    progress_report,
-    save_path,
-    weather_icon_path=None,
-    safety_sheet_path=None
-):
-    doc = SimpleDocTemplate(save_path, pagesize=letter)
-    elements = []
-    styles = getSampleStyleSheet()
+    <br><br>
+    <button type="submit">✅ Submit and Generate PDF</button>
+  </form>
 
-    # Page 1: Header
-    if logo_path and os.path.exists(logo_path):
-        elements.append(Image(logo_path, width=120, height=40))
+  <br>
+  <form action="/analyze_scope/{{ session_id }}" method="post">
+    <button type="submit">🧠 Run AI Scope Match</button>
+  </form>
 
-    elements.append(Paragraph("<b>Daily Log Report</b>", styles["Title"]))
-    elements.append(Spacer(1, 12))
-
-    for key, value in data.items():
-        elements.append(Paragraph(f"<b>{key.replace('_', ' ').title()}:</b> {value}", styles["Normal"]))
-        elements.append(Spacer(1, 6))
-
-    elements.append(PageBreak())
-
-    # Page 2: Jobsite Photos
-    elements.append(Paragraph("<b>📸 Jobsite Photos</b>", styles["Heading2"]))
-    for path in image_paths:
-        if os.path.exists(path):
-            img_path = fix_orientation_and_compress(path)
-            elements.append(Image(img_path, width=4*inch, height=3*inch))
-            elements.append(Spacer(1, 6))
-
-    elements.append(PageBreak())
-
-    # Page 3: AI Analysis
-    elements.append(Paragraph("<b>🔍 AI Scope Analysis</b>", styles["Heading2"]))
-    if ai_analysis:
-        comp = ai_analysis.get("completion", 0)
-        elements.append(Paragraph(f"<b>Estimated Completion:</b> {comp}%", styles["Normal"]))
-        elements.append(Spacer(1, 6))
-        for item in ai_analysis.get("scored_items", []):
-            elements.append(Paragraph(f"<b>Scope:</b> {item['scope']}", styles["Normal"]))
-            elements.append(Paragraph(f"✅ Match: {'Yes' if item['match'] else 'No'} — 🎯 Confidence: {item['confidence']}%", styles["Normal"]))
-            if item.get("matched_image"):
-                img_path = fix_orientation_and_compress(item["matched_image"])
-                elements.append(Image(img_path, width=3*inch, height=2.5*inch))
-            elements.append(Spacer(1, 12))
-
-    elements.append(PageBreak())
-
-    # Page 4: Safety Sheet
-    if safety_sheet_path and os.path.exists(safety_sheet_path):
-        elements.append(Paragraph("<b>🦺 Safety Sheet</b>", styles["Heading2"]))
-        try:
-            img_path = fix_orientation_and_compress(safety_sheet_path)
-            elements.append(Image(img_path, width=5*inch, height=6*inch))
-        except:
-            elements.append(Paragraph("⚠️ Unable to load safety image.", styles["Normal"]))
-
-    doc.build(elements)
+  <script>
+    function showMoreScope() {
+      document.querySelectorAll('.scope-item.hidden').forEach(el => el.classList.remove('hidden'));
+    }
+  </script>
+</body>
+</html>
