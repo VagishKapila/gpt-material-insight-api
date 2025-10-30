@@ -1,4 +1,4 @@
-<!-- ✅ preview.html (Async Photo Add/Delete Enabled) -->
+<!-- ✅ preview.html (Fixed Version) -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,7 +9,7 @@
       const response = await fetch(`/remove_image/${sessionId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image_path: imagePath })
+        body: JSON.stringify({ url: imagePath })  // ✅ FIXED
       });
       if (response.ok) location.reload();
       else alert("❌ Failed to delete image.");
@@ -39,14 +39,16 @@
     <ul>
       {% for path in image_paths %}
         <li>
-          <img src="/{{ path }}" width="150"><br>
+          <a href="/{{ path }}" target="_blank">
+            <img src="/{{ path }}" width="150">
+          </a><br>
           <button type="button" onclick="deleteImage('{{ session_id }}', '{{ path }}')">❌ Delete</button>
         </li>
       {% endfor %}
     </ul>
 
     <h3>Add More Photos:</h3>
-    <input type="file" id="new_images" name="new_images" multiple onchange="addImages('{{ session_id }}')">
+    <input type="file" id="new_images" name="new_images" multiple accept="image/*" onchange="addImages('{{ session_id }}')">
 
     <h2>🔍 Scope Match Review</h2>
     {% set scored = ai_results.get("scored_items", []) %}
