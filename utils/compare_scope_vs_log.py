@@ -1,3 +1,5 @@
+# utils/compare_scope_vs_log.py
+
 import os
 import traceback
 import torch
@@ -5,23 +7,14 @@ import clip
 from PIL import Image
 from sentence_transformers import SentenceTransformer, util
 
-from utils.scope_parser import parse_scope_file
-
 device = "cuda" if torch.cuda.is_available() else "cpu"
 clip_model, clip_preprocess = clip.load("ViT-B/32", device=device)
 text_model = SentenceTransformer("all-MiniLM-L6-v2")
 
-def analyze_scope_vs_log(scope_path, form_data, image_paths, project_id=None):
+def analyze_scope_vs_log(scope_path, form_data, image_paths):
     try:
-        ext = os.path.splitext(scope_path)[1].lower()
-
-        # Use smart parser if file is NOT a plain .txt
-        if ext != ".txt":
-            parsed = parse_scope_file(scope_path, project_id or "default_project")
-            scope_lines = parsed.get("checklist", [])
-        else:
-            with open(scope_path, "r", encoding="utf-8") as f:
-                scope_lines = [line.strip() for line in f if len(line.strip()) > 4]
+        with open(scope_path, "r", encoding="utf-8") as f:
+            scope_lines = [line.strip() for line in f if len(line.strip()) > 4]
 
         all_log_text = "\n".join([
             form_data.get("work_done", ""),
@@ -87,7 +80,6 @@ def analyze_scope_vs_log(scope_path, form_data, image_paths, project_id=None):
         }
 
     except Exception as e:
-        print("⚠️ Exception in compare_scope_vs_log:")
         traceback.print_exc()
         return {
             "completion": 0,
