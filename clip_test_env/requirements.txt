@@ -4,3 +4,4 @@ torchvision
 transformers
 Pillow
 scikit-learn
+git+https://github.com/openai/CLIP.git
