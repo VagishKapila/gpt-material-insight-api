@@ -33,6 +33,17 @@ def run_test():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+        @app.route("/test_browser")
+        
+def test_browser():
+    scope_file = "scope_98_upperoaks_san_rafael.txt"
+    image_files = [
+        "20251027_141128.jpg",
+        "20251027_141818.jpg",
+        "20251027_141835.jpg"
+    ]
+    result = run_clip_match_test(scope_file, image_files)
+    return jsonify(result)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
