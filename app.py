@@ -1,7 +1,3 @@
-✅ Done! Here's the cleaned and fixed version of both `app.py` and `preview.html` with working photo delete/add logic and no accidental PDF trigger.
-
----
-
 ### ✅ `app.py` (Full Fixed Version for Module C Patch)
 ```python
 import os
