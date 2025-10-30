@@ -1,18 +1,17 @@
-<!-- ✅ Final preview.html with sticky slider + grid layout + working delete + UI polish -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Preview Daily Log</title>
+  <title>Preview Daily Log (Optimized)</title>
   <style>
-    body { font-family: sans-serif; margin: 20px; }
+    body { font-family: sans-serif; margin: 20px; background: #f7f9fc; color: #333; }
 
     h1, h2, h3 { margin-bottom: 10px; }
 
     .sticky-bar {
       position: sticky;
       top: 0;
-      background: #f4f4f4;
+      background: #fff;
       padding: 10px;
       border-bottom: 1px solid #ccc;
       z-index: 1000;
@@ -26,38 +25,17 @@
     }
 
     .photo-tile {
-      border: 1px solid #ccc;
+      border: 1px solid #ddd;
       padding: 8px;
       text-align: center;
-      background: #fafafa;
-      border-radius: 6px;
+      background: #fff;
+      border-radius: 8px;
     }
 
     .photo-tile img {
       max-width: 100%;
       height: auto;
-      border-radius: 4px;
-    }
-
-    .slider-box {
-      margin-bottom: 30px;
-      padding: 10px;
-      background: #f9f9f9;
       border-radius: 6px;
-      border: 1px solid #ddd;
-    }
-
-    .slider-box:last-of-type {
-      margin-bottom: 50px;
-    }
-
-    .slider-box input[type="range"] {
-      width: 100%;
-    }
-
-    .slider-output {
-      font-weight: bold;
-      margin-left: 10px;
     }
 
     .delete-btn {
@@ -70,9 +48,17 @@
       cursor: pointer;
     }
 
-    .delete-btn:hover {
-      background-color: #cc0000;
+    .delete-btn:hover { background-color: #cc0000; }
+
+    .slider-box {
+      margin-bottom: 25px;
+      padding: 10px;
+      background: #fff;
+      border-radius: 6px;
+      border: 1px solid #ddd;
     }
+
+    .slider-box input[type="range"] { width: 100%; }
 
     .submit-btn {
       padding: 10px 20px;
@@ -84,27 +70,50 @@
       cursor: pointer;
     }
 
-    .submit-btn:hover {
-      background: #218838;
+    .submit-btn:hover { background: #218838; }
+
+    .image-select { width: 100%; margin-top: 5px; }
+
+    .load-more {
+      display: block;
+      margin: 20px auto;
+      padding: 10px 20px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
     }
 
-    .image-select {
-      width: 100%;
-      margin-top: 5px;
+    .load-more:hover { background: #0056b3; }
+
+    .analyze-btn {
+      background: #f39c12;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      font-size: 16px;
+      border-radius: 6px;
+      cursor: pointer;
     }
+
+    .analyze-btn:hover { background: #e67e22; }
 
     .top-summary {
       font-size: 18px;
       font-weight: bold;
     }
+
   </style>
 
   <script>
+    let visibleCount = 10;
+
     async function deleteImage(sessionId, imagePath) {
       const response = await fetch(`/remove_image/${sessionId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: imagePath })  // ✅ FIXED KEY
+        body: JSON.stringify({ image_path: imagePath })
       });
       if (response.ok) location.reload();
       else alert("❌ Failed to delete image.");
@@ -116,68 +125,83 @@
       const formData = new FormData();
       for (const file of files) formData.append("new_images", file);
 
-      const response = await fetch(`/add_image/${sessionId}`, {
-        method: "POST",
-        body: formData
-      });
+      const response = await fetch(`/add_image/${sessionId}`, { method: "POST", body: formData });
       if (response.ok) location.reload();
       else alert("❌ Failed to upload image.");
     }
 
     function updateCompletion() {
-      const sliders = document.querySelectorAll(".confidence-slider");
-      let total = 0;
-      let count = 0;
-
-      sliders.forEach(slider => {
-        const isChecked = slider.closest(".slider-box").querySelector(".match-checkbox").checked;
-        if (isChecked) {
+      const sliders = document.querySelectorAll(".confidence-slider:visible");
+      let total = 0, count = 0;
+      document.querySelectorAll(".slider-box").forEach(box => {
+        const slider = box.querySelector(".confidence-slider");
+        const checkbox = box.querySelector(".match-checkbox");
+        if (checkbox && checkbox.checked) {
           total += parseInt(slider.value);
           count++;
         }
       });
-
       const avg = count ? (total / count).toFixed(1) : 0;
       document.getElementById("total_completion").innerText = avg + "%";
     }
 
+    function showMore() {
+      const hiddenBoxes = document.querySelectorAll(".slider-box.hidden");
+      for (let i = 0; i < 10 && i < hiddenBoxes.length; i++) {
+        hiddenBoxes[i].classList.remove("hidden");
+      }
+      if (document.querySelectorAll(".slider-box.hidden").length === 0)
+        document.getElementById("load_more_btn").style.display = "none";
+      attachSliderHandlers();
+    }
+
     function attachSliderHandlers() {
-      const sliders = document.querySelectorAll(".confidence-slider");
-      sliders.forEach(slider => {
+      document.querySelectorAll(".confidence-slider").forEach(slider => {
         const output = slider.closest(".slider-box").querySelector(".slider-output");
-        output.textContent = slider.value + "%";  // ✅ Reflect initial state
-        slider.addEventListener("input", function () {
-          output.textContent = this.value + "%";
-          updateCompletion();
-        });
+        if (!slider.dataset.bound) {
+          slider.addEventListener("input", () => {
+            output.textContent = slider.value + "%";
+            updateCompletion();
+          });
+          slider.dataset.bound = true;
+        }
       });
 
-      const checkboxes = document.querySelectorAll(".match-checkbox");
-      checkboxes.forEach(cb => {
-        cb.addEventListener("change", updateCompletion);
+      document.querySelectorAll(".match-checkbox").forEach(cb => {
+        if (!cb.dataset.bound) {
+          cb.addEventListener("change", updateCompletion);
+          cb.dataset.bound = true;
+        }
       });
     }
 
-    window.onload = () => {
+    async function triggerAIAnalysis(sessionId) {
+      document.getElementById("ai_section").innerHTML = "<p>Analyzing… please wait ⏳</p>";
+      const response = await fetch(`/analyze_scope/${sessionId}`, { method: "POST" });
+      const data = await response.json();
+      if (data.success) location.reload();
+      else alert("❌ AI Analysis failed: " + (data.error || "Unknown error"));
+    }
+
+    window.onload = function() {
       attachSliderHandlers();
-      updateCompletion();  // ✅ Recalculate on load
+      updateCompletion();
     };
   </script>
 </head>
-<body>
-  <h1>🧠 Preview Daily Log</h1>
 
-  <!-- Sticky Top Bar -->
+<body>
+  <h1>🧠 Preview Daily Log (Optimized)</h1>
+
   <div class="sticky-bar">
     <div class="top-summary">🔄 Estimated Completion: <span id="total_completion">0%</span></div>
   </div>
 
-  <!-- 📸 Jobsite Photos -->
   <h2>📸 Jobsite Photos</h2>
   <div class="photo-grid">
     {% for path in image_paths %}
       <div class="photo-tile">
-        <img src="/{{ path }}" alt="Photo">
+        <img src="/{{ path }}" alt="Photo" loading="lazy">
         <button class="delete-btn" type="button" onclick="deleteImage('{{ session_id }}', '{{ path }}')">❌ Delete</button>
       </div>
     {% endfor %}
@@ -186,42 +210,43 @@
   <h3>Add More Photos:</h3>
   <input type="file" id="new_images" name="new_images" multiple onchange="addImages('{{ session_id }}')">
 
-  <!-- 🔍 AI Scope Match -->
-  <h2>🔍 Scope Match Review</h2>
-  <form action="/submit_preview" method="post">
-    <input type="hidden" name="session_id" value="{{ session_id }}">
-    {% set scored = ai_results.get("scored_items", []) %}
-    {% for item in scored %}
-      <div class="slider-box">
-        <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
-        <div>🧱 Scope Item: <b>{{ item.scope }}</b></div>
+  <br><br>
 
-        <label>
-          ✅ Match?
-          <input type="checkbox" class="match-checkbox" name="match_{{ loop.index0 }}" {% if item.match %}checked{% endif %}>
-        </label>
-        <br>
+  <button class="analyze-btn" type="button" onclick="triggerAIAnalysis('{{ session_id }}')">🔍 Run AI Scope Match</button>
 
-        <label>
+  <div id="ai_section">
+    <h2>🔍 Scope Match Review</h2>
+    <form action="/submit_preview" method="post">
+      <input type="hidden" name="session_id" value="{{ session_id }}">
+      {% set scored = ai_results.get("scored_items", []) %}
+      {% for item in scored %}
+        <div class="slider-box {% if loop.index > 10 %}hidden{% endif %}">
+          <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
+          <div>🧱 <b>{{ item.scope }}</b></div>
+          <label>✅ Match?
+            <input type="checkbox" class="match-checkbox" name="match_{{ loop.index0 }}" {% if item.match %}checked{% endif %}>
+          </label>
+          <br>
           🎯 Confidence:
           <input type="range" class="confidence-slider" name="confidence_{{ loop.index0 }}" value="{{ item.confidence }}" min="0" max="100">
           <span class="slider-output">{{ item.confidence }}%</span>
-        </label>
-
-        <br>
-        Matched Image:
-        <select class="image-select" name="matched_image_{{ loop.index0 }}">
-          <option value="">None</option>
-          {% for img in image_paths %}
-            <option value="{{ img }}" {% if img == item.matched_image %}selected{% endif %}>{{ img.split('/')[-1] }}</option>
-          {% endfor %}
-        </select>
-      </div>
-    {% endfor %}
-
-    <input type="hidden" name="total_items" value="{{ scored | length }}">
-    <br><br>
-    <button class="submit-btn" type="submit">✅ Generate PDF</button>
-  </form>
+          <br>
+          Matched Image:
+          <select class="image-select" name="matched_image_{{ loop.index0 }}">
+            <option value="">None</option>
+            {% for img in image_paths %}
+              <option value="{{ img }}" {% if img == item.matched_image %}selected{% endif %}>{{ img.split('/')[-1] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      {% endfor %}
+      {% if scored|length > 10 %}
+        <button id="load_more_btn" type="button" class="load-more" onclick="showMore()">⬇️ See More</button>
+      {% endif %}
+      <input type="hidden" name="total_items" value="{{ scored | length }}">
+      <br><br>
+      <button class="submit-btn" type="submit">✅ Generate PDF</button>
+    </form>
+  </div>
 </body>
 </html>
