@@ -1,89 +1,78 @@
 # utils/compare_scope_vs_log.py
-
 import os
-import traceback
+import numpy as np
+from sentence_transformers import SentenceTransformer, util
+from utils.scope_parser import parse_scope_file
+from PIL import Image
 import torch
 import clip
-from PIL import Image
-from sentence_transformers import SentenceTransformer, util
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-clip_model, clip_preprocess = clip.load("ViT-B/32", device=device)
-text_model = SentenceTransformer("all-MiniLM-L6-v2")
+# Load models once
+clip_model, clip_preprocess = clip.load("ViT-B/32", device="cpu")
+text_model = SentenceTransformer('all-MiniLM-L6-v2')
+
+def clip_score(text, image_path):
+    try:
+        image = clip_preprocess(Image.open(image_path)).unsqueeze(0).to("cpu")
+        text_tokens = clip.tokenize([text]).to("cpu")
+        with torch.no_grad():
+            image_features = clip_model.encode_image(image)
+            text_features = clip_model.encode_text(text_tokens)
+        image_features /= image_features.norm(dim=-1, keepdim=True)
+        text_features /= text_features.norm(dim=-1, keepdim=True)
+        similarity = (image_features @ text_features.T).item()
+        return similarity * 100
+    except Exception:
+        return 0.0
 
 def analyze_scope_vs_log(scope_path, form_data, image_paths):
-    try:
-        with open(scope_path, "r", encoding="utf-8") as f:
-            scope_lines = [line.strip() for line in f if len(line.strip()) > 4]
+    # 🔍 Step 1: Parse scope file
+    scope_items = parse_scope_file(scope_path)
+    if not scope_items:
+        return {"completion": 0, "scored_items": [], "out_of_scope": []}
 
-        all_log_text = "\n".join([
-            form_data.get("work_done", ""),
-            form_data.get("crew_notes", ""),
-            form_data.get("safety_notes", "")
-        ]).lower()
+    # 🔍 Step 2: Merge form data
+    combined_text = " ".join([
+        form_data.get("work_done", ""),
+        form_data.get("crew_notes", ""),
+        form_data.get("safety_notes", "")
+    ])
 
-        scored_items = []
-        out_of_scope = []
+    scored_items = []
+    matched_count = 0
 
-        log_embedding = text_model.encode(all_log_text, convert_to_tensor=True)
+    # 🔍 Step 3: Embedding
+    scope_embeddings = text_model.encode(scope_items, convert_to_tensor=True)
+    text_embedding = text_model.encode(combined_text, convert_to_tensor=True)
 
-        # Prepare image features
-        image_features = {}
+    for idx, scope in enumerate(scope_items):
+        text_score = util.cos_sim(scope_embeddings[idx], text_embedding).item() * 100
+        best_image = None
+        best_clip_score = 0
+
         for img_path in image_paths:
-            try:
-                image = clip_preprocess(Image.open(img_path)).unsqueeze(0).to(device)
-                with torch.no_grad():
-                    features = clip_model.encode_image(image).float()
-                image_features[img_path] = features
-            except Exception as e:
-                print(f"⚠️ Image load failed for {img_path}: {e}")
-                continue
+            score = clip_score(scope, img_path)
+            if score > best_clip_score:
+                best_clip_score = score
+                best_image = img_path
 
-        for line in scope_lines:
-            text_embed = text_model.encode(line, convert_to_tensor=True)
-            text_score = float(util.cos_sim(text_embed, log_embedding)[0][0]) * 100
+        final_score = (0.6 * text_score) + (0.4 * best_clip_score)
+        is_match = final_score > 50
 
-            tokens = clip.tokenize([line]).to(device)
-            with torch.no_grad():
-                text_clip_feat = clip_model.encode_text(tokens)[0]
-                text_clip_feat /= text_clip_feat.norm()
+        if is_match:
+            matched_count += 1
 
-            best_score = 0
-            best_image = None
+        scored_items.append({
+            "scope": scope,
+            "match": is_match,
+            "confidence": round(final_score),
+            "matched_image": best_image if is_match else None
+        })
 
-            for img_path, img_feat in image_features.items():
-                img_feat = img_feat[0] / img_feat[0].norm()
-                score = float((text_clip_feat @ img_feat.T).item()) * 100
-                if score > best_score:
-                    best_score = score
-                    best_image = os.path.basename(img_path)
-
-            final_score = round((text_score + best_score) / 2, 1) if best_image else round(text_score, 1)
-
-            match = final_score >= 25
-            scored_items.append({
-                "scope": line,
-                "confidence": final_score,
-                "match": match,
-                "matched_image": best_image or None
-            })
-
-            if not match:
-                out_of_scope.append(line)
-
-        estimated_completion = sum(i["confidence"] for i in scored_items if i["match"]) / max(len(scored_items), 1)
-
-        return {
-            "completion": round(estimated_completion, 1),
-            "scored_items": scored_items,
-            "out_of_scope": out_of_scope
-        }
-
-    except Exception as e:
-        traceback.print_exc()
-        return {
-            "completion": 0,
-            "scored_items": [],
-            "out_of_scope": [],
-            "error": str(e)
-        }
+    # 🔍 Step 4: Summary
+    completion = round((matched_count / len(scope_items)) * 100, 1)
+    return {
+        "completion": completion,
+        "scored_items": scored_items,
+        "out_of_scope": []
+    }
