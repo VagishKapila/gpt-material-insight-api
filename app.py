@@ -231,7 +231,8 @@ def serve_pdf(filename):
     pdf_path = os.path.join(GENERATED_FOLDER, filename)
     if not os.path.exists(pdf_path):
         return f"❌ File not found: {filename}", 404
-    return send_from_directory(GENERATED_FOLDER, filename)
+    # ✅ Serve correctly as PDF (forces download or inline view)
+    return send_from_directory(GENERATED_FOLDER, filename, mimetype="application/pdf")
 
 
 # --- Debug: Saved Sessions ---
