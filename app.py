@@ -1,4 +1,3 @@
-### ✅ `app.py` (Full Fixed Version for Module C Patch)
 import os
 import json
 import uuid
@@ -119,11 +118,9 @@ def update_images(session_id):
         with open(json_path, "r") as f:
             data = json.load(f)
 
-        # Remove selected image
         to_remove = request.form.getlist("delete_image")
         data["image_paths"] = [img for img in data.get("image_paths", []) if img not in to_remove]
 
-        # Add new images
         if "new_images" in request.files:
             for img in request.files.getlist("new_images"):
                 if img.filename:
