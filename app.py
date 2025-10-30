@@ -1,3 +1,4 @@
+
 import os
 import json
 import uuid
@@ -6,14 +7,12 @@ from datetime import datetime
 from flask import Flask, request, render_template, send_from_directory, redirect, url_for
 from werkzeug.utils import secure_filename
 
-# --- Stable Import of AI only (no parse_scope_file) ---
-from utils.compare_scope_vs_log import analyze_scope_vs_log
-
+from utils.compare_scope_vs_log import analyze_scope_vs_log  # parse_scope_file safely omitted
 from utils.pdf_generator import create_daily_log_pdf
 
 app = Flask(__name__)
 
-# --- Folders ---
+# Folders
 UPLOAD_FOLDER = "static/uploads"
 GENERATED_FOLDER = "static/generated"
 SCOPE_FOLDER = "static/scope"
@@ -96,4 +95,97 @@ def generate_form():
         with open(session_file, "w") as f:
             json.dump(session_data, f, indent=2)
 
-        print(f"
+        return redirect(url_for("preview", session_id=session_id))
+
+    except Exception as e:
+        traceback.print_exc()
+        return f"❌ Error generating form: {str(e)}", 500
+
+@app.route("/preview/<session_id>")
+def preview(session_id):
+    json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
+    if not os.path.exists(json_path):
+        return f"❌ Session not found: {session_id}", 404
+
+    try:
+        with open(json_path, "r") as f:
+            data = json.load(f)
+        return render_template("preview.html", session_id=session_id, **data)
+    except Exception as e:
+        traceback.print_exc()
+        return f"❌ Failed to load preview: {str(e)}", 500
+
+@app.route("/submit_preview", methods=["POST"])
+def submit_preview():
+    session_id = request.form.get("session_id")
+    if not session_id:
+        return "Missing session ID", 400
+
+    json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
+    if not os.path.exists(json_path):
+        return f"❌ Session not found: {session_id}", 404
+
+    try:
+        with open(json_path, "r") as f:
+            data = json.load(f)
+
+        total_items = int(request.form.get("total_items", 0))
+        scored_items = []
+        for i in range(total_items):
+            scope = request.form.get(f"scope_{i}", "")
+            confidence = int(request.form.get(f"confidence_{i}", 0))
+            match = f"match_{i}" in request.form
+            scored_items.append({"scope": scope, "confidence": confidence, "match": match})
+
+        estimated_completion = sum(i["confidence"] for i in scored_items if i["match"]) / max(len(scored_items), 1)
+        data["ai_results"] = {
+            "completion": round(estimated_completion, 1),
+            "scored_items": scored_items,
+            "out_of_scope": data.get("ai_results", {}).get("out_of_scope", [])
+        }
+
+        with open(json_path, "w") as f:
+            json.dump(data, f, indent=2)
+
+        pdf_name = f"{session_id}_daily_log.pdf"
+        save_path = os.path.join(GENERATED_FOLDER, pdf_name)
+
+        create_daily_log_pdf(
+            data=data.get("form_data", {}),
+            image_paths=data.get("image_paths", []),
+            logo_path=data.get("logo_path"),
+            ai_analysis=data.get("ai_results"),
+            progress_report=data.get("progress_report"),
+            save_path=save_path,
+            weather_icon_path=data.get("weather_icon_path"),
+            safety_sheet_path=data.get("safety_sheet_path")
+        )
+
+        return redirect(url_for("serve_pdf", filename=pdf_name))
+
+    except Exception as e:
+        traceback.print_exc()
+        return f"❌ Failed to generate PDF: {str(e)}", 500
+
+@app.route("/generated/<filename>")
+def serve_pdf(filename):
+    path = os.path.join(GENERATED_FOLDER, filename)
+    if not os.path.exists(path):
+        return f"❌ File not found: {filename}", 404
+    return send_from_directory(GENERATED_FOLDER, filename)
+
+@app.route("/debug_sessions")
+def debug_sessions():
+    try:
+        session_files = os.listdir(SESSION_FOLDER)
+        session_links = []
+        for file in session_files:
+            if file.endswith(".json"):
+                session_id = file.replace(".json", "")
+                session_links.append(f'<li><a href="/preview/{session_id}">{session_id}</a></li>')
+        return f"<h2>🧠 Debug: Saved Sessions</h2><ul>{''.join(session_links)}</ul>"
+    except Exception as e:
+        return f"Failed to load sessions: {str(e)}", 500
+
+if __name__ == "__main__":
+    app.run(debug=True)
