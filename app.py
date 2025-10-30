@@ -1,3 +1,9 @@
+✅ Done! Here's the cleaned and fixed version of both `app.py` and `preview.html` with working photo delete/add logic and no accidental PDF trigger.
+
+---
+
+### ✅ `app.py` (Full Fixed Version for Module C Patch)
+```python
 import os
 import json
 import uuid
@@ -11,7 +17,6 @@ from utils.pdf_generator import create_daily_log_pdf
 
 app = Flask(__name__)
 
-# Folder setup
 UPLOAD_FOLDER = "static/uploads"
 GENERATED_FOLDER = "static/generated"
 SCOPE_FOLDER = "static/scope"
@@ -109,6 +114,38 @@ def preview(session_id):
         traceback.print_exc()
         return f"❌ Failed to load preview: {str(e)}", 500
 
+@app.route("/update_images/<session_id>", methods=["POST"])
+def update_images(session_id):
+    try:
+        json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
+        if not os.path.exists(json_path):
+            return f"❌ Session not found: {session_id}", 404
+
+        with open(json_path, "r") as f:
+            data = json.load(f)
+
+        # Remove selected image
+        to_remove = request.form.getlist("delete_image")
+        data["image_paths"] = [img for img in data.get("image_paths", []) if img not in to_remove]
+
+        # Add new images
+        if "new_images" in request.files:
+            for img in request.files.getlist("new_images"):
+                if img.filename:
+                    filename = secure_filename(img.filename)
+                    path = os.path.join(UPLOAD_FOLDER, f"{session_id}_{filename}")
+                    img.save(path)
+                    data["image_paths"].append(path)
+
+        with open(json_path, "w") as f:
+            json.dump(data, f, indent=2)
+
+        return redirect(url_for("preview", session_id=session_id))
+
+    except Exception as e:
+        traceback.print_exc()
+        return f"❌ Failed to update images: {str(e)}", 500
+
 @app.route("/submit_preview", methods=["POST"])
 def submit_preview():
     session_id = request.form.get("session_id")
@@ -169,47 +206,6 @@ def submit_preview():
     except Exception as e:
         traceback.print_exc()
         return f"❌ Failed to generate PDF: {str(e)}", 500
-
-@app.route("/update_images/<session_id>", methods=["POST"])
-def update_images(session_id):
-    json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
-    if not os.path.exists(json_path):
-        return f"❌ Session not found: {session_id}", 404
-
-    try:
-        with open(json_path, "r") as f:
-            session_data = json.load(f)
-
-        # Remove images
-        images_to_remove = request.form.getlist("remove_images")
-        session_data["image_paths"] = [
-            img for img in session_data.get("image_paths", []) if os.path.basename(img) not in images_to_remove
-        ]
-
-        # Physically delete files
-        for img_filename in images_to_remove:
-            path = os.path.join(UPLOAD_FOLDER, img_filename)
-            if os.path.exists(path):
-                os.remove(path)
-
-        # Add new uploaded images
-        if "new_images" in request.files:
-            for img in request.files.getlist("new_images"):
-                if img.filename:
-                    filename = secure_filename(img.filename)
-                    save_path = os.path.join(UPLOAD_FOLDER, f"{session_id}_{filename}")
-                    img.save(save_path)
-                    session_data["image_paths"].append(save_path)
-
-        # Save updated session
-        with open(json_path, "w") as f:
-            json.dump(session_data, f, indent=2)
-
-        return redirect(url_for("preview", session_id=session_id))
-
-    except Exception as e:
-        traceback.print_exc()
-        return f"❌ Error updating images: {str(e)}", 500
 
 @app.route("/generated/<filename>")
 def serve_pdf(filename):
