@@ -1,9 +1,11 @@
+### ✅ NEW VERSION — app.py (with Async Image Add/Remove)
+
 import os
 import json
 import uuid
 import traceback
 from datetime import datetime
-from flask import Flask, request, render_template, send_from_directory, redirect, url_for
+from flask import Flask, request, render_template, send_from_directory, redirect, url_for, jsonify
 from werkzeug.utils import secure_filename
 
 from utils.compare_scope_vs_log import analyze_scope_vs_log
@@ -108,35 +110,57 @@ def preview(session_id):
         traceback.print_exc()
         return f"❌ Failed to load preview: {str(e)}", 500
 
-@app.route("/update_images/<session_id>", methods=["POST"])
-def update_images(session_id):
+@app.route("/add_image/<session_id>", methods=["POST"])
+def add_image(session_id):
     try:
         json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
         if not os.path.exists(json_path):
-            return f"❌ Session not found: {session_id}", 404
+            return jsonify({"error": "Session not found"}), 404
 
         with open(json_path, "r") as f:
             data = json.load(f)
 
-        to_remove = request.form.getlist("delete_image")
-        data["image_paths"] = [img for img in data.get("image_paths", []) if img not in to_remove]
-
-        if "new_images" in request.files:
-            for img in request.files.getlist("new_images"):
-                if img.filename:
-                    filename = secure_filename(img.filename)
-                    path = os.path.join(UPLOAD_FOLDER, f"{session_id}_{filename}")
-                    img.save(path)
-                    data["image_paths"].append(path)
+        new_images = request.files.getlist("new_images")
+        for img in new_images:
+            if img.filename:
+                filename = secure_filename(img.filename)
+                path = os.path.join(UPLOAD_FOLDER, f"{session_id}_{filename}")
+                img.save(path)
+                data["image_paths"].append(path)
 
         with open(json_path, "w") as f:
             json.dump(data, f, indent=2)
 
-        return redirect(url_for("preview", session_id=session_id))
+        return jsonify({"success": True})
 
     except Exception as e:
         traceback.print_exc()
-        return f"❌ Failed to update images: {str(e)}", 500
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/remove_image/<session_id>", methods=["POST"])
+def remove_image(session_id):
+    try:
+        json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
+        if not os.path.exists(json_path):
+            return jsonify({"error": "Session not found"}), 404
+
+        with open(json_path, "r") as f:
+            data = json.load(f)
+
+        image_to_remove = request.json.get("url")
+        if image_to_remove in data["image_paths"]:
+            data["image_paths"].remove(image_to_remove)
+            if os.path.exists(image_to_remove):
+                os.remove(image_to_remove)
+
+        with open(json_path, "w") as f:
+            json.dump(data, f, indent=2)
+
+        return jsonify({"success": True})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/submit_preview", methods=["POST"])
 def submit_preview():
