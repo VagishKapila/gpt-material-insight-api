@@ -1,12 +1,103 @@
-<!-- ✅ preview.html (Live Sliders & Recalculated Completion) -->
+<!-- ✅ Final preview.html with sticky slider + grid layout -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Preview Daily Log</title>
   <style>
-    .slider-label { font-weight: bold; }
+    body { font-family: sans-serif; margin: 20px; }
+
+    h1, h2, h3 {
+      margin-bottom: 10px;
+    }
+
+    .sticky-bar {
+      position: sticky;
+      top: 0;
+      background: #f4f4f4;
+      padding: 10px;
+      border-bottom: 1px solid #ccc;
+      z-index: 1000;
+    }
+
+    .photo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .photo-tile {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+      background: #fafafa;
+      border-radius: 6px;
+    }
+
+    .photo-tile img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 4px;
+    }
+
+    .slider-box {
+      margin-bottom: 30px;
+      padding: 10px;
+      background: #f9f9f9;
+      border-radius: 6px;
+      border: 1px solid #ddd;
+    }
+
+    .slider-box input[type="range"] {
+      width: 100%;
+    }
+
+    .slider-output {
+      font-weight: bold;
+      margin-left: 10px;
+    }
+
+    .delete-btn {
+      background-color: #ff6666;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      margin-top: 5px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .delete-btn:hover {
+      background-color: #cc0000;
+    }
+
+    .submit-btn {
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #28a745;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .submit-btn:hover {
+      background: #218838;
+    }
+
+    .image-select {
+      width: 100%;
+      margin-top: 5px;
+    }
+
+    .top-summary {
+      font-size: 18px;
+      font-weight: bold;
+    }
+
   </style>
+
   <script>
     async function deleteImage(sessionId, imagePath) {
       const response = await fetch(`/remove_image/${sessionId}`, {
@@ -32,70 +123,100 @@
       else alert("❌ Failed to upload image.");
     }
 
-    function updateSlider(index) {
-      const slider = document.getElementById(`confidence_${index}`);
-      const label = document.getElementById(`confidence_label_${index}`);
-      label.innerText = slider.value + "%";
-      updateTotal();
-    }
-
-    function updateTotal() {
-      const total = parseInt(document.getElementById("total_items").value);
-      let sum = 0;
+    function updateCompletion() {
+      const sliders = document.querySelectorAll(".confidence-slider");
+      let total = 0;
       let count = 0;
-      for (let i = 0; i < total; i++) {
-        const match = document.getElementById(`match_${i}`).checked;
-        const val = parseInt(document.getElementById(`confidence_${i}`).value);
-        if (match) {
-          sum += val;
+
+      sliders.forEach(slider => {
+        const isChecked = slider.closest(".slider-box").querySelector(".match-checkbox").checked;
+        if (isChecked) {
+          total += parseInt(slider.value);
           count++;
         }
-      }
-      const avg = count > 0 ? (sum / count).toFixed(1) : 0;
-      document.getElementById("completion_display").innerText = avg + "% estimated completion";
+      });
+
+      const avg = count ? (total / count).toFixed(1) : 0;
+      document.getElementById("total_completion").innerText = avg + "%";
     }
+
+    function attachSliderHandlers() {
+      const sliders = document.querySelectorAll(".confidence-slider");
+      sliders.forEach(slider => {
+        const output = slider.closest(".slider-box").querySelector(".slider-output");
+        slider.addEventListener("input", function() {
+          output.textContent = this.value + "%";
+          updateCompletion();
+        });
+      });
+
+      const checkboxes = document.querySelectorAll(".match-checkbox");
+      checkboxes.forEach(cb => {
+        cb.addEventListener("change", updateCompletion);
+      });
+    }
+
+    window.onload = attachSliderHandlers;
   </script>
 </head>
 <body>
   <h1>🧠 Preview Daily Log</h1>
+
+  <!-- Sticky Top Bar -->
+  <div class="sticky-bar">
+    <div class="top-summary">🔄 Estimated Completion: <span id="total_completion">0%</span></div>
+  </div>
+
+  <!-- 📸 Jobsite Photos -->
+  <h2>📸 Jobsite Photos</h2>
+  <div class="photo-grid">
+    {% for path in image_paths %}
+      <div class="photo-tile">
+        <img src="/{{ path }}" alt="Photo">
+        <button class="delete-btn" type="button" onclick="deleteImage('{{ session_id }}', '{{ path }}')">❌ Delete</button>
+      </div>
+    {% endfor %}
+  </div>
+
+  <h3>Add More Photos:</h3>
+  <input type="file" id="new_images" name="new_images" multiple onchange="addImages('{{ session_id }}')">
+
+  <!-- 🔍 AI Scope Match -->
+  <h2>🔍 Scope Match Review</h2>
   <form action="/submit_preview" method="post">
     <input type="hidden" name="session_id" value="{{ session_id }}">
-
-    <h2>📸 Jobsite Photos</h2>
-    <ul>
-      {% for path in image_paths %}
-        <li>
-          <img src="/{{ path }}" width="150"><br>
-          <button type="button" onclick="deleteImage('{{ session_id }}', '{{ path }}')">❌ Delete</button>
-        </li>
-      {% endfor %}
-    </ul>
-
-    <h3>Add More Photos:</h3>
-    <input type="file" id="new_images" name="new_images" multiple onchange="addImages('{{ session_id }}')">
-
-    <h2>🔍 Scope Match Review</h2>
     {% set scored = ai_results.get("scored_items", []) %}
-    <div id="completion_display">{{ ai_results.get("completion", 0) }}% estimated completion</div>
     {% for item in scored %}
-      <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
-      <p><b>Scope:</b> {{ item.scope }}</p>
-      Match? <input type="checkbox" name="match_{{ loop.index0 }}" id="match_{{ loop.index0 }}" {% if item.match %}checked{% endif %} onchange="updateTotal()"><br>
-      Confidence:
-      <input type="range" name="confidence_{{ loop.index0 }}" id="confidence_{{ loop.index0 }}" value="{{ item.confidence }}" min="0" max="100" oninput="updateSlider({{ loop.index0 }})">
-      <span class="slider-label" id="confidence_label_{{ loop.index0 }}">{{ item.confidence }}%</span><br>
-      Matched Image:
-      <select name="matched_image_{{ loop.index0 }}">
-        <option value="">None</option>
-        {% for img in image_paths %}
-          <option value="{{ img }}" {% if img == item.matched_image %}selected{% endif %}>{{ img.split('/')[-1] }}</option>
-        {% endfor %}
-      </select>
-      <hr>
+      <div class="slider-box">
+        <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
+        <div>🧱 Scope Item: <b>{{ item.scope }}</b></div>
+
+        <label>
+          ✅ Match?
+          <input type="checkbox" class="match-checkbox" name="match_{{ loop.index0 }}" {% if item.match %}checked{% endif %}>
+        </label>
+        <br>
+
+        <label>
+          🎯 Confidence:
+          <input type="range" class="confidence-slider" name="confidence_{{ loop.index0 }}" value="{{ item.confidence }}" min="0" max="100">
+          <span class="slider-output">{{ item.confidence }}%</span>
+        </label>
+
+        <br>
+        Matched Image:
+        <select class="image-select" name="matched_image_{{ loop.index0 }}">
+          <option value="">None</option>
+          {% for img in image_paths %}
+            <option value="{{ img }}" {% if img == item.matched_image %}selected{% endif %}>{{ img.split('/')[-1] }}</option>
+          {% endfor %}
+        </select>
+      </div>
     {% endfor %}
-    <input type="hidden" name="total_items" id="total_items" value="{{ scored | length }}">
-    <button type="submit">✅ Generate PDF</button>
+
+    <input type="hidden" name="total_items" value="{{ scored | length }}">
+    <br><br>
+    <button class="submit-btn" type="submit">✅ Generate PDF</button>
   </form>
-  <script>updateTotal()</script>
 </body>
 </html>
