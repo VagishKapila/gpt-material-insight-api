@@ -1,5 +1,4 @@
 ### ✅ `app.py` (Full Fixed Version for Module C Patch)
-```python
 import os
 import json
 import uuid
