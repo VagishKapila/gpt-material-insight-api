@@ -67,23 +67,15 @@ def generate_form():
                     img.save(path)
                     image_paths.append(path)
 
-        ai_results = {}
-        progress_report = {}
-        if request.form.get("enable_ai") and scope_path:
-            try:
-                ai_results = analyze_scope_vs_log(scope_path, form_data, image_paths)
-            except Exception as e:
-                traceback.print_exc()
-                ai_results = {"error": f"AI analysis failed: {str(e)}"}
-
         session_data = {
             "form_data": form_data,
             "image_paths": image_paths,
             "logo_path": logo_path,
-            "ai_results": ai_results,
-            "progress_report": progress_report,
+            "progress_report": {},
+            "ai_results": {},
             "weather_icon_path": None,
-            "safety_sheet_path": safety_path
+            "safety_sheet_path": safety_path,
+            "scope_path": scope_path
         }
 
         with open(os.path.join(SESSION_FOLDER, f"{session_id}.json"), "w") as f:
@@ -107,6 +99,31 @@ def preview(session_id):
     except Exception as e:
         traceback.print_exc()
         return f"❌ Failed to load preview: {str(e)}", 500
+
+@app.route("/analyze_scope/<session_id>", methods=["POST"])
+def analyze_scope(session_id):
+    try:
+        json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
+        if not os.path.exists(json_path):
+            return jsonify({"error": "Session not found"}), 404
+
+        with open(json_path, "r") as f:
+            data = json.load(f)
+
+        if not data.get("scope_path"):
+            return jsonify({"error": "Scope file not uploaded"}), 400
+
+        ai_results = analyze_scope_vs_log(data["scope_path"], data["form_data"], data["image_paths"])
+        data["ai_results"] = ai_results
+
+        with open(json_path, "w") as f:
+            json.dump(data, f, indent=2)
+
+        return jsonify({"success": True})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/add_image/<session_id>", methods=["POST"])
 def add_image(session_id):
