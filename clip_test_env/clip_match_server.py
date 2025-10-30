@@ -1,0 +1,35 @@
+import os
+import json
+from flask import Flask, request, jsonify
+from clip_matcher import run_clip_match_test  # this must be defined in clip_matcher.py
+
+app = Flask(__name__)
+
+@app.route("/")
+def health():
+    return "✅ CLIP Matcher Server is running!"
+
+@app.route("/run_test", methods=["POST"])
+def run_test():
+    try:
+        # Example expected JSON payload:
+        # {
+        #   "scope_file": "scope_98_upperoaks_san_rafael.txt",
+        #   "image_files": ["20251027_141128.jpg", "20251027_141818.jpg"]
+        # }
+        data = request.get_json()
+        scope_file = data.get("scope_file")
+        image_files = data.get("image_files", [])
+
+        if not scope_file or not image_files:
+            return jsonify({"error": "Missing 'scope_file' or 'image_files' in request"}), 400
+
+        # Run CLIP match test
+        results = run_clip_match_test(scope_file, image_files)
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(debug=True, host="0.0.0.0", port=port)
