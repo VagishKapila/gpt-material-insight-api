@@ -4,28 +4,23 @@ from PIL import Image
 import os
 import traceback
 
-# --- Load CLIP model once at import ---
 print("🧠 Loading CLIP model ...")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model, preprocess = clip.load("ViT-B/32", device=device)
 print("✅ CLIP model ready on", device)
 
-# --- Function: run CLIP-based matching ---
 def run_clip_match_test(scope_file_path, image_paths):
     try:
-        # --- Load scope lines ---
         with open(scope_file_path, "r", encoding="utf-8") as f:
             scope_lines = [line.strip() for line in f if len(line.strip()) > 4]
 
         if not scope_lines:
             return {"error": "Scope file is empty or unreadable"}
 
-        # --- Encode scope text ---
         text_tokens = clip.tokenize(scope_lines).to(device)
         with torch.no_grad():
             text_features = model.encode_text(text_tokens).float()
 
-        # --- Encode images ---
         image_features_list = []
         for path in image_paths:
             try:
@@ -39,7 +34,6 @@ def run_clip_match_test(scope_file_path, image_paths):
         if not image_features_list:
             return {"error": "No valid images processed"}
 
-        # --- Compare each scope line with each image ---
         results = []
         for i, text_feat in enumerate(text_features):
             text_feat = text_feat / text_feat.norm(dim=-1, keepdim=True)
