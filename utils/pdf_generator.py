@@ -97,7 +97,7 @@ def create_daily_log_pdf(
                 add_paragraph(text_block)
                 elements.append(Spacer(1, 6))
 
-               if match and matched_image:
+        if match and matched_image:
                     possible_paths = [
                         os.path.join("static/uploads", matched_image),
                         os.path.join("static/uploads", matched_image.replace("_compressed", "")),
