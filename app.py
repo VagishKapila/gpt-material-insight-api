@@ -1,4 +1,3 @@
-
 import os
 import json
 import uuid
@@ -7,12 +6,12 @@ from datetime import datetime
 from flask import Flask, request, render_template, send_from_directory, redirect, url_for
 from werkzeug.utils import secure_filename
 
-from utils.compare_scope_vs_log import analyze_scope_vs_log  # parse_scope_file safely omitted
+from utils.compare_scope_vs_log import analyze_scope_vs_log
 from utils.pdf_generator import create_daily_log_pdf
 
 app = Flask(__name__)
 
-# Folders
+# === Folder Setup ===
 UPLOAD_FOLDER = "static/uploads"
 GENERATED_FOLDER = "static/generated"
 SCOPE_FOLDER = "static/scope"
@@ -74,6 +73,7 @@ def generate_form():
 
         ai_results = {}
         progress_report = {}
+
         if request.form.get("enable_ai") and scope_path:
             try:
                 ai_results = analyze_scope_vs_log(scope_path, form_data, image_paths)
@@ -91,8 +91,7 @@ def generate_form():
             "safety_sheet_path": safety_path
         }
 
-        session_file = os.path.join(SESSION_FOLDER, f"{session_id}.json")
-        with open(session_file, "w") as f:
+        with open(os.path.join(SESSION_FOLDER, f"{session_id}.json"), "w") as f:
             json.dump(session_data, f, indent=2)
 
         return redirect(url_for("preview", session_id=session_id))
@@ -135,7 +134,13 @@ def submit_preview():
             scope = request.form.get(f"scope_{i}", "")
             confidence = int(request.form.get(f"confidence_{i}", 0))
             match = f"match_{i}" in request.form
-            scored_items.append({"scope": scope, "confidence": confidence, "match": match})
+            matched_image = request.form.get(f"matched_image_{i}", None)
+            scored_items.append({
+                "scope": scope,
+                "confidence": confidence,
+                "match": match,
+                "matched_image": matched_image
+            })
 
         estimated_completion = sum(i["confidence"] for i in scored_items if i["match"]) / max(len(scored_items), 1)
         data["ai_results"] = {
