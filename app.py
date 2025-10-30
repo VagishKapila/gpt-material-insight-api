@@ -11,7 +11,7 @@ from utils.pdf_generator import create_daily_log_pdf
 
 app = Flask(__name__)
 
-# === Folder Setup ===
+# Folder setup
 UPLOAD_FOLDER = "static/uploads"
 GENERATED_FOLDER = "static/generated"
 SCOPE_FOLDER = "static/scope"
@@ -45,10 +45,7 @@ def generate_form():
         }
 
         session_id = str(uuid.uuid4())
-        image_paths = []
-        scope_path = None
-        safety_path = None
-        logo_path = None
+        image_paths, scope_path, safety_path, logo_path = [], None, None, None
 
         def save_file(field, folder):
             if field in request.files and request.files[field].filename:
@@ -73,7 +70,6 @@ def generate_form():
 
         ai_results = {}
         progress_report = {}
-
         if request.form.get("enable_ai") and scope_path:
             try:
                 ai_results = analyze_scope_vs_log(scope_path, form_data, image_paths)
@@ -105,7 +101,6 @@ def preview(session_id):
     json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
     if not os.path.exists(json_path):
         return f"❌ Session not found: {session_id}", 404
-
     try:
         with open(json_path, "r") as f:
             data = json.load(f)
@@ -130,11 +125,13 @@ def submit_preview():
 
         total_items = int(request.form.get("total_items", 0))
         scored_items = []
+
         for i in range(total_items):
             scope = request.form.get(f"scope_{i}", "")
             confidence = int(request.form.get(f"confidence_{i}", 0))
             match = f"match_{i}" in request.form
-            matched_image = request.form.get(f"matched_image_{i}", None)
+            matched_image = request.form.get(f"matched_image_{i}", "").strip() or None
+
             scored_items.append({
                 "scope": scope,
                 "confidence": confidence,
@@ -143,6 +140,7 @@ def submit_preview():
             })
 
         estimated_completion = sum(i["confidence"] for i in scored_items if i["match"]) / max(len(scored_items), 1)
+
         data["ai_results"] = {
             "completion": round(estimated_completion, 1),
             "scored_items": scored_items,
