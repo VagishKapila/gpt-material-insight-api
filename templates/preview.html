@@ -1,4 +1,3 @@
-<!-- ✅ preview.html (with matched image filenames shown) -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,14 +8,13 @@
     h1, h2 { color: #2c3e50; }
     .section { margin-bottom: 30px; padding: 20px; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
     .label { font-weight: bold; color: #34495e; display: block; margin-top: 10px; }
-    .value { color: #2c3e50; margin-left: 10px; }
     .images { display: flex; flex-wrap: wrap; gap: 10px; }
     .images img { width: 120px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: zoom-in; }
-    .score { margin: 10px 0; }
+    .score { margin: 12px 0; }
     .out-of-scope { color: #c0392b; }
     .button { margin-top: 30px; padding: 14px 28px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer; }
     .button:hover { background: #2980b9; }
-    .filename { font-size: 13px; color: #888; font-style: italic; }
+    .dropdown { margin-top: 6px; font-size: 14px; }
   </style>
 </head>
 <body>
@@ -62,11 +60,20 @@
             {{ item.scope }} — 
             <input type="range" class="slider" name="confidence_{{ loop.index0 }}" min="0" max="100" step="1" value="{{ item.confidence }}">
             <span class="conf_val">{{ item.confidence }}</span>%
-            <div class="filename">
-              Matched Image: {{ item.matched_image or "(No match found)" }}
-            </div>
           </label>
           <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
+
+          <!-- 🔄 Dropdown to override matched image -->
+          <div class="dropdown">
+            Matched Image:
+            <select name="matched_image_{{ loop.index0 }}">
+              <option value="">(No match)</option>
+              {% for img_path in image_paths %}
+                {% set filename = img_path.split('/')[-1] %}
+                <option value="{{ filename }}" {% if item.matched_image == filename %}selected{% endif %}>{{ filename }}</option>
+              {% endfor %}
+            </select>
+          </div>
         </div>
       {% endfor %}
       <input type="hidden" name="total_items" value="{{ ai_results.scored_items|length }}">
