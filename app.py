@@ -1,5 +1,3 @@
-### ✅ NEW VERSION — app.py (with Async Image Add/Remove)
-
 import os
 import json
 import uuid
@@ -147,7 +145,7 @@ def remove_image(session_id):
         with open(json_path, "r") as f:
             data = json.load(f)
 
-        image_to_remove = request.json.get("url")
+        image_to_remove = request.json.get("image_path")
         if image_to_remove in data["image_paths"]:
             data["image_paths"].remove(image_to_remove)
             if os.path.exists(image_to_remove):
