@@ -63,7 +63,7 @@
           </label>
           <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
 
-          <!-- 🔄 Dropdown to override matched image -->
+          {% if item.match %}
           <div class="dropdown">
             Matched Image:
             <select name="matched_image_{{ loop.index0 }}">
@@ -74,6 +74,7 @@
               {% endfor %}
             </select>
           </div>
+          {% endif %}
         </div>
       {% endfor %}
       <input type="hidden" name="total_items" value="{{ ai_results.scored_items|length }}">
