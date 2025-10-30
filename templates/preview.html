@@ -1,4 +1,4 @@
-<!-- ✅ preview.html (with hidden session_id field + working form) -->
+<!-- ✅ preview.html (with matched image filenames shown) -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -12,16 +12,16 @@
     .value { color: #2c3e50; margin-left: 10px; }
     .images { display: flex; flex-wrap: wrap; gap: 10px; }
     .images img { width: 120px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: zoom-in; }
-    .score { margin: 6px 0; }
+    .score { margin: 10px 0; }
     .out-of-scope { color: #c0392b; }
     .button { margin-top: 30px; padding: 14px 28px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer; }
     .button:hover { background: #2980b9; }
+    .filename { font-size: 13px; color: #888; font-style: italic; }
   </style>
 </head>
 <body>
   <h1>📋 Daily Log Preview</h1>
   <form action="/submit_preview" method="POST">
-    <!-- ✅ Hidden Session ID -->
     <input type="hidden" name="session_id" value="{{ session_id }}">
 
     <div class="section">
@@ -42,7 +42,7 @@
 
     {% if image_paths %}
     <div class="section">
-      <h2>📷 Photos</h2>
+      <h2>📷 Job Site Photos</h2>
       <div class="images">
         {% for img_path in image_paths %}
           <img src="/{{ img_path }}" alt="Job Site Photo" onclick="zoomImage(this)">
@@ -62,6 +62,9 @@
             {{ item.scope }} — 
             <input type="range" class="slider" name="confidence_{{ loop.index0 }}" min="0" max="100" step="1" value="{{ item.confidence }}">
             <span class="conf_val">{{ item.confidence }}</span>%
+            <div class="filename">
+              Matched Image: {{ item.matched_image or "(No match found)" }}
+            </div>
           </label>
           <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
         </div>
@@ -115,9 +118,11 @@
     document.querySelectorAll(".zoomed").forEach(el => el.classList.remove("zoomed"));
     if (!isZoomed) img.classList.add("zoomed");
   }
+
   document.addEventListener("keydown", e => {
     if (e.key === 'Escape') document.querySelectorAll(".zoomed").forEach(el => el.classList.remove("zoomed"));
   });
+
   document.addEventListener("click", e => {
     if (!e.target.classList.contains("zoomed") && !e.target.closest(".images")) {
       document.querySelectorAll(".zoomed").forEach(el => el.classList.remove("zoomed"));
