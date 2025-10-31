@@ -49,3 +49,9 @@ def upload_media():
         "message": f"✅ Uploaded {len(saved_files)} file(s) successfully.",
         "files": saved_files
     })
+
+from flask import send_from_directory
+
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    return send_from_directory('static', filename)
