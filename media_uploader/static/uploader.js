@@ -99,7 +99,25 @@ function renderPreviews() {
   });
 }
 
+// 🧹 Updated removeFile() — Stops videos + Frees memory
 function removeFile(index) {
+  const media = mediaFiles[index];
+
+  // 🛑 Stop video playback before removing
+  if (media && media.file.type.startsWith("video/")) {
+    const videos = document.querySelectorAll(`video[src="${media.url}"]`);
+    videos.forEach(v => {
+      v.pause();
+      v.src = "";
+      v.load();
+    });
+  }
+
+  // 🧠 Free up memory for all types
+  if (media && media.url) {
+    URL.revokeObjectURL(media.url);
+  }
+
   mediaFiles.splice(index, 1);
   renderPreviews();
 }
