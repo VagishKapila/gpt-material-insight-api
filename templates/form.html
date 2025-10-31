@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Daily Log Submission</title>
-  <link rel="stylesheet" href="/static/style.css" /> <!-- ✅ Add uploader styling -->
+  <link rel="stylesheet" href="/static/style.css" />
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; }
     h1 { color: #2c3e50; }
@@ -25,13 +25,19 @@
       cursor: pointer;
     }
     button:hover { background: #219150; }
-    .form-section { background: #fff; padding: 20px; margin-bottom: 30px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    .form-section {
+      background: #fff; padding: 20px; margin-bottom: 30px;
+      border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    ::placeholder {
+      color: #888;
+    }
   </style>
 </head>
 <body>
   <h1>📋 Daily Log Entry</h1>
   <form action="/generate_form" method="post" enctype="multipart/form-data">
-    
+
     <div class="form-section">
       <label>Project Name:</label>
       <input type="text" name="project_name" required>
@@ -51,28 +57,23 @@
 
     <div class="form-section">
       <label>Work Done:</label>
-      <textarea name="work_done" rows="4" required></textarea>
+      <textarea name="work_done" rows="4" placeholder="E.g. Trench dug 2 ft, pipe laid, concrete poured" required></textarea>
 
       <label>Crew Notes:</label>
-      <textarea name="crew_notes" rows="3"></textarea>
+      <textarea name="crew_notes" rows="3" placeholder="4 crew members, work from 8am–4pm, no issues"></textarea>
 
       <label>Safety Notes:</label>
-      <textarea name="safety_notes" rows="3"></textarea>
+      <textarea name="safety_notes" rows="3" placeholder="PPE checked, fire hazards mitigated, no injuries"></textarea>
     </div>
 
     <div class="form-section">
-      <!-- 🧱 REPLACED OLD INPUT for jobsite images -->
-      <label>Upload Job Site Photos (multiple):</label>
-
-      <!-- ✅ NEW DRAG & DROP UPLOADER -->
+      <label>Upload Job Site Photos (drag/drop or click):</label>
       <div class="dropzone" id="dropzone">
         Drag & drop jobsite photos anywhere on this page or click below
         <input type="file" id="fileInput" accept="image/*,video/*" multiple hidden>
       </div>
-
       <div id="preview-container"></div>
 
-      <!-- Optional: Progress bar (same as uploader) -->
       <div id="progress-container" style="display:none; margin-top: 10px;">
         <div style="background: #ddd; border-radius: 8px; overflow: hidden;">
           <div id="progress-bar" style="width: 0%; height: 14px; background: #2ecc71;"></div>
@@ -80,7 +81,6 @@
       </div>
 
       <div id="upload-status" style="margin-top: 10px; color: green;"></div>
-      <!-- 🧱 END NEW UPLOADER -->
 
       <label>Upload Scope of Work File:</label>
       <input type="file" name="scope_doc" accept=".pdf,.docx,.txt,.xls,.xlsx">
@@ -101,10 +101,7 @@
     <button type="submit">🚀 Submit Daily Log</button>
   </form>
 
-  <!-- ✅ Zoom modal for image/video preview -->
   <div id="zoom-modal" class="zoom-modal"></div>
-
-  <!-- ✅ JS logic for uploader -->
   <script src="/static/uploader.js"></script>
 </body>
 </html>
