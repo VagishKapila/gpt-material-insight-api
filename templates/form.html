@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Daily Log Submission</title>
+  <link rel="stylesheet" href="/static/style.css" /> <!-- ✅ Add uploader styling -->
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; }
     h1 { color: #2c3e50; }
@@ -60,8 +61,26 @@
     </div>
 
     <div class="form-section">
+      <!-- 🧱 REPLACED OLD INPUT for jobsite images -->
       <label>Upload Job Site Photos (multiple):</label>
-      <input type="file" name="images" multiple accept="image/*">
+
+      <!-- ✅ NEW DRAG & DROP UPLOADER -->
+      <div class="dropzone" id="dropzone">
+        Drag & drop jobsite photos anywhere on this page or click below
+        <input type="file" id="fileInput" accept="image/*,video/*" multiple hidden>
+      </div>
+
+      <div id="preview-container"></div>
+
+      <!-- Optional: Progress bar (same as uploader) -->
+      <div id="progress-container" style="display:none; margin-top: 10px;">
+        <div style="background: #ddd; border-radius: 8px; overflow: hidden;">
+          <div id="progress-bar" style="width: 0%; height: 14px; background: #2ecc71;"></div>
+        </div>
+      </div>
+
+      <div id="upload-status" style="margin-top: 10px; color: green;"></div>
+      <!-- 🧱 END NEW UPLOADER -->
 
       <label>Upload Scope of Work File:</label>
       <input type="file" name="scope_doc" accept=".pdf,.docx,.txt,.xls,.xlsx">
@@ -81,5 +100,11 @@
 
     <button type="submit">🚀 Submit Daily Log</button>
   </form>
+
+  <!-- ✅ Zoom modal for image/video preview -->
+  <div id="zoom-modal" class="zoom-modal"></div>
+
+  <!-- ✅ JS logic for uploader -->
+  <script src="/static/uploader.js"></script>
 </body>
 </html>
