@@ -1,7 +1,7 @@
 {
-  "root": "media_uploader",
+  "root": "static",
   "clean_urls": true,
   "routes": {
-    "/**": "index.html"
+    "/": "index.html"
   }
 }
