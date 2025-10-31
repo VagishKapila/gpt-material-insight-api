@@ -22,22 +22,17 @@ def upload_media():
         save_path = os.path.join(UPLOAD_FOLDER, temp_name)
         f.save(save_path)
 
-        # If it's a video, compress it
         if file_ext in ["mp4", "mov", "avi", "mkv"]:
             compressed_name = f"compressed_{temp_name}"
             compressed_path = os.path.join(COMPRESSED_FOLDER, compressed_name)
-
             ffmpeg_cmd = [
                 "ffmpeg", "-i", save_path,
                 "-vcodec", "libx264", "-crf", "28",
-                "-preset", "veryfast",  # Speed vs quality trade-off
-                "-y",  # Overwrite output if exists
-                compressed_path
+                "-preset", "veryfast", "-y", compressed_path
             ]
-
             try:
                 subprocess.run(ffmpeg_cmd, check=True)
-                os.remove(save_path)  # Cleanup original
+                os.remove(save_path)
                 saved_files.append(compressed_name)
             except subprocess.CalledProcessError:
                 saved_files.append(f"⚠️ Compression failed: {filename}")
@@ -49,13 +44,21 @@ def upload_media():
         "files": saved_files
     })
 
-
 @app.route("/")
 def home():
     return send_from_directory("static", "index.html")
 
+@app.route("/uploaded_files")
+def uploaded_files():
+    html = "<h3>Uploaded Files</h3><ul>"
+    for folder in ["static/uploads", "static/compressed"]:
+        if os.path.exists(folder):
+            for fname in os.listdir(folder):
+                fpath = f"{folder}/{fname}"
+                html += f'<li><a href="/{fpath}">{fname}</a></li>'
+    html += "</ul>"
+    return html
 
-# ✅ Add this to explicitly start Flask in Railway
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Railway uses dynamic ports
+    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
