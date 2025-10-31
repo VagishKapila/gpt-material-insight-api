@@ -22,13 +22,16 @@ SESSION_FOLDER = "session_data"
 for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER, SAFETY_FOLDER, LOGO_FOLDER, SESSION_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
+
 @app.route("/")
 def health():
     return "✅ Nails & Notes AI Log is running!"
 
+
 @app.route("/form")
 def form():
     return render_template("form.html", datetime=datetime)
+
 
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
@@ -53,14 +56,16 @@ def generate_form():
                 filename = secure_filename(file.filename)
                 path = os.path.join(folder, f"{session_id}_{filename}")
                 file.save(path)
+                print(f"✅ Saved {field} to {path}")
                 return path
             return None
 
+        # Save optional files
         logo_path = save_file("logo", LOGO_FOLDER)
         safety_path = save_file("safety_sheet", SAFETY_FOLDER)
         scope_path = save_file("scope_doc", SCOPE_FOLDER)
 
-        # ✅ NEW DRAG & DROP: Save uploaded media from uploader
+        # ✅ Save uploaded job site photos
         if "media_files" in request.files:
             for file in request.files.getlist("media_files"):
                 if file.filename:
@@ -69,7 +74,13 @@ def generate_form():
                     save_path = os.path.join(UPLOAD_FOLDER, safe_filename)
                     file.save(save_path)
                     image_paths.append(save_path)
+                    print(f"📸 Jobsite image saved: {save_path}")
+        else:
+            print("⚠️ No jobsite media uploaded.")
 
+        print(f"📦 Final image_paths before PDF/preview: {image_paths}")
+
+        # ✅ AI Scope Comparison
         ai_results = {}
         progress_report = {}
         if request.form.get("enable_ai") and scope_path:
@@ -98,6 +109,7 @@ def generate_form():
         traceback.print_exc()
         return f"❌ Error generating form: {str(e)}", 500
 
+
 @app.route("/preview/<session_id>")
 def preview(session_id):
     json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
@@ -110,6 +122,7 @@ def preview(session_id):
     except Exception as e:
         traceback.print_exc()
         return f"❌ Failed to load preview: {str(e)}", 500
+
 
 @app.route("/submit_preview", methods=["POST"])
 def submit_preview():
@@ -172,12 +185,14 @@ def submit_preview():
         traceback.print_exc()
         return f"❌ Failed to generate PDF: {str(e)}", 500
 
+
 @app.route("/generated/<filename>")
 def serve_pdf(filename):
     path = os.path.join(GENERATED_FOLDER, filename)
     if not os.path.exists(path):
         return f"❌ File not found: {filename}", 404
     return send_from_directory(GENERATED_FOLDER, filename)
+
 
 @app.route("/debug_sessions")
 def debug_sessions():
@@ -191,6 +206,7 @@ def debug_sessions():
         return f"<h2>🧠 Debug: Saved Sessions</h2><ul>{''.join(session_links)}</ul>"
     except Exception as e:
         return f"Failed to load sessions: {str(e)}", 500
+
 
 if __name__ == "__main__":
     app.run(debug=True)
