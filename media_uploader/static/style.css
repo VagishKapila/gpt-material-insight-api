@@ -1,4 +1,6 @@
 .preview-item {
+  min-height: 180px;  /* ✅ ensures same height for video + image previews */
+}
   position: relative;
   min-height: 180px;         /* 🔧 Keeps video + image same height */
   background: #fff;
