@@ -1,13 +1,24 @@
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 const previewGrid = document.getElementById('previewGrid');
-const resetBtn = document.getElementById('upload-reset');
 
 let mediaFiles = [];
-let showAll = false;
-const MAX_FILES = 20;
 
-// Compress image before upload
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropzone.classList.add('dragover');
+});
+dropzone.addEventListener('dragleave', () => {
+  dropzone.classList.remove('dragover');
+});
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
 function compressImage(file, callback) {
   const img = new Image();
   const reader = new FileReader();
@@ -38,11 +49,7 @@ function compressImage(file, callback) {
   reader.readAsDataURL(file);
 }
 
-// Handle image/video input
 function handleFiles(files) {
-  const totalCount = mediaFiles.length + files.length;
-  if (totalCount > MAX_FILES) return alert("⚠️ Max 20 files allowed");
-
   Array.from(files).forEach(file => {
     const isImage = file.type.startsWith("image/");
     const isVideo = file.type.startsWith("video/");
@@ -55,7 +62,6 @@ function handleFiles(files) {
       return;
     }
 
-    // Compress image or push video
     if (isImage) {
       compressImage(file, compressed => {
         mediaFiles.push({ file: compressed, url: URL.createObjectURL(compressed) });
@@ -68,39 +74,37 @@ function handleFiles(files) {
   });
 }
 
-// Show image previews in grid
 function renderPreviews() {
   previewGrid.innerHTML = "";
   mediaFiles.forEach((media, index) => {
-    const item = document.createElement("div");
-    item.className = "preview-item";
     const isVideo = media.file.type.startsWith("video/");
-    item.innerHTML = `
-      <${isVideo ? 'video controls' : 'img'} src="${media.url}" />
-      <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
-    `;
-    previewGrid.appendChild(item);
+    const wrapper = document.createElement("div");
+    wrapper.className = "preview-item";
+
+    if (isVideo) {
+      wrapper.innerHTML = `
+        <video src="${media.url}" muted></video>
+        <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
+        <div class="play-overlay">▶️</div>
+      `;
+      wrapper.querySelector("video").addEventListener("click", () => openZoomVideo(media.url));
+    } else {
+      wrapper.innerHTML = `
+        <img src="${media.url}" />
+        <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
+      `;
+      wrapper.querySelector("img").addEventListener("click", () => openZoomImage(media.url));
+    }
+
+    previewGrid.appendChild(wrapper);
   });
 }
 
-// Remove individual image from preview
 function removeFile(index) {
   mediaFiles.splice(index, 1);
   renderPreviews();
 }
 
-// Reset uploader after upload
-function resetUploader() {
-  mediaFiles = [];
-  showAll = false;
-  renderPreviews();
-  document.getElementById("progress-container").style.display = "none";
-  document.getElementById("progress-bar").style.width = "0%";
-  document.getElementById("upload-status").textContent = "";
-  resetBtn.style.display = "none";
-}
-
-// Upload to backend server
 function uploadMedia() {
   if (mediaFiles.length === 0) return alert("No media to upload.");
 
@@ -129,8 +133,6 @@ function uploadMedia() {
     if (xhr.status === 200) {
       const res = JSON.parse(xhr.responseText);
       statusText.textContent = res.message || "✅ Upload complete!";
-      resetBtn.style.display = "block";
-      console.log("✅ Upload finished");
     } else {
       statusText.textContent = "❌ Upload failed";
       progressBar.style.backgroundColor = "#e74c3c";
@@ -145,18 +147,25 @@ function uploadMedia() {
   xhr.send(formData);
 }
 
-// ✅ Attach event listeners
-dropzone.addEventListener('click', () => fileInput.click());
-dropzone.addEventListener('dragover', e => {
-  e.preventDefault();
-  dropzone.classList.add('dragover');
-});
-dropzone.addEventListener('dragleave', () => {
-  dropzone.classList.remove('dragover');
-});
-dropzone.addEventListener('drop', e => {
-  e.preventDefault();
-  dropzone.classList.remove('dragover');
-  handleFiles(e.dataTransfer.files);
-});
-fileInput.addEventListener('change', e => handleFiles(e.target.files));
+/* ---------- ZOOM MODAL ---------- */
+function openZoomImage(url) {
+  document.getElementById("zoomImage").src = url;
+  document.getElementById("zoomImage").style.display = "block";
+  document.getElementById("zoomVideo").style.display = "none";
+  document.getElementById("zoomModal").style.display = "flex";
+}
+
+function openZoomVideo(url) {
+  const video = document.getElementById("zoomVideo");
+  video.src = url;
+  video.style.display = "block";
+  document.getElementById("zoomImage").style.display = "none";
+  document.getElementById("zoomModal").style.display = "flex";
+}
+
+function closeZoom() {
+  document.getElementById("zoomModal").style.display = "none";
+  document.getElementById("zoomImage").src = "";
+  document.getElementById("zoomVideo").pause();
+  document.getElementById("zoomVideo").src = "";
+}
