@@ -50,9 +50,9 @@ def upload_media():
     })
 
 
-@app.route('/static/<path:filename>')
-def serve_static(filename):
-    return send_from_directory('static', filename)
+@app.route("/")
+def home():
+    return send_from_directory("static", "index.html")
 
 
 # ✅ Add this to explicitly start Flask in Railway
