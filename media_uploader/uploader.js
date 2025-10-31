@@ -87,16 +87,39 @@ function uploadMedia() {
     formData.append("media_files", media.file);
   });
 
-  fetch("/upload_media_test", {
-    method: "POST",
-    body: formData
-  })
-  .then(res => res.json())
-  .then(data => {
-    document.getElementById("upload-status").textContent = data.message || "✅ Uploaded!";
-  })
-  .catch(err => {
-    console.error("Upload error:", err);
-    document.getElementById("upload-status").textContent = "❌ Upload failed";
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", "/upload_media_test", true);
+
+  const progressContainer = document.getElementById("progress-container");
+  const progressBar = document.getElementById("progress-bar");
+  const statusText = document.getElementById("upload-status");
+
+  progressContainer.style.display = "block";
+  progressBar.style.width = "0%";
+  statusText.textContent = "";
+
+  xhr.upload.addEventListener("progress", (e) => {
+    if (e.lengthComputable) {
+      const percent = Math.round((e.loaded / e.total) * 100);
+      progressBar.style.width = percent + "%";
+    }
   });
+
+  xhr.onload = () => {
+    if (xhr.status === 200) {
+      const res = JSON.parse(xhr.responseText);
+      statusText.textContent = res.message || "✅ Upload complete!";
+      progressBar.style.background = "#2ecc71";
+    } else {
+      statusText.textContent = "❌ Upload failed";
+      progressBar.style.background = "#e74c3c";
+    }
+  };
+
+  xhr.onerror = () => {
+    statusText.textContent = "❌ Upload error";
+    progressBar.style.background = "#e74c3c";
+  };
+
+  xhr.send(formData);
 }
