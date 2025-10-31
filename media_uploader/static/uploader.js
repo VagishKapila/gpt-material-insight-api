@@ -3,21 +3,7 @@ const fileInput = document.getElementById('fileInput');
 const previewGrid = document.getElementById('previewGrid');
 
 let mediaFiles = [];
-
-dropzone.addEventListener('click', () => fileInput.click());
-dropzone.addEventListener('dragover', e => {
-  e.preventDefault();
-  dropzone.classList.add('dragover');
-});
-dropzone.addEventListener('dragleave', () => {
-  dropzone.classList.remove('dragover');
-});
-dropzone.addEventListener('drop', e => {
-  e.preventDefault();
-  dropzone.classList.remove('dragover');
-  handleFiles(e.dataTransfer.files);
-});
-fileInput.addEventListener('change', e => handleFiles(e.target.files));
+const MAX_FILES = 20;
 
 function compressImage(file, callback) {
   const img = new Image();
@@ -50,6 +36,9 @@ function compressImage(file, callback) {
 }
 
 function handleFiles(files) {
+  const totalCount = mediaFiles.length + files.length;
+  if (totalCount > MAX_FILES) return alert("⚠️ Max 20 files allowed");
+
   Array.from(files).forEach(file => {
     const isImage = file.type.startsWith("image/");
     const isVideo = file.type.startsWith("video/");
@@ -78,25 +67,34 @@ function renderPreviews() {
   previewGrid.innerHTML = "";
   mediaFiles.forEach((media, index) => {
     const isVideo = media.file.type.startsWith("video/");
-    const wrapper = document.createElement("div");
-    wrapper.className = "preview-item";
+    const item = document.createElement("div");
+    item.className = "preview-item";
 
-    if (isVideo) {
-      wrapper.innerHTML = `
-        <video src="${media.url}" muted></video>
-        <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
-        <div class="play-overlay">▶️</div>
-      `;
-      wrapper.querySelector("video").addEventListener("click", () => openZoomVideo(media.url));
-    } else {
-      wrapper.innerHTML = `
-        <img src="${media.url}" />
-        <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
-      `;
-      wrapper.querySelector("img").addEventListener("click", () => openZoomImage(media.url));
-    }
+    // Wrap in clickable zoom
+    item.innerHTML = `
+      <${isVideo ? 'video controls' : 'img'} src="${media.url}" class="preview-media" />
+      <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
+    `;
 
-    previewGrid.appendChild(wrapper);
+    item.addEventListener('click', () => {
+      const popup = document.createElement("div");
+      popup.style.position = "fixed";
+      popup.style.top = 0;
+      popup.style.left = 0;
+      popup.style.width = "100%";
+      popup.style.height = "100%";
+      popup.style.background = "rgba(0,0,0,0.8)";
+      popup.style.display = "flex";
+      popup.style.alignItems = "center";
+      popup.style.justifyContent = "center";
+      popup.innerHTML = `
+        <${isVideo ? 'video controls autoplay' : 'img'} src="${media.url}" style="max-width:90%; max-height:90%; border-radius:12px;" />
+      `;
+      popup.onclick = () => document.body.removeChild(popup);
+      document.body.appendChild(popup);
+    });
+
+    previewGrid.appendChild(item);
   });
 }
 
@@ -121,6 +119,7 @@ function uploadMedia() {
   progressContainer.style.display = "block";
   progressBar.style.width = "0%";
   statusText.textContent = "";
+  progressBar.style.backgroundColor = "#2ecc71";
 
   xhr.upload.addEventListener("progress", e => {
     if (e.lengthComputable) {
@@ -147,25 +146,18 @@ function uploadMedia() {
   xhr.send(formData);
 }
 
-/* ---------- ZOOM MODAL ---------- */
-function openZoomImage(url) {
-  document.getElementById("zoomImage").src = url;
-  document.getElementById("zoomImage").style.display = "block";
-  document.getElementById("zoomVideo").style.display = "none";
-  document.getElementById("zoomModal").style.display = "flex";
-}
-
-function openZoomVideo(url) {
-  const video = document.getElementById("zoomVideo");
-  video.src = url;
-  video.style.display = "block";
-  document.getElementById("zoomImage").style.display = "none";
-  document.getElementById("zoomModal").style.display = "flex";
-}
-
-function closeZoom() {
-  document.getElementById("zoomModal").style.display = "none";
-  document.getElementById("zoomImage").src = "";
-  document.getElementById("zoomVideo").pause();
-  document.getElementById("zoomVideo").src = "";
-}
+// Dropzone events
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropzone.classList.add('dragover');
+});
+dropzone.addEventListener('dragleave', () => {
+  dropzone.classList.remove('dragover');
+});
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
