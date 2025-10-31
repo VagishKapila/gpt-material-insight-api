@@ -1,68 +1,131 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Daily Log Submission</title>
-    <style>
-        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
-        h1 { color: #333; }
-        form { background: white; padding: 20px; border-radius: 8px; max-width: 700px; margin: auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        label { display: block; margin-top: 12px; font-weight: bold; }
-        input[type="text"], textarea, input[type="file"], input[type="date"] {
-            width: 100%; padding: 8px; margin-top: 5px; border-radius: 4px; border: 1px solid #ccc;
-        }
-        textarea { resize: vertical; }
-        button { margin-top: 20px; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #0056b3; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily Log Form</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script defer src="/static/uploader.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+    .container {
+      max-width: 750px;
+      margin: auto;
+      background: white;
+      padding: 25px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    label {
+      display: block;
+      margin-top: 14px;
+      font-weight: bold;
+    }
+    input[type="text"],
+    input[type="date"],
+    textarea,
+    input[type="file"] {
+      width: 100%;
+      padding: 8px;
+      margin-top: 6px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    textarea { resize: vertical; }
+    button {
+      margin-top: 20px;
+      padding: 12px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    .dropzone {
+      border: 2px dashed #aaa;
+      padding: 20px;
+      text-align: center;
+      margin-top: 10px;
+      border-radius: 8px;
+      background: #f9f9f9;
+      cursor: pointer;
+    }
+    #preview-container {
+      margin-top: 15px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .preview-thumb {
+      max-width: 100%;
+      max-height: 120px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      object-fit: cover;
+    }
+  </style>
 </head>
 <body>
+  <div class="container">
+    <h1>🛠️ Submit Daily Log</h1>
 
-<h1>🛠️ Submit Daily Log</h1>
+    <form action="/generate_form" method="POST" enctype="multipart/form-data">
+      <label>Project Name</label>
+      <input type="text" name="project_name" placeholder="e.g. Upper Oaks Apartments" required>
 
-<form action="/generate_form" method="POST" enctype="multipart/form-data">
-    <label>Project Name</label>
-    <input type="text" name="project_name" placeholder="e.g. Upper Oaks Apartments" required>
+      <label>Client Name</label>
+      <input type="text" name="client_name" placeholder="e.g. ABC Construction Ltd." required>
 
-    <label>Client Name</label>
-    <input type="text" name="client_name" placeholder="e.g. ABC Construction Ltd." required>
+      <label>Location</label>
+      <input type="text" name="location" placeholder="City or jobsite address" required>
 
-    <label>Location</label>
-    <input type="text" name="location" placeholder="City or jobsite address" required>
+      <label>Date</label>
+      <input type="date" name="date" value="{{ datetime.utcnow().date() }}" required>
 
-    <label>Date</label>
-    <input type="date" name="date" value="{{ datetime.utcnow().date() }}" required>
+      <label>Weather</label>
+      <input type="text" name="weather" placeholder="e.g. Sunny, 72°F" required>
 
-    <label>Weather</label>
-    <input type="text" name="weather" placeholder="e.g. Sunny, 72°F" required>
+      <label>Work Done Today</label>
+      <textarea name="work_done" rows="3" placeholder="Describe work completed today..." required></textarea>
 
-    <label>Work Done Today</label>
-    <textarea name="work_done" rows="3" placeholder="Describe work completed today..." required></textarea>
+      <label>Crew Notes</label>
+      <textarea name="crew_notes" rows="2" placeholder="Crew size, shifts, issues..."></textarea>
 
-    <label>Crew Notes</label>
-    <textarea name="crew_notes" rows="2" placeholder="Crew size, shifts, issues..."></textarea>
+      <label>Safety Notes</label>
+      <textarea name="safety_notes" rows="2" placeholder="Safety concerns, incidents, reminders..."></textarea>
 
-    <label>Safety Notes</label>
-    <textarea name="safety_notes" rows="2" placeholder="Safety concerns, incidents, reminders..."></textarea>
+      <label>Jobsite Media (Images or Videos)</label>
+      <div id="dropzone" class="dropzone">
+        <p>📸 Drag & drop up to 20 files here, or click to select</p>
+        <input type="file" id="fileInput" name="media_files" accept="image/*,video/*" multiple hidden>
+      </div>
+      <div id="preview-container"></div>
 
-    <label>Jobsite Media Uploads (Images or Videos)</label>
-    <input type="file" name="media_files" multiple accept="image/*,video/*">
+      <label>Upload Scope of Work</label>
+      <input type="file" name="scope_doc" accept=".pdf,.doc,.docx,.txt,.xlsx,.pptx" required>
 
-    <label>Upload Scope of Work</label>
-    <input type="file" name="scope_doc" accept=".pdf,.doc,.docx,.txt,.xlsx,.pptx">
+      <label>Upload Safety Sheet</label>
+      <input type="file" name="safety_sheet" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx">
 
-    <label>Upload Safety Sheet</label>
-    <input type="file" name="safety_sheet" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx">
+      <label>Upload Logo</label>
+      <input type="file" name="logo" accept=".png,.jpg,.jpeg,.svg">
 
-    <label>Upload Logo</label>
-    <input type="file" name="logo" accept=".png,.jpg,.jpeg,.svg">
-
-    <label>
+      <label>
         <input type="checkbox" name="enable_ai" checked>
         Enable AI Scope Matching
-    </label>
+      </label>
 
-    <button type="submit">Generate Preview</button>
-</form>
-
+      <button type="submit">🚀 Generate Preview</button>
+    </form>
+  </div>
 </body>
 </html>
