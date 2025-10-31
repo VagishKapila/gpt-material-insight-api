@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 import os
 import uuid
 import subprocess
@@ -27,18 +27,17 @@ def upload_media():
             compressed_name = f"compressed_{temp_name}"
             compressed_path = os.path.join(COMPRESSED_FOLDER, compressed_name)
 
-            # Compress using ffmpeg (adjust bitrate/resolution if needed)
             ffmpeg_cmd = [
                 "ffmpeg", "-i", save_path,
                 "-vcodec", "libx264", "-crf", "28",
-                "-preset", "veryfast",  # or "faster", "fast", "medium"
-                "-y",  # Overwrite
+                "-preset", "veryfast",  # Speed vs quality trade-off
+                "-y",  # Overwrite output if exists
                 compressed_path
             ]
 
             try:
                 subprocess.run(ffmpeg_cmd, check=True)
-                os.remove(save_path)  # Optional: cleanup original
+                os.remove(save_path)  # Cleanup original
                 saved_files.append(compressed_name)
             except subprocess.CalledProcessError:
                 saved_files.append(f"⚠️ Compression failed: {filename}")
@@ -50,8 +49,13 @@ def upload_media():
         "files": saved_files
     })
 
-from flask import send_from_directory
 
 @app.route('/static/<path:filename>')
 def serve_static(filename):
     return send_from_directory('static', filename)
+
+
+# ✅ Add this to explicitly start Flask in Railway
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))  # Railway uses dynamic ports
+    app.run(host="0.0.0.0", port=port)
