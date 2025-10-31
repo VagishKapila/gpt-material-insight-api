@@ -8,15 +8,13 @@
     .dropzone {
       border: 2px dashed #aaa; padding: 40px; background: #fff;
       text-align: center; color: #888; border-radius: 12px; cursor: pointer;
+      transition: border-color 0.3s ease, background 0.3s ease;
     }
-    .preview-grid {
-      margin-top: 30px; display: flex; flex-wrap: wrap; gap: 15px;
-    }
-    .preview-item {
-      position: relative; max-width: 160px;
-    }
+    .dropzone.dragover { border-color: #3498db; background: #eef8ff; }
+    .preview-grid { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 15px; }
+    .preview-item { position: relative; max-width: 160px; }
     .preview-item img, .preview-item video {
-      max-width: 100%; border-radius: 8px;
+      max-width: 100%; border-radius: 8px; object-fit: cover;
     }
     .remove-btn {
       position: absolute; top: 5px; right: 5px; background: #e74c3c;
@@ -35,9 +33,10 @@
 <body>
   <h2>📦 Test Media Upload (Image + Video)</h2>
   <div class="dropzone" id="dropzone">
-    Drag & drop or click to upload (Max 20 files, image <5MB, video <20MB)
+    Drag & drop or click to upload (Max 20 files, image ≤15 MB, video ≤100 MB)
     <input type="file" id="fileInput" accept="image/*,video/*" multiple hidden>
   </div>
+
   <div class="preview-grid" id="previewGrid"></div>
   <div id="more-btn" onclick="toggleMore()">+ Show More Media</div>
 
@@ -60,24 +59,24 @@ const moreBtn = document.getElementById('more-btn');
 
 let mediaFiles = [];
 let showAll = false;
-
 const MAX_FILES = 20;
 
+// 🔁 Toggle Show More / Less
 function toggleMore() {
   showAll = !showAll;
   renderPreviews();
 }
 
+// 🧠 Image Compression Logic
 function compressImage(file, callback) {
   const img = new Image();
   const reader = new FileReader();
   reader.onload = e => {
     img.onload = () => {
       const canvas = document.createElement("canvas");
-      const maxDim = 1200;
+      const maxDim = 1600;
       let width = img.width;
       let height = img.height;
-
       if (width > height && width > maxDim) {
         height *= maxDim / width;
         width = maxDim;
@@ -85,12 +84,10 @@ function compressImage(file, callback) {
         width *= maxDim / height;
         height = maxDim;
       }
-
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext("2d");
       ctx.drawImage(img, 0, 0, width, height);
-
       canvas.toBlob(blob => {
         const compressed = new File([blob], file.name, { type: file.type });
         callback(compressed);
@@ -101,6 +98,7 @@ function compressImage(file, callback) {
   reader.readAsDataURL(file);
 }
 
+// 📂 Handle Files + Validation
 function handleFiles(files) {
   const totalCount = mediaFiles.length + files.length;
   if (totalCount > MAX_FILES) return alert("⚠️ Max 20 files allowed");
@@ -110,8 +108,12 @@ function handleFiles(files) {
     const isVideo = file.type.startsWith("video/");
     if (!isImage && !isVideo) return;
 
-    const maxSize = isVideo ? 20 * 1024 * 1024 : 5 * 1024 * 1024;
-    if (file.size > maxSize) return alert(`⚠️ ${file.name} too large`);
+    const maxSize = isVideo ? 100 * 1024 * 1024 : 15 * 1024 * 1024;
+    if (file.size > maxSize) {
+      const readable = isVideo ? "100 MB (video)" : "15 MB (image)";
+      alert(`⚠️ ${file.name} too large. Max allowed: ${readable}`);
+      return;
+    }
 
     if (isImage) {
       compressImage(file, compressed => {
@@ -125,6 +127,7 @@ function handleFiles(files) {
   });
 }
 
+// 🖼️ Render Thumbnails
 function renderPreviews() {
   previewGrid.innerHTML = "";
   const filesToShow = showAll ? mediaFiles : mediaFiles.slice(0, 6);
@@ -142,35 +145,18 @@ function renderPreviews() {
   moreBtn.textContent = showAll ? "− Hide Extra Media" : "+ Show More Media";
 }
 
+// ❌ Remove Media
 function removeFile(index) {
   mediaFiles.splice(index, 1);
   renderPreviews();
 }
 
-dropzone.addEventListener('click', () => fileInput.click());
-dropzone.addEventListener('dragover', e => {
-  e.preventDefault();
-  dropzone.style.borderColor = '#3498db';
-});
-dropzone.addEventListener('dragleave', () => {
-  dropzone.style.borderColor = '#aaa';
-});
-dropzone.addEventListener('drop', e => {
-  e.preventDefault();
-  dropzone.style.borderColor = '#aaa';
-  handleFiles(e.dataTransfer.files);
-});
-fileInput.addEventListener('change', e => handleFiles(e.target.files));
-
+// 🎯 Upload Logic with Progress Bar
 function uploadMedia() {
-  if (mediaFiles.length === 0) {
-    return alert("No media to upload.");
-  }
+  if (mediaFiles.length === 0) return alert("No media to upload.");
 
   const formData = new FormData();
-  mediaFiles.forEach((media, i) => {
-    formData.append("media_files", media.file);
-  });
+  mediaFiles.forEach(media => formData.append("media_files", media.file));
 
   const xhr = new XMLHttpRequest();
   xhr.open("POST", "/upload_media_test", true);
@@ -179,13 +165,11 @@ function uploadMedia() {
   const progressBar = document.getElementById("progress-bar");
   const statusText = document.getElementById("upload-status");
 
-  // Reset UI
   progressContainer.style.display = "block";
   progressBar.style.width = "0%";
-  progressBar.style.backgroundColor = "#2ecc71";
   statusText.textContent = "";
 
-  xhr.upload.addEventListener("progress", (e) => {
+  xhr.upload.addEventListener("progress", e => {
     if (e.lengthComputable) {
       const percent = Math.round((e.loaded / e.total) * 100);
       progressBar.style.width = percent + "%";
@@ -209,6 +193,22 @@ function uploadMedia() {
 
   xhr.send(formData);
 }
+
+// 🧲 Drag & Drop Events
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropzone.classList.add('dragover');
+});
+dropzone.addEventListener('dragleave', () => {
+  dropzone.classList.remove('dragover');
+});
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
 </script>
 </body>
 </html>
