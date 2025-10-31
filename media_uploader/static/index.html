@@ -8,19 +8,25 @@
 <body>
   <h2>📦 Test Media Upload (Image + Video)</h2>
 
-  <!-- Drag/drop zone + PLUS icon -->
-  <div class="top-actions">
-    <div class="add-more-label">+ Add More Files</div>
-    <div class="dropzone" id="dropzone">
-      Drag & drop or click to upload (Max 20 files, image ≤15 MB, video ≤100 MB)
-      <input type="file" id="fileInput" accept="image/*,video/*" multiple hidden />
-    </div>
+  <!-- Centered Add More Files button -->
+  <div style="text-align: center; margin-bottom: 10px;">
+    <button onclick="fileInput.click()" class="upload-btn">＋ Add More Files</button>
+    <div style="font-size: 13px; color: gray;">Supports .jpg, .png, .mp4, .mov, etc.</div>
   </div>
 
+  <!-- Drag-and-drop zone -->
+  <div class="dropzone" id="dropzone">
+    Drag & drop files here or use the + Add button
+    <input type="file" id="fileInput" accept="image/*,video/*" multiple hidden />
+  </div>
+
+  <!-- Previews of images/videos -->
   <div class="preview-grid" id="previewGrid"></div>
 
+  <!-- Upload button -->
   <button onclick="uploadMedia()" class="upload-btn">⬆️ Upload Media to Server</button>
 
+  <!-- Progress bar -->
   <div id="progress-container" style="display:none; margin-top: 20px;">
     <div style="font-size:14px; margin-bottom: 4px;">Upload Progress:</div>
     <div style="background: #ddd; border-radius: 8px; overflow: hidden;">
@@ -30,13 +36,7 @@
 
   <div id="upload-status" style="margin-top: 15px; color: green;"></div>
 
-  <!-- Zoom Preview Modal -->
-  <div id="zoomModal" class="zoom-modal" onclick="closeZoom()">
-    <span class="close-btn">&times;</span>
-    <img id="zoomImage" />
-    <video id="zoomVideo" controls autoplay></video>
-  </div>
-
+  <!-- Upload reset removed — handled by + Add button -->
   <script src="/static/uploader.js"></script>
 </body>
 </html>
