@@ -1,37 +1,43 @@
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 const previewGrid = document.getElementById('previewGrid');
-const moreBtn = document.getElementById('more-btn');
-const resetBtn = document.getElementById('upload-reset');
+const addMore = document.getElementById('add-more-container');
 
 let mediaFiles = [];
-let showAll = false;
 const MAX_FILES = 20;
 
-function toggleMore() {
-  showAll = !showAll;
-  renderPreviews();
+// 🔁 Re-render previews
+function renderPreviews() {
+  previewGrid.innerHTML = '';
+  mediaFiles.forEach((media, index) => {
+    const isVideo = media.file.type.startsWith('video/');
+    const div = document.createElement('div');
+    div.className = 'preview-item';
+    div.innerHTML = `
+      <${isVideo ? 'video controls' : 'img'} src="${media.url}" />
+      <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
+    `;
+    previewGrid.appendChild(div);
+  });
+  console.debug('✅ Previews rendered:', mediaFiles.length, 'files');
 }
 
+// 🧠 Compress images client-side
 function compressImage(file, callback) {
   const img = new Image();
   const reader = new FileReader();
   reader.onload = e => {
     img.onload = () => {
-      const canvas = document.createElement("canvas");
+      const canvas = document.createElement('canvas');
+      let width = img.width, height = img.height;
       const maxDim = 1600;
-      let width = img.width;
-      let height = img.height;
       if (width > height && width > maxDim) {
-        height *= maxDim / width;
-        width = maxDim;
+        height *= maxDim / width; width = maxDim;
       } else if (height > maxDim) {
-        width *= maxDim / height;
-        height = maxDim;
+        width *= maxDim / height; height = maxDim;
       }
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, width, height);
       canvas.toBlob(blob => {
         const compressed = new File([blob], file.name, { type: file.type });
@@ -43,19 +49,21 @@ function compressImage(file, callback) {
   reader.readAsDataURL(file);
 }
 
+// 📂 Handle new files
 function handleFiles(files) {
-  const totalCount = mediaFiles.length + files.length;
-  if (totalCount > MAX_FILES) return alert("⚠️ Max 20 files allowed");
+  if (mediaFiles.length + files.length > MAX_FILES) {
+    alert("⚠️ Max 20 files allowed");
+    return;
+  }
 
   Array.from(files).forEach(file => {
-    const isImage = file.type.startsWith("image/");
-    const isVideo = file.type.startsWith("video/");
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
     if (!isImage && !isVideo) return;
 
     const maxSize = isVideo ? 100 * 1024 * 1024 : 15 * 1024 * 1024;
     if (file.size > maxSize) {
-      const readable = isVideo ? "100 MB (video)" : "15 MB (image)";
-      alert(`⚠️ ${file.name} too large. Max allowed: ${readable}`);
+      alert(`⚠️ ${file.name} too large.`);
       return;
     }
 
@@ -69,40 +77,26 @@ function handleFiles(files) {
       renderPreviews();
     }
   });
+
+  console.debug('📁 Files handled:', mediaFiles.map(f => f.file.name));
 }
 
-function renderPreviews() {
-  previewGrid.innerHTML = "";
-  const filesToShow = showAll ? mediaFiles : mediaFiles.slice(0, 6);
-  filesToShow.forEach((media, index) => {
-    const item = document.createElement("div");
-    item.className = "preview-item";
-    const isVideo = media.file.type.startsWith("video/");
-    item.innerHTML = `
-      <${isVideo ? 'video controls' : 'img'} src="${media.url}" />
-      <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
-    `;
-    previewGrid.appendChild(item);
-  });
-  moreBtn.style.display = mediaFiles.length > 6 ? "block" : "none";
-  moreBtn.textContent = showAll ? "− Hide Extra Media" : "+ Show More Media";
-}
-
+// ❌ Remove a file
 function removeFile(index) {
   mediaFiles.splice(index, 1);
   renderPreviews();
 }
 
+// 🔁 Reset uploader
 function resetUploader() {
   mediaFiles = [];
-  showAll = false;
   renderPreviews();
   document.getElementById("progress-container").style.display = "none";
   document.getElementById("progress-bar").style.width = "0%";
   document.getElementById("upload-status").textContent = "";
-  resetBtn.style.display = "none";
 }
 
+// ⬆️ Upload to server
 function uploadMedia() {
   if (mediaFiles.length === 0) return alert("No media to upload.");
 
@@ -131,7 +125,7 @@ function uploadMedia() {
     if (xhr.status === 200) {
       const res = JSON.parse(xhr.responseText);
       statusText.textContent = res.message || "✅ Upload complete!";
-      resetBtn.style.display = "block";
+      console.log("✅ Server Response:", res);
     } else {
       statusText.textContent = "❌ Upload failed";
       progressBar.style.backgroundColor = "#e74c3c";
@@ -146,6 +140,10 @@ function uploadMedia() {
   xhr.send(formData);
 }
 
+// ➕ Add more media (clicking plus sign)
+addMore.addEventListener('click', () => fileInput.click());
+
+// Drag events
 dropzone.addEventListener('click', () => fileInput.click());
 dropzone.addEventListener('dragover', e => {
   e.preventDefault();
