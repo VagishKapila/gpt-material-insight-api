@@ -1,4 +1,3 @@
-
 import os
 import json
 import uuid
@@ -61,13 +60,15 @@ def generate_form():
         safety_path = save_file("safety_sheet", SAFETY_FOLDER)
         scope_path = save_file("scope_doc", SCOPE_FOLDER)
 
-        if "images" in request.files:
-            for img in request.files.getlist("images"):
-                if img.filename:
-                    filename = secure_filename(img.filename)
-                    path = os.path.join(UPLOAD_FOLDER, f"{session_id}_{filename}")
-                    img.save(path)
-                    image_paths.append(path)
+        # ✅ NEW DRAG & DROP: Save uploaded media from uploader
+        if "media_files" in request.files:
+            for file in request.files.getlist("media_files"):
+                if file.filename:
+                    ext = os.path.splitext(file.filename)[1]
+                    safe_filename = f"{session_id}_{uuid.uuid4().hex}{ext}"
+                    save_path = os.path.join(UPLOAD_FOLDER, safe_filename)
+                    file.save(save_path)
+                    image_paths.append(save_path)
 
         ai_results = {}
         progress_report = {}
