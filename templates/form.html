@@ -1,68 +1,68 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Daily Log Form</title>
-  <link rel="stylesheet" href="/static/style.css" />
-  <script defer src="/static/uploader.js"></script>
+    <title>Daily Log Submission</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        h1 { color: #333; }
+        form { background: white; padding: 20px; border-radius: 8px; max-width: 700px; margin: auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        label { display: block; margin-top: 12px; font-weight: bold; }
+        input[type="text"], textarea, input[type="file"], input[type="date"] {
+            width: 100%; padding: 8px; margin-top: 5px; border-radius: 4px; border: 1px solid #ccc;
+        }
+        textarea { resize: vertical; }
+        button { margin-top: 20px; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <h1>📋 Daily Log Form</h1>
 
-    <form action="/generate_form" method="post" enctype="multipart/form-data">
-      <label>Project Name</label>
-      <input type="text" name="project_name" placeholder="e.g. Upper Oaks Redevelopment" required />
+<h1>🛠️ Submit Daily Log</h1>
 
-      <label>Client Name</label>
-      <input type="text" name="client_name" placeholder="e.g. Acme Corp" required />
+<form action="/generate_form" method="POST" enctype="multipart/form-data">
+    <label>Project Name</label>
+    <input type="text" name="project_name" placeholder="e.g. Upper Oaks Apartments" required>
 
-      <label>Location</label>
-      <input type="text" name="location" placeholder="e.g. San Rafael, CA" required />
+    <label>Client Name</label>
+    <input type="text" name="client_name" placeholder="e.g. ABC Construction Ltd." required>
 
-      <label>Date</label>
-      <input type="date" name="date" value="{{ datetime.now().strftime('%Y-%m-%d') }}" required />
+    <label>Location</label>
+    <input type="text" name="location" placeholder="City or jobsite address" required>
 
-      <label>Weather</label>
-      <input type="text" name="weather" placeholder="e.g. Sunny, 75°F" />
+    <label>Date</label>
+    <input type="date" name="date" value="{{ datetime.utcnow().date() }}" required>
 
-      <label>Work Done Today</label>
-      <textarea name="work_done" rows="3" placeholder="e.g. Excavated trench, poured concrete base"></textarea>
+    <label>Weather</label>
+    <input type="text" name="weather" placeholder="e.g. Sunny, 72°F" required>
 
-      <label>Crew Notes</label>
-      <textarea name="crew_notes" rows="3" placeholder="e.g. 4 crew members onsite, no incidents"></textarea>
+    <label>Work Done Today</label>
+    <textarea name="work_done" rows="3" placeholder="Describe work completed today..." required></textarea>
 
-      <label>Safety Notes</label>
-      <textarea name="safety_notes" rows="3" placeholder="e.g. All PPE observed, safety checklist completed"></textarea>
+    <label>Crew Notes</label>
+    <textarea name="crew_notes" rows="2" placeholder="Crew size, shifts, issues..."></textarea>
 
-      <label>Upload Logo (optional)</label>
-      <input type="file" name="logo" accept="image/*" />
+    <label>Safety Notes</label>
+    <textarea name="safety_notes" rows="2" placeholder="Safety concerns, incidents, reminders..."></textarea>
 
-      <label>Upload Safety Sheet (optional)</label>
-      <input type="file" name="safety_sheet" accept="image/*,application/pdf" />
+    <label>Jobsite Media Uploads (Images or Videos)</label>
+    <input type="file" name="media_files" multiple accept="image/*,video/*">
 
-      <label>Upload Scope of Work</label>
-      <input type="file" name="scope_doc" accept=".pdf,.docx,.xlsx,.txt" required />
+    <label>Upload Scope of Work</label>
+    <input type="file" name="scope_doc" accept=".pdf,.doc,.docx,.txt,.xlsx,.pptx">
 
-      <label>Jobsite Media (Images or Videos)</label>
-      <div id="dropzone" class="dropzone">
-        <p>📸 Drag & drop up to 20 media files here (images/videos)<br>or click to select</p>
-        <input type="file" id="fileInput" multiple hidden />
-        <div id="preview-container"></div>
-        <div id="progress-container">
-          <div id="progress-bar"></div>
-          <p id="upload-status"></p>
-        </div>
-        <div id="zoom-modal"></div>
-      </div>
+    <label>Upload Safety Sheet</label>
+    <input type="file" name="safety_sheet" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx">
 
-      <label>
-        <input type="checkbox" name="enable_ai" checked /> Enable AI Scope Comparison (recommended)
-      </label>
+    <label>Upload Logo</label>
+    <input type="file" name="logo" accept=".png,.jpg,.jpeg,.svg">
 
-      <button type="submit">🚀 Generate Preview</button>
-    </form>
-  </div>
+    <label>
+        <input type="checkbox" name="enable_ai" checked>
+        Enable AI Scope Matching
+    </label>
+
+    <button type="submit">Generate Preview</button>
+</form>
+
 </body>
 </html>
