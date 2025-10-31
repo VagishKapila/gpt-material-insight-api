@@ -78,9 +78,9 @@ function renderPreviews() {
     const item = document.createElement("div");
     item.className = "preview-item";
     item.innerHTML = `
-      ${isVideo ? `<video src="${media.url}" class="preview-media" controls></video>` : `<img src="${media.url}" class="preview-media">`}
-      <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
-    `;
+  ${isVideo ? `<video src="${media.url}" class="preview-media" controls></video>` : `<img src="${media.url}" class="preview-media">`}
+  <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
+`;
     item.addEventListener("click", e => {
       if (e.target.classList.contains("remove-btn")) return;
       zoomModal.innerHTML = `<${isVideo ? 'video controls autoplay' : 'img'} src="${media.url}" />`;
