@@ -56,6 +56,13 @@ h2 {
   font-size: 12px;
 }
 
+#preview-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+/* 👇 Preview items (image or video) */
 .preview-item {
   position: relative;
   background: #fff;
@@ -63,22 +70,18 @@ h2 {
   border-radius: 8px;
   overflow: hidden;
   width: 160px;
+  min-height: 180px;
   box-shadow: 0 1px 5px rgba(0,0,0,0.1);
   margin: 10px;
 }
 
-.preview-item img,
-.preview-item video {
+/* 👇 All media (image or video) inside preview box */
+.preview-media {
   width: 100%;
-  height: auto;
+  height: 180px;
+  object-fit: cover;
   display: block;
   cursor: pointer;
-}
-
-#preview-container {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-start;
 }
 
 .remove-btn {
