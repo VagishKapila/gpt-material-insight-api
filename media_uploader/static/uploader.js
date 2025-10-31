@@ -9,7 +9,7 @@ const zoomModal = document.getElementById("zoom-modal");
 let mediaFiles = [];
 const MAX_FILES = 20;
 
-// 🌐 Global drag & drop
+// 🌐 Global drag & drop support
 document.addEventListener("dragover", e => e.preventDefault());
 document.addEventListener("drop", e => {
   e.preventDefault();
@@ -83,30 +83,25 @@ function renderPreviews() {
     item.className = "preview-item";
 
     item.innerHTML = `
-  ${isVideo 
-    ? `<video src="${media.url}" class="preview-media" controls></video>` 
-    : `<img src="${media.url}" class="preview-media" />`
-  }
-  <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
-  `;
+      ${isVideo 
+        ? `<video src="${media.url}" class="preview-media" controls></video>` 
+        : `<img src="${media.url}" class="preview-media" />`
+      }
+      <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
+    `;
 
     item.addEventListener('click', (e) => {
-  // Prevent zoom if ❌ was clicked
-  if (e.target.classList.contains("remove-btn")) return;
-
-  zoomModal.innerHTML = `<${isVideo ? 'video controls autoplay' : 'img'} src="${media.url}" />`;
-  zoomModal.style.display = "flex";
-  });
+      if (e.target.classList.contains("remove-btn")) return;
+      zoomModal.innerHTML = `<${isVideo ? 'video controls autoplay' : 'img'} src="${media.url}" />`;
+      zoomModal.style.display = "flex";
+    });
 
     previewGrid.appendChild(item);
   });
 }
 
-// 🧹 Updated removeFile() — Stops videos + Frees memory
 function removeFile(index) {
   const media = mediaFiles[index];
-
-  // 🛑 Stop video playback before removing
   if (media && media.file.type.startsWith("video/")) {
     const videos = document.querySelectorAll(`video[src="${media.url}"]`);
     videos.forEach(v => {
@@ -116,7 +111,6 @@ function removeFile(index) {
     });
   }
 
-  // 🧠 Free up memory for all types
   if (media && media.url) {
     URL.revokeObjectURL(media.url);
   }
@@ -125,50 +119,7 @@ function removeFile(index) {
   renderPreviews();
 }
 
-function uploadMedia() {
-  if (mediaFiles.length === 0) return alert("No media to upload.");
-
-  const formData = new FormData();
-  mediaFiles.forEach(media => formData.append("media_files", media.file));
-
-  progressContainer.style.display = "block";
-  progressBar.style.width = "0%";
-  statusText.textContent = "";
-  progressBar.style.backgroundColor = "#2ecc71";
-
-  const xhr = new XMLHttpRequest();
-  xhr.open("POST", "/upload_media_test", true);
-
-  xhr.upload.addEventListener("progress", e => {
-    if (e.lengthComputable) {
-      const percent = Math.round((e.loaded / e.total) * 100);
-      progressBar.style.width = percent + "%";
-    }
-  });
-
-  xhr.onload = () => {
-    if (xhr.status === 200) {
-      const res = JSON.parse(xhr.responseText);
-      statusText.textContent = res.message || "✅ Upload complete!";
-    } else {
-      statusText.textContent = "❌ Upload failed";
-      progressBar.style.backgroundColor = "#e74c3c";
-    }
-  };
-
-  xhr.onerror = () => {
-    statusText.textContent = "❌ Upload error";
-    progressBar.style.backgroundColor = "#e74c3c";
-  };
-
-  xhr.send(formData);
-}
-
-// 🖱️ Button trigger
-dropzone.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', e => handleFiles(e.target.files));
-
-// 🚫 Stop video & close zoom when modal is clicked
+// 🛑 Stop video if modal is clicked
 zoomModal.addEventListener("click", () => {
   const video = zoomModal.querySelector("video");
   if (video) {
@@ -179,3 +130,7 @@ zoomModal.addEventListener("click", () => {
   zoomModal.innerHTML = "";
   zoomModal.style.display = "none";
 });
+
+// Trigger input
+dropzone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
