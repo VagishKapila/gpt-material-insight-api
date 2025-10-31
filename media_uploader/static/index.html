@@ -4,145 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Test Media Upload (Image + Video)</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter&display=swap" />
-  <style>
-    body {
-      font-family: 'Inter', sans-serif;
-      margin: 0;
-      padding: 0;
-      background: #f8f9fa;
-    }
-
-    .container {
-      max-width: 900px;
-      margin: 30px auto;
-      background: white;
-      padding: 30px;
-      border-radius: 12px;
-      box-shadow: 0 0 15px rgba(0, 0, 0, 0.05);
-    }
-
-    h2 {
-      margin-bottom: 20px;
-    }
-
-    .drop-zone {
-      border: 2px dashed #66afe9;
-      padding: 40px;
-      border-radius: 10px;
-      text-align: center;
-      background: #eef6fb;
-      color: #31708f;
-      transition: background 0.3s;
-    }
-
-    .drop-zone.dragover {
-      background: #d9edf7;
-    }
-
-    #preview-container {
-      margin-top: 30px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 15px;
-    }
-
-    .preview-item {
-      position: relative;
-      width: 150px;
-      min-height: 150px;
-      background: #fff;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 0 5px rgba(0,0,0,0.1);
-    }
-
-    .preview-item img,
-    .preview-item video {
-      width: 100%;
-      height: auto;
-      display: block;
-      cursor: pointer;
-    }
-
-    .remove-btn {
-      position: absolute;
-      top: 5px;
-      right: 5px;
-      background: red;
-      color: white;
-      border: none;
-      border-radius: 50%;
-      width: 22px;
-      height: 22px;
-      cursor: pointer;
-    }
-
-    .upload-btn {
-      margin-top: 25px;
-      padding: 10px 20px;
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 16px;
-    }
-
-    #upload-status {
-      margin-top: 15px;
-      font-weight: bold;
-    }
-
-    .add-files-btn {
-      margin-bottom: 10px;
-      display: flex;
-      justify-content: center;
-    }
-
-    .add-files-btn button {
-      background-color: #28a745;
-      color: white;
-      border: none;
-      padding: 10px 18px;
-      border-radius: 6px;
-      font-size: 14px;
-      cursor: pointer;
-    }
-
-    .add-files-btn small {
-      display: block;
-      margin-top: 6px;
-      color: gray;
-      font-size: 12px;
-    }
-
-    .zoomed {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0,0,0,0.8);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-    }
-
-    .zoomed img,
-    .zoomed video {
-      max-width: 90%;
-      max-height: 90%;
-    }
-  </style>
+  <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
   <div class="container">
     <h2>📦 Test Media Upload (Image + Video)</h2>
 
-    <div class="drop-zone" id="drop-zone">
-      <p>Drag & drop files here or use the + Add button</p>
+    <div class="dropzone" id="dropzone">
+      <p>Drag & drop files anywhere on this page or use the + Add button</p>
     </div>
 
     <div class="add-files-btn">
@@ -154,14 +23,22 @@
 
     <div id="preview-container"></div>
 
-    <button class="upload-btn" onclick="uploadFiles()">⬆️ Upload Media to Server</button>
+    <button class="upload-btn" onclick="uploadMedia()">⬆️ Upload Media to Server</button>
+
+    <div id="progress-container" style="display:none; margin-top: 20px;">
+      <div style="font-size:14px; margin-bottom: 4px;">Upload Progress:</div>
+      <div style="background: #ddd; border-radius: 8px; overflow: hidden;">
+        <div id="progress-bar" style="width: 0%; height: 16px; background: #2ecc71;"></div>
+      </div>
+    </div>
+
     <div id="upload-status"></div>
   </div>
 
-  <input type="file" id="file-input" multiple hidden />
+  <input type="file" id="fileInput" accept="image/*,video/*" multiple hidden />
 
-  <div id="zoom-modal" class="zoomed" style="display:none" onclick="this.style.display='none'"></div>
+  <div id="zoom-modal" class="zoom-modal" onclick="this.style.display='none'"></div>
 
-  <script src="uploader.js"></script>
+  <script src="/static/uploader.js"></script>
 </body>
 </html>
