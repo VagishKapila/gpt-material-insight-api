@@ -65,19 +65,20 @@ def generate_form():
         safety_path = save_file("safety_sheet", SAFETY_FOLDER)
         scope_path = save_file("scope_doc", SCOPE_FOLDER)
 
-        # ✅ Save uploaded job site photos
-        if "media_files" in request.files:
-            for file in request.files.getlist("media_files"):
-                if file.filename:
+        # ✅ FIX: Handle jobsite media uploaded via drag/drop JS
+        media_file_keys = [k for k in request.files if k == "media_files" or k.startswith("media_files[")]
+        for key in media_file_keys:
+            for file in request.files.getlist(key):
+                if file and file.filename:
                     ext = os.path.splitext(file.filename)[1]
                     safe_filename = f"{session_id}_{uuid.uuid4().hex}{ext}"
                     save_path = os.path.join(UPLOAD_FOLDER, safe_filename)
                     file.save(save_path)
                     image_paths.append(save_path)
-                    print(f"📸 Jobsite image saved: {save_path}")
-        else:
-            print("⚠️ No jobsite media uploaded.")
+                    print(f"📸 Uploaded jobsite media: {save_path}")
 
+        if not image_paths:
+            print("⚠️ No jobsite media uploaded.")
         print(f"📦 Final image_paths before PDF/preview: {image_paths}")
 
         # ✅ AI Scope Comparison
