@@ -168,11 +168,6 @@ function uploadMedia() {
 dropzone.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', e => handleFiles(e.target.files));
 
-// 🧼 Fix for "+ Add More Files" button
-document.getElementById("add-more-btn").addEventListener("click", () => {
-  document.getElementById("file-input").click();
-});
-
 // 🚫 Stop video & close zoom when modal is clicked
 zoomModal.addEventListener("click", () => {
   const video = zoomModal.querySelector("video");
