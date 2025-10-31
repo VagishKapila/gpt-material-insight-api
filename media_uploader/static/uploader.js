@@ -90,10 +90,13 @@ function renderPreviews() {
   <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
   `;
 
-    item.addEventListener('click', () => {
-      zoomModal.innerHTML = `<${isVideo ? 'video controls autoplay' : 'img'} src="${media.url}" />`;
-      zoomModal.style.display = "flex";
-    });
+    item.addEventListener('click', (e) => {
+  // Prevent zoom if ❌ was clicked
+  if (e.target.classList.contains("remove-btn")) return;
+
+  zoomModal.innerHTML = `<${isVideo ? 'video controls autoplay' : 'img'} src="${media.url}" />`;
+  zoomModal.style.display = "flex";
+  });
 
     previewGrid.appendChild(item);
   });
