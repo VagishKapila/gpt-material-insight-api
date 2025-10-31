@@ -10,19 +10,12 @@
     .label { font-weight: bold; color: #34495e; display: block; margin-top: 10px; }
     .images { display: flex; flex-wrap: wrap; gap: 10px; }
     .images img { width: 120px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: zoom-in; }
-    .score { margin: 12px 0; border-bottom: 1px dashed #ccc; padding-bottom: 10px; }
+    .score { margin: 12px 0; }
     .out-of-scope { color: #c0392b; }
     .button { margin-top: 30px; padding: 14px 28px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer; }
     .button:hover { background: #2980b9; }
     .dropdown { margin-top: 6px; font-size: 14px; }
-    .scroll-box {
-      max-height: 320px;
-      overflow-y: auto;
-      padding: 10px;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      background: #fcfcfc;
-    }
+    .scroll-box { max-height: 350px; overflow-y: auto; padding-right: 10px; }
   </style>
 </head>
 <body>
@@ -57,29 +50,26 @@
     </div>
     {% endif %}
 
-    {% if safety_sheet_path %}
+    {% if safety_sheet %}
     <div class="section">
-      <h2>🧯 Safety Sheet</h2>
-      {% set ext = safety_sheet_path.split('.')[-1].lower() %}
-      {% if ext in ['jpg', 'jpeg', 'png'] %}
-        <img src="/{{ safety_sheet_path }}" style="max-width: 100%; border: 1px solid #ccc; border-radius: 6px;" alt="Safety Sheet">
+      <h2>📎 Safety Sheet</h2>
+      {% if safety_sheet.endswith('.jpg') or safety_sheet.endswith('.jpeg') or safety_sheet.endswith('.png') %}
+        <img src="/{{ safety_sheet }}" style="max-width: 400px; border: 1px solid #ccc;" alt="Safety Sheet">
       {% else %}
-        <p>📎 Safety sheet uploaded: <strong>{{ safety_sheet_path.split('/')[-1] }}</strong> (not previewable here)</p>
+        <p><strong>Uploaded file:</strong> {{ safety_sheet.split('/')[-1] }} (PDF or unsupported preview type)</p>
       {% endif %}
     </div>
     {% endif %}
 
-    {% if ai_results %}
-    <div class="section">
+    <div class="section scroll-box">
       <h2>🤖 AI Scope Comparison</h2>
       <div><strong>Estimated Completion:</strong> <span id="completion-val">{{ ai_results.completion or 0 }}</span>%</div>
       <hr>
-      <div class="scroll-box">
       {% for item in ai_results.scored_items %}
         <div class="score">
           <input type="checkbox" name="match_{{ loop.index0 }}" class="matchbox" {% if item.match %}checked{% endif %}>
           <label>
-            {{ item.scope }} —
+            {{ item.scope }} — 
             <input type="range" class="slider" name="confidence_{{ loop.index0 }}" min="0" max="100" step="1" value="{{ item.confidence }}">
             <span class="conf_val">{{ item.confidence }}</span>%
           </label>
@@ -97,10 +87,8 @@
           </div>
         </div>
       {% endfor %}
-      </div>
       <input type="hidden" name="total_items" value="{{ ai_results.scored_items|length }}">
     </div>
-    {% endif %}
 
     {% if ai_results.out_of_scope %}
     <div class="section out-of-scope">
@@ -122,8 +110,7 @@
   const completionDisplay = document.getElementById("completion-val");
 
   function updateCompletion() {
-    let total = 0;
-    let count = 0;
+    let total = 0, count = 0;
     sliders.forEach((slider, i) => {
       if (checkboxes[i].checked) {
         total += parseInt(slider.value);
