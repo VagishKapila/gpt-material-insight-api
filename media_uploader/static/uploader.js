@@ -1,163 +1,98 @@
-const dropzone = document.getElementById('dropzone');
-const fileInput = document.getElementById('fileInput');
-const previewGrid = document.getElementById('previewGrid');
+let selectedFiles = [];
+const previewContainer = document.getElementById("preview-container");
+const dropZone = document.getElementById("drop-zone");
+const fileInput = document.getElementById("file-input");
+const zoomModal = document.getElementById("zoom-modal");
+const uploadStatus = document.getElementById("upload-status");
 
-let mediaFiles = [];
-const MAX_FILES = 20;
+document.getElementById("add-more-btn").addEventListener("click", () => fileInput.click());
 
-function compressImage(file, callback) {
-  const img = new Image();
-  const reader = new FileReader();
-  reader.onload = e => {
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      const maxDim = 1600;
-      let width = img.width;
-      let height = img.height;
-      if (width > height && width > maxDim) {
-        height *= maxDim / width;
-        width = maxDim;
-      } else if (height > maxDim) {
-        width *= maxDim / height;
-        height = maxDim;
-      }
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0, width, height);
-      canvas.toBlob(blob => {
-        const compressed = new File([blob], file.name, { type: file.type });
-        callback(compressed);
-      }, file.type, 0.7);
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-}
-
-function handleFiles(files) {
-  const totalCount = mediaFiles.length + files.length;
-  if (totalCount > MAX_FILES) return alert("⚠️ Max 20 files allowed");
-
-  Array.from(files).forEach(file => {
-    const isImage = file.type.startsWith("image/");
-    const isVideo = file.type.startsWith("video/");
-    if (!isImage && !isVideo) return;
-
-    const maxSize = isVideo ? 100 * 1024 * 1024 : 15 * 1024 * 1024;
-    if (file.size > maxSize) {
-      const readable = isVideo ? "100 MB (video)" : "15 MB (image)";
-      alert(`⚠️ ${file.name} too large. Max allowed: ${readable}`);
-      return;
-    }
-
-    if (isImage) {
-      compressImage(file, compressed => {
-        mediaFiles.push({ file: compressed, url: URL.createObjectURL(compressed) });
-        renderPreviews();
-      });
-    } else {
-      mediaFiles.push({ file, url: URL.createObjectURL(file) });
-      renderPreviews();
-    }
-  });
-}
-
-function renderPreviews() {
-  previewGrid.innerHTML = "";
-  mediaFiles.forEach((media, index) => {
-    const isVideo = media.file.type.startsWith("video/");
-    const item = document.createElement("div");
-    item.className = "preview-item";
-
-    // Wrap in clickable zoom
-    item.innerHTML = `
-      <${isVideo ? 'video controls' : 'img'} src="${media.url}" class="preview-media" />
-      <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
-    `;
-
-    item.addEventListener('click', () => {
-      const popup = document.createElement("div");
-      popup.style.position = "fixed";
-      popup.style.top = 0;
-      popup.style.left = 0;
-      popup.style.width = "100%";
-      popup.style.height = "100%";
-      popup.style.background = "rgba(0,0,0,0.8)";
-      popup.style.display = "flex";
-      popup.style.alignItems = "center";
-      popup.style.justifyContent = "center";
-      popup.innerHTML = `
-        <${isVideo ? 'video controls autoplay' : 'img'} src="${media.url}" style="max-width:90%; max-height:90%; border-radius:12px;" />
-      `;
-      popup.onclick = () => document.body.removeChild(popup);
-      document.body.appendChild(popup);
-    });
-
-    previewGrid.appendChild(item);
-  });
-}
-
-function removeFile(index) {
-  mediaFiles.splice(index, 1);
-  renderPreviews();
-}
-
-function uploadMedia() {
-  if (mediaFiles.length === 0) return alert("No media to upload.");
-
-  const formData = new FormData();
-  mediaFiles.forEach(media => formData.append("media_files", media.file));
-
-  const xhr = new XMLHttpRequest();
-  xhr.open("POST", "/upload_media_test", true);
-
-  const progressContainer = document.getElementById("progress-container");
-  const progressBar = document.getElementById("progress-bar");
-  const statusText = document.getElementById("upload-status");
-
-  progressContainer.style.display = "block";
-  progressBar.style.width = "0%";
-  statusText.textContent = "";
-  progressBar.style.backgroundColor = "#2ecc71";
-
-  xhr.upload.addEventListener("progress", e => {
-    if (e.lengthComputable) {
-      const percent = Math.round((e.loaded / e.total) * 100);
-      progressBar.style.width = percent + "%";
-    }
-  });
-
-  xhr.onload = () => {
-    if (xhr.status === 200) {
-      const res = JSON.parse(xhr.responseText);
-      statusText.textContent = res.message || "✅ Upload complete!";
-    } else {
-      statusText.textContent = "❌ Upload failed";
-      progressBar.style.backgroundColor = "#e74c3c";
-    }
-  };
-
-  xhr.onerror = () => {
-    statusText.textContent = "❌ Upload error";
-    progressBar.style.backgroundColor = "#e74c3c";
-  };
-
-  xhr.send(formData);
-}
-
-// Dropzone events
-dropzone.addEventListener('click', () => fileInput.click());
-dropzone.addEventListener('dragover', e => {
-  e.preventDefault();
-  dropzone.classList.add('dragover');
+fileInput.addEventListener("change", (e) => {
+  handleFiles(e.target.files);
 });
-dropzone.addEventListener('dragleave', () => {
-  dropzone.classList.remove('dragover');
-});
-dropzone.addEventListener('drop', e => {
+
+dropZone.addEventListener("dragover", (e) => {
   e.preventDefault();
-  dropzone.classList.remove('dragover');
+  dropZone.classList.add("dragover");
+});
+
+dropZone.addEventListener("dragleave", () => {
+  dropZone.classList.remove("dragover");
+});
+
+dropZone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropZone.classList.remove("dragover");
   handleFiles(e.dataTransfer.files);
 });
-fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+function handleFiles(files) {
+  for (let file of files) {
+    selectedFiles.push(file);
+    const previewItem = document.createElement("div");
+    previewItem.className = "preview-item";
+
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "remove-btn";
+    removeBtn.innerText = "❌";
+    removeBtn.onclick = () => {
+      selectedFiles = selectedFiles.filter(f => f !== file);
+      previewItem.remove();
+    };
+
+    if (file.type.startsWith("image")) {
+      const img = document.createElement("img");
+      img.src = URL.createObjectURL(file);
+      img.onclick = () => zoomPreview(img.src, "img");
+      previewItem.append(img);
+    } else if (file.type.startsWith("video")) {
+      const video = document.createElement("video");
+      video.src = URL.createObjectURL(file);
+      video.controls = true;
+      video.onclick = () => zoomPreview(video.src, "video");
+      previewItem.append(video);
+    }
+
+    previewItem.append(removeBtn);
+    previewContainer.append(previewItem);
+  }
+}
+
+function zoomPreview(src, type) {
+  zoomModal.innerHTML = "";
+  const media = document.createElement(type);
+  media.src = src;
+  media.controls = true;
+  if (type === "video") media.autoplay = true;
+  zoomModal.append(media);
+  zoomModal.style.display = "flex";
+}
+
+async function uploadFiles() {
+  const formData = new FormData();
+  selectedFiles.forEach((file) => {
+    formData.append("files", file);
+  });
+
+  uploadStatus.innerHTML = "⏳ Uploading...";
+  uploadStatus.style.color = "black";
+
+  try {
+    const res = await fetch("/upload_media_test", {
+      method: "POST",
+      body: formData
+    });
+    const result = await res.json();
+
+    if (result.success) {
+      uploadStatus.innerHTML = `✅ Uploaded ${selectedFiles.length} file(s) successfully.`;
+      uploadStatus.style.color = "green";
+    } else {
+      throw new Error("Upload failed");
+    }
+  } catch (err) {
+    console.error(err);
+    uploadStatus.innerHTML = "❌ Upload failed";
+    uploadStatus.style.color = "red";
+  }
+}
