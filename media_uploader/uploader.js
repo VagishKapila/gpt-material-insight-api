@@ -77,3 +77,26 @@ function compressAndPreview(file) {
 
   reader.readAsDataURL(file);
 }
+function uploadMedia() {
+  if (mediaFiles.length === 0) {
+    return alert("No media to upload.");
+  }
+
+  const formData = new FormData();
+  mediaFiles.forEach((media, i) => {
+    formData.append("media_files", media.file);
+  });
+
+  fetch("/upload_media_test", {
+    method: "POST",
+    body: formData
+  })
+  .then(res => res.json())
+  .then(data => {
+    document.getElementById("upload-status").textContent = data.message || "✅ Uploaded!";
+  })
+  .catch(err => {
+    console.error("Upload error:", err);
+    document.getElementById("upload-status").textContent = "❌ Upload failed";
+  });
+}
