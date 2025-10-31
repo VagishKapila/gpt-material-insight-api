@@ -8,24 +8,19 @@
 <body>
   <h2>📦 Test Media Upload (Image + Video)</h2>
 
-  <!-- Dropzone Container with Floating Plus -->
-  <div class="dropzone-container">
-    <div class="plus-icon" onclick="fileInput.click()">+</div>
-    <div class="plus-label">Add More Files</div>
-
+  <!-- Drag/drop zone + PLUS icon -->
+  <div class="top-actions">
+    <div class="add-more-label">+ Add More Files</div>
     <div class="dropzone" id="dropzone">
       Drag & drop or click to upload (Max 20 files, image ≤15 MB, video ≤100 MB)
       <input type="file" id="fileInput" accept="image/*,video/*" multiple hidden />
     </div>
   </div>
 
-  <!-- Preview Grid -->
   <div class="preview-grid" id="previewGrid"></div>
 
-  <!-- Upload Button -->
   <button onclick="uploadMedia()" class="upload-btn">⬆️ Upload Media to Server</button>
 
-  <!-- Upload Progress Bar -->
   <div id="progress-container" style="display:none; margin-top: 20px;">
     <div style="font-size:14px; margin-bottom: 4px;">Upload Progress:</div>
     <div style="background: #ddd; border-radius: 8px; overflow: hidden;">
@@ -33,12 +28,13 @@
     </div>
   </div>
 
-  <!-- Upload Status -->
   <div id="upload-status" style="margin-top: 15px; color: green;"></div>
 
-  <!-- Reset Button -->
-  <div id="upload-reset" style="display:none; margin-top:20px;">
-    <button onclick="resetUploader()" class="upload-btn">🔁 Upload More Media</button>
+  <!-- Zoom Preview Modal -->
+  <div id="zoomModal" class="zoom-modal" onclick="closeZoom()">
+    <span class="close-btn">&times;</span>
+    <img id="zoomImage" />
+    <video id="zoomVideo" controls autoplay></video>
   </div>
 
   <script src="/static/uploader.js"></script>
