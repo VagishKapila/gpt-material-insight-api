@@ -1,140 +1,157 @@
-let selectedFiles = [];
-const previewContainer = document.getElementById("preview-container");
-const dropZone = document.getElementById("drop-zone");
-const fileInput = document.getElementById("file-input");
-const zoomModal = document.getElementById("zoom-modal");
-const uploadStatus = document.getElementById("upload-status");
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const previewGrid = document.getElementById('previewGrid');
+const progressContainer = document.getElementById("progress-container");
 const progressBar = document.getElementById("progress-bar");
+const statusText = document.getElementById("upload-status");
 
-document.getElementById("add-more-btn").addEventListener("click", () => fileInput.click());
+let mediaFiles = [];
+const MAX_FILES = 20;
 
-// ✅ Global drag/drop protection — prevents browser from opening files on drop
-window.addEventListener("dragover", (e) => {
+// 🌐 Global drag & drop (anywhere on page)
+document.addEventListener("dragover", e => e.preventDefault());
+document.addEventListener("drop", e => {
   e.preventDefault();
+  if (e.dataTransfer && e.dataTransfer.files.length) {
+    handleFiles(e.dataTransfer.files);
+  }
 });
 
-window.addEventListener("drop", (e) => {
-  e.preventDefault();
-});
-
-// ✅ FULL-PAGE DROP HANDLER
-document.body.addEventListener("drop", (e) => {
-  e.preventDefault();
-  handleFiles(e.dataTransfer.files);
-});
-
-fileInput.addEventListener("change", (e) => {
-  handleFiles(e.target.files);
-});
-
-dropZone.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  dropZone.classList.add("dragover");
-});
-
-dropZone.addEventListener("dragleave", () => {
-  dropZone.classList.remove("dragover");
-});
-
-dropZone.addEventListener("drop", (e) => {
-  e.preventDefault();
-  dropZone.classList.remove("dragover");
-  handleFiles(e.dataTransfer.files);
-});
+function compressImage(file, callback) {
+  const img = new Image();
+  const reader = new FileReader();
+  reader.onload = e => {
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const maxDim = 1600;
+      let width = img.width, height = img.height;
+      if (width > height && width > maxDim) {
+        height *= maxDim / width;
+        width = maxDim;
+      } else if (height > maxDim) {
+        width *= maxDim / height;
+        height = maxDim;
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(blob => {
+        const compressed = new File([blob], file.name, { type: file.type });
+        callback(compressed);
+      }, file.type, 0.7);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
 
 function handleFiles(files) {
-  for (let file of files) {
-    selectedFiles.push(file);
-    const previewItem = document.createElement("div");
-    previewItem.className = "preview-item";
+  const totalCount = mediaFiles.length + files.length;
+  if (totalCount > MAX_FILES) return alert("⚠️ Max 20 files allowed");
 
-    const removeBtn = document.createElement("button");
-    removeBtn.className = "remove-btn";
-    removeBtn.innerText = "❌";
-    removeBtn.onclick = () => {
-      selectedFiles = selectedFiles.filter(f => f !== file);
-      previewItem.remove();
-    };
+  Array.from(files).forEach(file => {
+    const isImage = file.type.startsWith("image/");
+    const isVideo = file.type.startsWith("video/");
+    if (!isImage && !isVideo) return;
 
-    // 📷 Image preview
-    if (file.type.startsWith("image")) {
-      const img = document.createElement("img");
-      img.src = URL.createObjectURL(file);
-      img.onclick = () => zoomPreview(img.src, "img");
-      previewItem.append(img);
-
-    // 🎥 Video preview
-    } else if (file.type.startsWith("video")) {
-      const video = document.createElement("video");
-      video.src = URL.createObjectURL(file);
-      video.controls = true;
-      video.onclick = () => zoomPreview(video.src, "video");
-      previewItem.append(video);
+    const maxSize = isVideo ? 100 * 1024 * 1024 : 15 * 1024 * 1024;
+    if (file.size > maxSize) {
+      const readable = isVideo ? "100 MB (video)" : "15 MB (image)";
+      alert(`⚠️ ${file.name} too large. Max allowed: ${readable}`);
+      return;
     }
 
-    previewItem.append(removeBtn);
-    previewContainer.append(previewItem);
-  }
+    if (isImage) {
+      compressImage(file, compressed => {
+        mediaFiles.push({ file: compressed, url: URL.createObjectURL(compressed) });
+        renderPreviews();
+      });
+    } else {
+      mediaFiles.push({ file, url: URL.createObjectURL(file) });
+      renderPreviews();
+    }
+  });
 }
 
-function zoomPreview(src, type) {
-  zoomModal.innerHTML = "";
-  const media = document.createElement(type);
-  media.src = src;
-  media.controls = true;
-  media.style.maxWidth = "90vw";
-  media.style.maxHeight = "90vh";
-  if (type === "video") media.autoplay = true;
-  zoomModal.append(media);
-  zoomModal.style.display = "flex";
+function renderPreviews() {
+  previewGrid.innerHTML = "";
+  mediaFiles.forEach((media, index) => {
+    const isVideo = media.file.type.startsWith("video/");
+    const item = document.createElement("div");
+    item.className = "preview-item";
 
-  // Click outside to close
-  zoomModal.onclick = () => {
-    zoomModal.style.display = "none";
-  };
+    item.innerHTML = `
+      <${isVideo ? 'video controls' : 'img'} src="${media.url}" class="preview-media" />
+      <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
+    `;
+
+    item.addEventListener('click', () => {
+      const popup = document.createElement("div");
+      popup.style.position = "fixed";
+      popup.style.top = 0;
+      popup.style.left = 0;
+      popup.style.width = "100%";
+      popup.style.height = "100%";
+      popup.style.background = "rgba(0,0,0,0.8)";
+      popup.style.display = "flex";
+      popup.style.alignItems = "center";
+      popup.style.justifyContent = "center";
+      popup.innerHTML = `
+        <${isVideo ? 'video controls autoplay' : 'img'} src="${media.url}" style="max-width:90%; max-height:90%; border-radius:12px;" />
+      `;
+      popup.onclick = () => document.body.removeChild(popup);
+      document.body.appendChild(popup);
+    });
+
+    previewGrid.appendChild(item);
+  });
 }
 
-async function uploadFiles() {
+function removeFile(index) {
+  mediaFiles.splice(index, 1);
+  renderPreviews();
+}
+
+function uploadMedia() {
+  if (mediaFiles.length === 0) return alert("No media to upload.");
+
   const formData = new FormData();
-  selectedFiles.forEach((file) => {
-    formData.append("media_files", file);
+  mediaFiles.forEach(media => formData.append("media_files", media.file));
+
+  progressContainer.style.display = "block";
+  progressBar.style.width = "0%";
+  statusText.textContent = "";
+  progressBar.style.backgroundColor = "#2ecc71";
+
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", "/upload_media_test", true);
+
+  xhr.upload.addEventListener("progress", e => {
+    if (e.lengthComputable) {
+      const percent = Math.round((e.loaded / e.total) * 100);
+      progressBar.style.width = percent + "%";
+    }
   });
 
-  uploadStatus.innerHTML = "⏳ Uploading...";
-  uploadStatus.style.color = "black";
-  progressBar.style.width = "0%";
+  xhr.onload = () => {
+    if (xhr.status === 200) {
+      const res = JSON.parse(xhr.responseText);
+      statusText.textContent = res.message || "✅ Upload complete!";
+    } else {
+      statusText.textContent = "❌ Upload failed";
+      progressBar.style.backgroundColor = "#e74c3c";
+    }
+  };
 
-  try {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/upload_media_test");
+  xhr.onerror = () => {
+    statusText.textContent = "❌ Upload error";
+    progressBar.style.backgroundColor = "#e74c3c";
+  };
 
-    // 🔁 Progress event
-    xhr.upload.onprogress = function (e) {
-      if (e.lengthComputable) {
-        const percent = (e.loaded / e.total) * 100;
-        progressBar.style.width = percent + "%";
-      }
-    };
-
-    xhr.onload = function () {
-      if (xhr.status === 200) {
-        uploadStatus.innerHTML = `✅ Uploaded ${selectedFiles.length} file(s) successfully.`;
-        uploadStatus.style.color = "green";
-      } else {
-        uploadStatus.innerHTML = "❌ Upload failed";
-        uploadStatus.style.color = "red";
-      }
-    };
-
-    xhr.onerror = function () {
-      uploadStatus.innerHTML = "❌ Upload failed";
-      uploadStatus.style.color = "red";
-    };
-
-    xhr.send(formData);
-  } catch (err) {
-    console.error("[Upload Error]", err);
-    uploadStatus.innerHTML = "❌ Upload failed";
-    uploadStatus.style.color = "red";
-  }
+  xhr.send(formData);
 }
+
+// Local click trigger
+dropzone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
