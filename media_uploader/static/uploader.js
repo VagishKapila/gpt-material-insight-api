@@ -1,13 +1,13 @@
-const dropzone = document.getElementById('dropzone');
-const fileInput = document.getElementById('file-input');  // MATCHES your input ID
-const previewGrid = document.getElementById('preview-container');
+const dropzone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const previewContainer = document.getElementById('preview-container');
+const uploadStatus = document.getElementById('upload-status');
 const addMoreBtn = document.getElementById("add-more-btn");
-const uploadStatus = document.getElementById("upload-status");
 
 let mediaFiles = [];
 const MAX_FILES = 20;
 
-// 🔁 Global drag & drop support
+// 🌐 Global drag & drop
 document.addEventListener("dragover", e => e.preventDefault());
 document.addEventListener("drop", e => {
   e.preventDefault();
@@ -16,7 +16,6 @@ document.addEventListener("drop", e => {
   }
 });
 
-// ✅ Bind "+ Add More Files" button to file input
 addMoreBtn.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", e => handleFiles(e.target.files));
 
@@ -78,7 +77,7 @@ function handleFiles(files) {
 }
 
 function renderPreviews() {
-  previewGrid.innerHTML = "";
+  previewContainer.innerHTML = "";
   mediaFiles.forEach((media, index) => {
     const isVideo = media.file.type.startsWith("video/");
     const item = document.createElement("div");
@@ -93,7 +92,7 @@ function renderPreviews() {
     removeBtn.className = "remove-btn";
     removeBtn.innerHTML = "❌";
     removeBtn.onclick = (e) => {
-      e.stopPropagation(); // prevent zoom
+      e.stopPropagation(); // don’t open zoom
       mediaFiles.splice(index, 1);
       renderPreviews();
     };
@@ -101,16 +100,14 @@ function renderPreviews() {
     item.appendChild(mediaTag);
     item.appendChild(removeBtn);
 
-    // Click = zoom preview modal
     item.addEventListener("click", () => zoomPreview(media.url, isVideo ? "video" : "img"));
-
-    previewGrid.appendChild(item);
+    previewContainer.appendChild(item);
   });
 }
 
 function zoomPreview(src, type) {
   const modal = document.getElementById("zoom-modal");
-  modal.innerHTML = ""; // clear existing
+  modal.innerHTML = "";
   const media = document.createElement(type);
   media.src = src;
   media.controls = true;
