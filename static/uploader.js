@@ -148,5 +148,22 @@ function uploadMedia(callback) {
     progressBar.style.backgroundColor = "#e74c3c";
   };
 
-  xhr.send(formData);
+ xhr.send(formData);
 }
+
+// ✅ Attach media files to main form on submit (must be outside the function)
+document.querySelector("form").addEventListener("submit", e => {
+  const form = e.target;
+  form.querySelectorAll("input[name='media_files']").forEach(n => n.remove());
+
+  mediaFiles.forEach(m => {
+    const dt = new DataTransfer();
+    dt.items.add(m.file);
+    const input = document.createElement("input");
+    input.type = "file";
+    input.name = "media_files";
+    input.files = dt.files;
+    input.hidden = true;
+    form.appendChild(input);
+  });
+});
