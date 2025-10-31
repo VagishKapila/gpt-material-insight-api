@@ -172,3 +172,15 @@ fileInput.addEventListener('change', e => handleFiles(e.target.files));
 document.getElementById("add-more-btn").addEventListener("click", () => {
   document.getElementById("file-input").click();
 });
+
+// 🚫 Stop video & close zoom when modal is clicked
+zoomModal.addEventListener("click", () => {
+  const video = zoomModal.querySelector("video");
+  if (video) {
+    video.pause();
+    video.src = "";
+    video.load();
+  }
+  zoomModal.innerHTML = "";
+  zoomModal.style.display = "none";
+});
