@@ -10,18 +10,17 @@
     .label { font-weight: bold; color: #34495e; display: block; margin-top: 10px; }
     .images { display: flex; flex-wrap: wrap; gap: 10px; }
     .images img { width: 120px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: zoom-in; }
-    .score { margin: 12px 0; padding: 10px; background: #ecf0f1; border-radius: 8px; }
+    .score { margin: 12px 0; }
     .out-of-scope { color: #c0392b; }
     .button { margin-top: 30px; padding: 14px 28px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer; }
     .button:hover { background: #2980b9; }
     .dropdown { margin-top: 6px; font-size: 14px; }
-    .scrollbox { max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 8px; background: #fff; }
-    .delete-btn { background: red; color: white; border: none; border-radius: 4px; cursor: pointer; padding: 4px 8px; margin-top: 4px; font-size: 12px; }
+    .scroll-box { max-height: 350px; overflow-y: auto; padding-right: 10px; }
   </style>
 </head>
 <body>
   <h1>📋 Daily Log Preview</h1>
-  <form action="/submit_preview" method="POST" enctype="multipart/form-data">
+  <form action="/submit_preview" method="POST">
     <input type="hidden" name="session_id" value="{{ session_id }}">
 
     <div class="section">
@@ -45,27 +44,27 @@
       <h2>📷 Job Site Photos</h2>
       <div class="images">
         {% for img_path in image_paths %}
-          <div>
-            <img src="/{{ img_path }}" alt="Job Photo" onclick="zoomImage(this)">
-            <form method="POST" action="/remove_image/{{ session_id }}">
-              <input type="hidden" name="remove_path" value="{{ img_path }}">
-              <button type="submit" class="delete-btn">❌ Remove</button>
-            </form>
-          </div>
+          <img src="/{{ img_path }}" alt="Job Site Photo" onclick="zoomImage(this)">
         {% endfor %}
       </div>
     </div>
     {% endif %}
 
+    {% if safety_sheet %}
     <div class="section">
-      <h2>➕ Add More Jobsite Images</h2>
-      <input type="file" name="new_images" accept="image/*" multiple>
+      <h2>📎 Safety Sheet</h2>
+      {% if safety_sheet.endswith('.jpg') or safety_sheet.endswith('.jpeg') or safety_sheet.endswith('.png') %}
+        <img src="/{{ safety_sheet }}" style="max-width: 400px; border: 1px solid #ccc;" alt="Safety Sheet">
+      {% else %}
+        <p><strong>Uploaded file:</strong> {{ safety_sheet.split('/')[-1] }} (PDF or unsupported preview type)</p>
+      {% endif %}
     </div>
+    {% endif %}
 
-    <div class="section">
+    <div class="section scroll-box">
       <h2>🤖 AI Scope Comparison</h2>
       <div><strong>Estimated Completion:</strong> <span id="completion-val">{{ ai_results.completion or 0 }}</span>%</div>
-      <div class="scrollbox">
+      <hr>
       {% for item in ai_results.scored_items %}
         <div class="score">
           <input type="checkbox" name="match_{{ loop.index0 }}" class="matchbox" {% if item.match %}checked{% endif %}>
@@ -88,7 +87,6 @@
           </div>
         </div>
       {% endfor %}
-      </div>
       <input type="hidden" name="total_items" value="{{ ai_results.scored_items|length }}">
     </div>
 
@@ -103,19 +101,6 @@
     </div>
     {% endif %}
 
-    {% if safety_sheet_path %}
-    <div class="section">
-      <h2>📎 Safety Sheet Preview</h2>
-      {% set ext = safety_sheet_path.split('.')[-1].lower() %}
-      {% if ext in ['jpg', 'jpeg', 'png'] %}
-        <img src="/{{ safety_sheet_path }}" alt="Safety Sheet" style="max-width: 400px;">
-      {% else %}
-        <p>Safety sheet uploaded: <strong>{{ safety_sheet_path.split('/')[-1] }}</strong></p>
-        <p><i>(Non-image format — shown in PDF only)</i></p>
-      {% endif %}
-    </div>
-    {% endif %}
-
     <button type="submit" class="button">✅ Generate Final PDF</button>
   </form>
 
@@ -125,8 +110,7 @@
   const completionDisplay = document.getElementById("completion-val");
 
   function updateCompletion() {
-    let total = 0;
-    let count = 0;
+    let total = 0, count = 0;
     sliders.forEach((slider, i) => {
       if (checkboxes[i].checked) {
         total += parseInt(slider.value);
