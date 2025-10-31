@@ -8,7 +8,7 @@ app = Flask(__name__)
 UPLOAD_FOLDER = 'static/uploads'
 COMPRESSED_FOLDER = 'static/compressed'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(COMPRESSED_FOLDER, exist_ok=True)
+os.makedirs(COMRESSED_FOLDER, exist_ok=True)
 
 @app.route("/upload_media_test", methods=["POST"])
 def upload_media():
@@ -25,16 +25,22 @@ def upload_media():
         if file_ext in ["mp4", "mov", "avi", "mkv"]:
             compressed_name = f"compressed_{temp_name}"
             compressed_path = os.path.join(COMPRESSED_FOLDER, compressed_name)
+
             ffmpeg_cmd = [
                 "ffmpeg", "-i", save_path,
                 "-vcodec", "libx264", "-crf", "28",
                 "-preset", "veryfast", "-y", compressed_path
             ]
+
             try:
                 subprocess.run(ffmpeg_cmd, check=True)
                 os.remove(save_path)
                 saved_files.append(compressed_name)
+            except FileNotFoundError:
+                print("[⚠️] FFmpeg not found — skipping compression.")
+                saved_files.append(temp_name)
             except subprocess.CalledProcessError:
+                print("[❌] FFmpeg error — skipping video compression.")
                 saved_files.append(f"⚠️ Compression failed: {filename}")
         else:
             saved_files.append(temp_name)
