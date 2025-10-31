@@ -143,3 +143,8 @@ function uploadMedia() {
 // 🖱️ Button trigger
 dropzone.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+// 🧼 Fix for "+ Add More Files" button
+document.getElementById("add-more-btn").addEventListener("click", () => {
+  document.getElementById("file-input").click();
+});
