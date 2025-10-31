@@ -1,143 +1,68 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Daily Log Submission</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily Log Form</title>
   <link rel="stylesheet" href="/static/style.css" />
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 20px;
-      background: #f8f9fa;
-    }
-    h1 {
-      color: #2c3e50;
-    }
-    label {
-      font-weight: bold;
-      display: block;
-      margin-top: 12px;
-    }
-    input[type="text"],
-    input[type="date"],
-    textarea,
-    select {
-      width: 100%;
-      padding: 10px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-      margin-top: 4px;
-    }
-    textarea {
-      resize: vertical;
-    }
-    input[type="file"] {
-      margin-top: 8px;
-    }
-    .checkbox {
-      margin-top: 16px;
-    }
-    button {
-      margin-top: 20px;
-      padding: 12px 24px;
-      font-size: 16px;
-      background: #27ae60;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #219150;
-    }
-    .form-section {
-      background: #fff;
-      padding: 20px;
-      margin-bottom: 30px;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    }
-    .file-name {
-      font-size: 12px;
-      color: #555;
-      text-align: center;
-      padding: 5px 0;
-      word-break: break-word;
-    }
-  </style>
+  <script defer src="/static/uploader.js"></script>
 </head>
 <body>
-  <h1>📋 Daily Log Entry</h1>
-  <form action="/generate_form" method="post" enctype="multipart/form-data">
+  <div class="container">
+    <h1>📋 Daily Log Form</h1>
 
-    <div class="form-section">
-      <label>Project Name:</label>
-      <input type="text" name="project_name" required>
+    <form action="/generate_form" method="post" enctype="multipart/form-data">
+      <label>Project Name</label>
+      <input type="text" name="project_name" placeholder="e.g. Upper Oaks Redevelopment" required />
 
-      <label>Client Name:</label>
-      <input type="text" name="client_name">
+      <label>Client Name</label>
+      <input type="text" name="client_name" placeholder="e.g. Acme Corp" required />
 
-      <label>Location:</label>
-      <input type="text" name="location" required>
+      <label>Location</label>
+      <input type="text" name="location" placeholder="e.g. San Rafael, CA" required />
 
-      <label>Date:</label>
-      <input type="date" name="date" value="{{ current_date if current_date else '' }}" required>
+      <label>Date</label>
+      <input type="date" name="date" value="{{ datetime.now().strftime('%Y-%m-%d') }}" required />
 
-      <label>Weather:</label>
-      <input type="text" name="weather" placeholder="Sunny, 75°F">
-    </div>
+      <label>Weather</label>
+      <input type="text" name="weather" placeholder="e.g. Sunny, 75°F" />
 
-    <div class="form-section">
-      <label>Work Done:</label>
-      <textarea name="work_done" rows="4" required placeholder="E.g. Installed drywall, inspected wiring, poured foundation..."></textarea>
+      <label>Work Done Today</label>
+      <textarea name="work_done" rows="3" placeholder="e.g. Excavated trench, poured concrete base"></textarea>
 
-      <label>Crew Notes:</label>
-      <textarea name="crew_notes" rows="3" placeholder="4 crew members on site. Work began at 8am and ended at 4pm."></textarea>
+      <label>Crew Notes</label>
+      <textarea name="crew_notes" rows="3" placeholder="e.g. 4 crew members onsite, no incidents"></textarea>
 
-      <label>Safety Notes:</label>
-      <textarea name="safety_notes" rows="3" placeholder="No incidents. All team members wore safety vests and helmets."></textarea>
-    </div>
+      <label>Safety Notes</label>
+      <textarea name="safety_notes" rows="3" placeholder="e.g. All PPE observed, safety checklist completed"></textarea>
 
-    <div class="form-section">
-      <label>Upload Job Site Photos (multiple):</label>
-      <div class="dropzone" id="dropzone">
-        Drag & drop jobsite photos anywhere on this page or click below
-        <input type="file" id="fileInput" accept="image/*,video/*" multiple hidden>
-      </div>
+      <label>Upload Logo (optional)</label>
+      <input type="file" name="logo" accept="image/*" />
 
-      <div id="preview-container"></div>
+      <label>Upload Safety Sheet (optional)</label>
+      <input type="file" name="safety_sheet" accept="image/*,application/pdf" />
 
-      <div id="progress-container" style="display:none; margin-top: 10px;">
-        <div style="background: #ddd; border-radius: 8px; overflow: hidden;">
-          <div id="progress-bar" style="width: 0%; height: 14px; background: #2ecc71;"></div>
+      <label>Upload Scope of Work</label>
+      <input type="file" name="scope_doc" accept=".pdf,.docx,.xlsx,.txt" required />
+
+      <label>Jobsite Media (Images or Videos)</label>
+      <div id="dropzone" class="dropzone">
+        <p>📸 Drag & drop up to 20 media files here (images/videos)<br>or click to select</p>
+        <input type="file" id="fileInput" multiple hidden />
+        <div id="preview-container"></div>
+        <div id="progress-container">
+          <div id="progress-bar"></div>
+          <p id="upload-status"></p>
         </div>
+        <div id="zoom-modal"></div>
       </div>
 
-      <div id="upload-status" style="margin-top: 10px; color: green;"></div>
+      <label>
+        <input type="checkbox" name="enable_ai" checked /> Enable AI Scope Comparison (recommended)
+      </label>
 
-      <label>Upload Scope of Work File:</label>
-      <input type="file" name="scope_doc" accept=".pdf,.docx,.txt,.xls,.xlsx">
-
-      <label>Upload Safety Sheet (Image or PDF):</label>
-      <input type="file" name="safety_sheet" accept=".jpg,.jpeg,.png,.pdf">
-
-      <label>Upload Company Logo (optional):</label>
-      <input type="file" name="logo" accept=".jpg,.jpeg,.png,.svg">
-
-      <div class="checkbox">
-        <label>
-          <input type="checkbox" name="enable_ai" checked> ✅ Enable AI Scope Comparison
-        </label>
-      </div>
-    </div>
-
-    <button type="submit">🚀 Submit Daily Log</button>
-  </form>
-
-  <!-- ✅ Zoom modal -->
-  <div id="zoom-modal" class="zoom-modal"></div>
-
-  <!-- ✅ Uploader JS -->
-  <script src="/static/uploader.js"></script>
+      <button type="submit">🚀 Generate Preview</button>
+    </form>
+  </div>
 </body>
 </html>
