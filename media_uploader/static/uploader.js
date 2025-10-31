@@ -1,8 +1,10 @@
-const dropzone = document.getElementById('drop-zone');
-const fileInput = document.getElementById('file-input');
-const previewContainer = document.getElementById('preview-container');
-const uploadStatus = document.getElementById('upload-status');
-const addMoreBtn = document.getElementById("add-more-btn");
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const previewGrid = document.getElementById('preview-container');
+const progressContainer = document.getElementById("progress-container");
+const progressBar = document.getElementById("progress-bar");
+const statusText = document.getElementById("upload-status");
+const zoomModal = document.getElementById("zoom-modal");
 
 let mediaFiles = [];
 const MAX_FILES = 20;
@@ -15,9 +17,6 @@ document.addEventListener("drop", e => {
     handleFiles(e.dataTransfer.files);
   }
 });
-
-addMoreBtn.addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", e => handleFiles(e.target.files));
 
 function compressImage(file, callback) {
   const img = new Image();
@@ -77,67 +76,70 @@ function handleFiles(files) {
 }
 
 function renderPreviews() {
-  previewContainer.innerHTML = "";
+  previewGrid.innerHTML = "";
   mediaFiles.forEach((media, index) => {
     const isVideo = media.file.type.startsWith("video/");
     const item = document.createElement("div");
     item.className = "preview-item";
 
-    const mediaTag = document.createElement(isVideo ? "video" : "img");
-    mediaTag.src = media.url;
-    mediaTag.className = "preview-media";
-    if (isVideo) mediaTag.controls = true;
+    item.innerHTML = `
+      <${isVideo ? 'video controls' : 'img'} src="${media.url}" class="preview-media" />
+      <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
+    `;
 
-    const removeBtn = document.createElement("button");
-    removeBtn.className = "remove-btn";
-    removeBtn.innerHTML = "❌";
-    removeBtn.onclick = (e) => {
-      e.stopPropagation(); // don’t open zoom
-      mediaFiles.splice(index, 1);
-      renderPreviews();
-    };
+    item.addEventListener('click', () => {
+      zoomModal.innerHTML = `<${isVideo ? 'video controls autoplay' : 'img'} src="${media.url}" />`;
+      zoomModal.style.display = "flex";
+    });
 
-    item.appendChild(mediaTag);
-    item.appendChild(removeBtn);
-
-    item.addEventListener("click", () => zoomPreview(media.url, isVideo ? "video" : "img"));
-    previewContainer.appendChild(item);
+    previewGrid.appendChild(item);
   });
 }
 
-function zoomPreview(src, type) {
-  const modal = document.getElementById("zoom-modal");
-  modal.innerHTML = "";
-  const media = document.createElement(type);
-  media.src = src;
-  media.controls = true;
-  media.style.maxWidth = "90%";
-  media.style.maxHeight = "90%";
-  modal.appendChild(media);
-  modal.style.display = "flex";
+function removeFile(index) {
+  mediaFiles.splice(index, 1);
+  renderPreviews();
 }
 
-function uploadFiles() {
+function uploadMedia() {
   if (mediaFiles.length === 0) return alert("No media to upload.");
 
   const formData = new FormData();
   mediaFiles.forEach(media => formData.append("media_files", media.file));
 
-  uploadStatus.textContent = "⏳ Uploading...";
-  uploadStatus.style.color = "black";
+  progressContainer.style.display = "block";
+  progressBar.style.width = "0%";
+  statusText.textContent = "";
+  progressBar.style.backgroundColor = "#2ecc71";
 
-  fetch("/upload_media_test", {
-    method: "POST",
-    body: formData
-  })
-    .then(res => res.json())
-    .then(data => {
-      uploadStatus.textContent = data.message || "✅ Upload complete!";
-      uploadStatus.style.color = "green";
-    })
-    .catch(err => {
-      console.error(err);
-      uploadStatus.textContent = "❌ Upload error";
-      uploadStatus.style.color = "red";
-    });
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", "/upload_media_test", true);
+
+  xhr.upload.addEventListener("progress", e => {
+    if (e.lengthComputable) {
+      const percent = Math.round((e.loaded / e.total) * 100);
+      progressBar.style.width = percent + "%";
+    }
+  });
+
+  xhr.onload = () => {
+    if (xhr.status === 200) {
+      const res = JSON.parse(xhr.responseText);
+      statusText.textContent = res.message || "✅ Upload complete!";
+    } else {
+      statusText.textContent = "❌ Upload failed";
+      progressBar.style.backgroundColor = "#e74c3c";
+    }
+  };
+
+  xhr.onerror = () => {
+    statusText.textContent = "❌ Upload error";
+    progressBar.style.backgroundColor = "#e74c3c";
+  };
+
+  xhr.send(formData);
 }
+
+// 🖱️ Button trigger
+dropzone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
