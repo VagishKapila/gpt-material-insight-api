@@ -1,27 +1,32 @@
-// =============================
-// 🧠 uploader.js — Modular + Debug-Friendly
-// =============================
-
-// --- File storage ---
 let selectedFiles = [];
-
-// --- DOM Elements ---
 const previewContainer = document.getElementById("preview-container");
 const dropZone = document.getElementById("drop-zone");
 const fileInput = document.getElementById("file-input");
 const zoomModal = document.getElementById("zoom-modal");
 const uploadStatus = document.getElementById("upload-status");
+const progressBar = document.getElementById("progress-bar");
 
-// --- Add More Files button ---
 document.getElementById("add-more-btn").addEventListener("click", () => fileInput.click());
 
-// --- File Input Change Event ---
+// ✅ Global drag/drop protection — prevents browser from opening files on drop
+window.addEventListener("dragover", (e) => {
+  e.preventDefault();
+});
+
+window.addEventListener("drop", (e) => {
+  e.preventDefault();
+});
+
+// ✅ FULL-PAGE DROP HANDLER
+document.body.addEventListener("drop", (e) => {
+  e.preventDefault();
+  handleFiles(e.dataTransfer.files);
+});
+
 fileInput.addEventListener("change", (e) => {
-  console.log("[DEBUG] Files selected via file input:", e.target.files);
   handleFiles(e.target.files);
 });
 
-// --- Drag and Drop Handlers ---
 dropZone.addEventListener("dragover", (e) => {
   e.preventDefault();
   dropZone.classList.add("dragover");
@@ -34,18 +39,12 @@ dropZone.addEventListener("dragleave", () => {
 dropZone.addEventListener("drop", (e) => {
   e.preventDefault();
   dropZone.classList.remove("dragover");
-  console.log("[DEBUG] Files dropped:", e.dataTransfer.files);
   handleFiles(e.dataTransfer.files);
 });
 
-// =============================
-// 🖼️ Handle Previews (Images + Videos)
-// =============================
 function handleFiles(files) {
   for (let file of files) {
     selectedFiles.push(file);
-    console.log(`[DEBUG] Added file: ${file.name}, type: ${file.type}`);
-
     const previewItem = document.createElement("div");
     previewItem.className = "preview-item";
 
@@ -55,17 +54,16 @@ function handleFiles(files) {
     removeBtn.onclick = () => {
       selectedFiles = selectedFiles.filter(f => f !== file);
       previewItem.remove();
-      console.log(`[DEBUG] Removed file: ${file.name}`);
     };
 
-    // --- Image Preview ---
+    // 📷 Image preview
     if (file.type.startsWith("image")) {
       const img = document.createElement("img");
       img.src = URL.createObjectURL(file);
       img.onclick = () => zoomPreview(img.src, "img");
       previewItem.append(img);
 
-    // --- Video Preview ---
+    // 🎥 Video preview
     } else if (file.type.startsWith("video")) {
       const video = document.createElement("video");
       video.src = URL.createObjectURL(file);
@@ -79,54 +77,63 @@ function handleFiles(files) {
   }
 }
 
-// =============================
-// 🔍 Zoom Modal (Lightbox Effect)
-// =============================
 function zoomPreview(src, type) {
   zoomModal.innerHTML = "";
   const media = document.createElement(type);
   media.src = src;
   media.controls = true;
+  media.style.maxWidth = "90vw";
+  media.style.maxHeight = "90vh";
   if (type === "video") media.autoplay = true;
   zoomModal.append(media);
   zoomModal.style.display = "flex";
-  console.log(`[DEBUG] Zooming ${type}: ${src}`);
+
+  // Click outside to close
+  zoomModal.onclick = () => {
+    zoomModal.style.display = "none";
+  };
 }
 
-// =============================
-// 🚀 Upload Function (to Flask Server)
-// =============================
 async function uploadFiles() {
   const formData = new FormData();
-
-  // ✅ Fix: use correct Flask key "media_files"
   selectedFiles.forEach((file) => {
     formData.append("media_files", file);
   });
 
   uploadStatus.innerHTML = "⏳ Uploading...";
   uploadStatus.style.color = "black";
+  progressBar.style.width = "0%";
 
   try {
-    console.log("[DEBUG] Upload started for", selectedFiles.length, "files");
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/upload_media_test");
 
-    const res = await fetch("/upload_media_test", {
-      method: "POST",
-      body: formData
-    });
+    // 🔁 Progress event
+    xhr.upload.onprogress = function (e) {
+      if (e.lengthComputable) {
+        const percent = (e.loaded / e.total) * 100;
+        progressBar.style.width = percent + "%";
+      }
+    };
 
-    const result = await res.json();
-    console.log("[DEBUG] Server response:", result);
+    xhr.onload = function () {
+      if (xhr.status === 200) {
+        uploadStatus.innerHTML = `✅ Uploaded ${selectedFiles.length} file(s) successfully.`;
+        uploadStatus.style.color = "green";
+      } else {
+        uploadStatus.innerHTML = "❌ Upload failed";
+        uploadStatus.style.color = "red";
+      }
+    };
 
-    // ✅ Fix: handle both success and fallback
-    if (res.ok) {
-      uploadStatus.innerHTML = `✅ Uploaded ${selectedFiles.length} file(s) successfully.`;
-      uploadStatus.style.color = "green";
-    } else {
-      throw new Error("Upload failed");
-    }
+    xhr.onerror = function () {
+      uploadStatus.innerHTML = "❌ Upload failed";
+      uploadStatus.style.color = "red";
+    };
+
+    xhr.send(formData);
   } catch (err) {
-    console.error("[ERROR] Upload failed:", err);
+    console.error("[Upload Error]", err);
     uploadStatus.innerHTML = "❌ Upload failed";
     uploadStatus.style.color = "red";
   }
