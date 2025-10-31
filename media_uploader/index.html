@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Media Upload Test</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 30px; background: #f4f4f4; }
+    .dropzone {
+      border: 2px dashed #aaa; padding: 40px; background: #fff;
+      text-align: center; color: #888; border-radius: 12px; cursor: pointer;
+    }
+    .preview-grid {
+      margin-top: 30px; display: flex; flex-wrap: wrap; gap: 15px;
+    }
+    .preview-item {
+      position: relative; max-width: 160px;
+    }
+    .preview-item img, .preview-item video {
+      max-width: 100%; border-radius: 8px;
+    }
+    .remove-btn {
+      position: absolute; top: 5px; right: 5px; background: #e74c3c;
+      color: white; border: none; border-radius: 50%; width: 24px; height: 24px;
+      font-size: 14px; cursor: pointer;
+    }
+    #more-btn { margin-top: 20px; display: none; cursor: pointer; color: #2980b9; }
+  </style>
+</head>
+<body>
+  <h2>📦 Test Media Upload (Image + Video)</h2>
+  <div class="dropzone" id="dropzone">
+    Drag & drop or click to upload (Max 20 files, image <5MB, video <20MB)
+    <input type="file" id="fileInput" accept="image/*,video/*" multiple hidden>
+  </div>
+  <div class="preview-grid" id="previewGrid"></div>
+  <div id="more-btn" onclick="toggleMore()">+ Show More Media</div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const previewGrid = document.getElementById('previewGrid');
+const moreBtn = document.getElementById('more-btn');
+
+let mediaFiles = [];
+let showAll = false;
+
+const MAX_FILES = 20;
+
+function toggleMore() {
+  showAll = !showAll;
+  renderPreviews();
+}
+
+function compressImage(file, callback) {
+  const img = new Image();
+  const reader = new FileReader();
+  reader.onload = e => {
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const maxDim = 1200;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height && width > maxDim) {
+        height *= maxDim / width;
+        width = maxDim;
+      } else if (height > maxDim) {
+        width *= maxDim / height;
+        height = maxDim;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(blob => {
+        const compressed = new File([blob], file.name, { type: file.type });
+        callback(compressed);
+      }, file.type, 0.7);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleFiles(files) {
+  const totalCount = mediaFiles.length + files.length;
+  if (totalCount > MAX_FILES) return alert("⚠️ Max 20 files allowed");
+
+  Array.from(files).forEach(file => {
+    const isImage = file.type.startsWith("image/");
+    const isVideo = file.type.startsWith("video/");
+    if (!isImage && !isVideo) return;
+
+    const maxSize = isVideo ? 20 * 1024 * 1024 : 5 * 1024 * 1024;
+    if (file.size > maxSize) return alert(`⚠️ ${file.name} too large`);
+
+    if (isImage) {
+      compressImage(file, compressed => {
+        mediaFiles.push({ file: compressed, url: URL.createObjectURL(compressed) });
+        renderPreviews();
+      });
+    } else {
+      mediaFiles.push({ file, url: URL.createObjectURL(file) });
+      renderPreviews();
+    }
+  });
+}
+
+function renderPreviews() {
+  previewGrid.innerHTML = "";
+  const filesToShow = showAll ? mediaFiles : mediaFiles.slice(0, 6);
+  filesToShow.forEach((media, index) => {
+    const item = document.createElement("div");
+    item.className = "preview-item";
+    const isVideo = media.file.type.startsWith("video/");
+    item.innerHTML = `
+      <${isVideo ? 'video controls' : 'img'} src="${media.url}" />
+      <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
+    `;
+    previewGrid.appendChild(item);
+  });
+  moreBtn.style.display = mediaFiles.length > 6 ? "block" : "none";
+  moreBtn.textContent = showAll ? "− Hide Extra Media" : "+ Show More Media";
+}
+
+function removeFile(index) {
+  mediaFiles.splice(index, 1);
+  renderPreviews();
+}
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropzone.style.borderColor = '#3498db';
+});
+dropzone.addEventListener('dragleave', () => {
+  dropzone.style.borderColor = '#aaa';
+});
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.style.borderColor = '#aaa';
+  handleFiles(e.dataTransfer.files);
+});
+
+fileInput.addEventListener('change', e => {
+  handleFiles(e.target.files);
+});
+</script>
+</body>
+</html>
