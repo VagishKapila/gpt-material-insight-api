@@ -1,30 +1,41 @@
-const dropzone = document.getElementById('dropzone');
-const fileInput = document.getElementById('fileInput');
-const previewGrid = document.getElementById('previewGrid');
-const progressContainer = document.getElementById("progress-container");
-const progressBar = document.getElementById("progress-bar");
-const statusText = document.getElementById("upload-status");
+const dropzone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const previewContainer = document.getElementById('preview-container');
+const zoomModal = document.getElementById('zoom-modal');
+const uploadStatus = document.getElementById('upload-status');
 
 let mediaFiles = [];
 const MAX_FILES = 20;
 
-// 🌐 Global drag & drop (anywhere on page)
-document.addEventListener("dragover", e => e.preventDefault());
-document.addEventListener("drop", e => {
+// ✅ Global drag & drop (entire window)
+document.addEventListener("dragover", (e) => {
   e.preventDefault();
-  if (e.dataTransfer && e.dataTransfer.files.length) {
+  dropzone.classList.add("dragover");
+});
+
+document.addEventListener("dragleave", (e) => {
+  e.preventDefault();
+  dropzone.classList.remove("dragover");
+});
+
+document.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropzone.classList.remove("dragover");
+  if (e.dataTransfer?.files?.length) {
     handleFiles(e.dataTransfer.files);
   }
 });
 
+// 📦 Compress images client-side before upload
 function compressImage(file, callback) {
-  const img = new Image();
   const reader = new FileReader();
-  reader.onload = e => {
+  reader.onload = (e) => {
+    const img = new Image();
     img.onload = () => {
       const canvas = document.createElement("canvas");
       const maxDim = 1600;
-      let width = img.width, height = img.height;
+      let { width, height } = img;
+
       if (width > height && width > maxDim) {
         height *= maxDim / width;
         width = maxDim;
@@ -32,11 +43,13 @@ function compressImage(file, callback) {
         width *= maxDim / height;
         height = maxDim;
       }
+
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext("2d");
       ctx.drawImage(img, 0, 0, width, height);
-      canvas.toBlob(blob => {
+
+      canvas.toBlob((blob) => {
         const compressed = new File([blob], file.name, { type: file.type });
         callback(compressed);
       }, file.type, 0.7);
@@ -46,112 +59,108 @@ function compressImage(file, callback) {
   reader.readAsDataURL(file);
 }
 
+// 📁 Handle image & video files
 function handleFiles(files) {
-  const totalCount = mediaFiles.length + files.length;
-  if (totalCount > MAX_FILES) return alert("⚠️ Max 20 files allowed");
+  if (mediaFiles.length + files.length > MAX_FILES) {
+    alert("⚠️ Max 20 files allowed.");
+    return;
+  }
 
-  Array.from(files).forEach(file => {
+  Array.from(files).forEach((file) => {
     const isImage = file.type.startsWith("image/");
     const isVideo = file.type.startsWith("video/");
     if (!isImage && !isVideo) return;
 
     const maxSize = isVideo ? 100 * 1024 * 1024 : 15 * 1024 * 1024;
     if (file.size > maxSize) {
-      const readable = isVideo ? "100 MB (video)" : "15 MB (image)";
-      alert(`⚠️ ${file.name} too large. Max allowed: ${readable}`);
+      alert(`⚠️ ${file.name} too large. Max allowed: ${maxSize / 1024 / 1024} MB`);
       return;
     }
 
-    if (isImage) {
-      compressImage(file, compressed => {
-        mediaFiles.push({ file: compressed, url: URL.createObjectURL(compressed) });
-        renderPreviews();
-      });
-    } else {
-      mediaFiles.push({ file, url: URL.createObjectURL(file) });
+    const addMedia = (f) => {
+      mediaFiles.push({ file: f, url: URL.createObjectURL(f) });
       renderPreviews();
+    };
+
+    if (isImage) {
+      compressImage(file, addMedia);
+    } else {
+      addMedia(file);
     }
   });
 }
 
+// 🖼️ Render preview grid
 function renderPreviews() {
-  previewGrid.innerHTML = "";
+  previewContainer.innerHTML = "";
   mediaFiles.forEach((media, index) => {
     const isVideo = media.file.type.startsWith("video/");
     const item = document.createElement("div");
     item.className = "preview-item";
 
     item.innerHTML = `
-      <${isVideo ? 'video controls' : 'img'} src="${media.url}" class="preview-media" />
-      <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
+      <${isVideo ? 'video controls' : 'img'} src="${media.url}" />
+      <button class="remove-btn" onclick="removeFile(${index})">❌</button>
     `;
 
-    item.addEventListener('click', () => {
-      const popup = document.createElement("div");
-      popup.style.position = "fixed";
-      popup.style.top = 0;
-      popup.style.left = 0;
-      popup.style.width = "100%";
-      popup.style.height = "100%";
-      popup.style.background = "rgba(0,0,0,0.8)";
-      popup.style.display = "flex";
-      popup.style.alignItems = "center";
-      popup.style.justifyContent = "center";
-      popup.innerHTML = `
-        <${isVideo ? 'video controls autoplay' : 'img'} src="${media.url}" style="max-width:90%; max-height:90%; border-radius:12px;" />
-      `;
-      popup.onclick = () => document.body.removeChild(popup);
-      document.body.appendChild(popup);
-    });
+    item.querySelector(isVideo ? 'video' : 'img').onclick = () => {
+      zoomPreview(media.url, isVideo ? "video" : "img");
+    };
 
-    previewGrid.appendChild(item);
+    previewContainer.appendChild(item);
   });
 }
 
+// 🔍 Zoom modal
+function zoomPreview(src, type) {
+  zoomModal.innerHTML = "";
+  const el = document.createElement(type);
+  el.src = src;
+  el.controls = true;
+  if (type === "video") el.autoplay = true;
+  el.style.maxWidth = "90%";
+  el.style.maxHeight = "80%";
+  zoomModal.appendChild(el);
+  zoomModal.style.display = "flex";
+}
+
+// ❌ Remove file from queue
 function removeFile(index) {
   mediaFiles.splice(index, 1);
   renderPreviews();
 }
 
-function uploadMedia() {
-  if (mediaFiles.length === 0) return alert("No media to upload.");
+// ⬆️ Upload logic
+function uploadFiles() {
+  if (!mediaFiles.length) return alert("No media selected.");
 
   const formData = new FormData();
-  mediaFiles.forEach(media => formData.append("media_files", media.file));
+  mediaFiles.forEach((media) => formData.append("media_files", media.file));
 
-  progressContainer.style.display = "block";
-  progressBar.style.width = "0%";
-  statusText.textContent = "";
-  progressBar.style.backgroundColor = "#2ecc71";
+  uploadStatus.textContent = "⏳ Uploading...";
+  uploadStatus.style.color = "#333";
 
-  const xhr = new XMLHttpRequest();
-  xhr.open("POST", "/upload_media_test", true);
-
-  xhr.upload.addEventListener("progress", e => {
-    if (e.lengthComputable) {
-      const percent = Math.round((e.loaded / e.total) * 100);
-      progressBar.style.width = percent + "%";
-    }
-  });
-
-  xhr.onload = () => {
-    if (xhr.status === 200) {
-      const res = JSON.parse(xhr.responseText);
-      statusText.textContent = res.message || "✅ Upload complete!";
-    } else {
-      statusText.textContent = "❌ Upload failed";
-      progressBar.style.backgroundColor = "#e74c3c";
-    }
-  };
-
-  xhr.onerror = () => {
-    statusText.textContent = "❌ Upload error";
-    progressBar.style.backgroundColor = "#e74c3c";
-  };
-
-  xhr.send(formData);
+  fetch("/upload_media_test", {
+    method: "POST",
+    body: formData,
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      uploadStatus.textContent = data.message || "✅ Upload complete!";
+      uploadStatus.style.color = "green";
+    })
+    .catch((err) => {
+      console.error(err);
+      uploadStatus.textContent = "❌ Upload failed.";
+      uploadStatus.style.color = "red";
+    });
 }
 
-// Local click trigger
-dropzone.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', e => handleFiles(e.target.files));
+// ➕ Button to add more
+document.getElementById("add-more-btn").onclick = () => fileInput.click();
+fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
+
+// 🧼 Zoom modal close on click outside
+zoomModal.onclick = () => {
+  zoomModal.style.display = "none";
+};
