@@ -12,23 +12,26 @@ h2 {
 .dropzone {
   border: 2px dashed #3498db;
   border-radius: 10px;
-  padding: 40px;
+  padding: 60px 20px;
   background: #ecf6fc;
   text-align: center;
   color: #2980b9;
   cursor: pointer;
   transition: background 0.3s ease;
+  font-size: 16px;
 }
 
 .dropzone.dragover {
   background: #d0ebff;
+  color: #1a6fa0;
 }
 
 .preview-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 12px;
-  margin-top: 20px;
+  gap: 14px;
+  margin-top: 25px;
+  align-items: stretch;
 }
 
 .preview-item {
@@ -38,6 +41,10 @@ h2 {
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .preview-item img,
@@ -46,6 +53,7 @@ h2 {
   height: auto;
   display: block;
   cursor: pointer;
+  object-fit: cover;
 }
 
 .remove-btn {
@@ -60,6 +68,7 @@ h2 {
   height: 22px;
   font-size: 16px;
   cursor: pointer;
+  z-index: 2;
 }
 
 .upload-btn {
@@ -72,6 +81,7 @@ h2 {
   cursor: pointer;
   margin-top: 30px;
 }
+
 .upload-btn:hover {
   background: #27ae60;
 }
@@ -88,19 +98,22 @@ h2 {
   justify-content: center;
   align-items: center;
   text-align: center;
+  padding: 20px;
+  box-sizing: border-box;
 }
 
 .zoom-modal img,
 .zoom-modal video {
   max-width: 90%;
   max-height: 80%;
+  border-radius: 10px;
 }
 
 .zoom-modal .close-btn {
   position: absolute;
-  top: 30px;
-  right: 40px;
-  font-size: 40px;
+  top: 20px;
+  right: 30px;
+  font-size: 38px;
   color: #fff;
   cursor: pointer;
 }
@@ -117,4 +130,20 @@ h2 {
   font-size: 16px;
   color: #3498db;
   font-weight: bold;
+}
+
+/* 🔍 Responsive: optional */
+@media screen and (max-width: 600px) {
+  .dropzone {
+    padding: 40px 10px;
+    font-size: 14px;
+  }
+
+  .upload-btn {
+    width: 100%;
+  }
+
+  .preview-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
 }
