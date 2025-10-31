@@ -2,3 +2,4 @@ flask
 werkzeug
 moviepy
 imageio
+gunicorn
