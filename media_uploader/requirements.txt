@@ -1,2 +1,4 @@
 flask
 werkzeug
+moviepy
+imageio
