@@ -1,8 +1,11 @@
+<!-- ✅ preview.html with working modals for image & video preview -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Preview Log</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script defer src="/static/uploader.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -24,55 +27,52 @@
       flex-wrap: wrap;
       gap: 10px;
     }
-    .preview-thumb {
+    .media-thumb {
       max-width: 200px;
       height: auto;
-      margin: 10px;
       border-radius: 5px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
       cursor: pointer;
     }
+    .play-overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 32px;
+      color: white;
+      pointer-events: none;
+    }
+    .media-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+    /* Modal styling */
     .modal {
       display: none;
       position: fixed;
       z-index: 1000;
-      top: 0;
       left: 0;
+      top: 0;
       width: 100%;
       height: 100%;
-      background-color: rgba(0,0,0,0.8);
-      justify-content: center;
-      align-items: center;
+      overflow: auto;
+      background-color: rgba(0, 0, 0, 0.8);
     }
-    .modal img {
-      max-width: 90%;
-      max-height: 90%;
-    }
-    .modal.show {
-      display: flex;
-    }
-    .video-link {
+    .modal-content {
+      margin: 5% auto;
       display: block;
-      text-align: center;
-      font-size: 14px;
-      margin-top: 5px;
-      color: #007bff;
-      text-decoration: none;
+      max-width: 90%;
+      max-height: 80vh;
     }
-    .video-link:hover {
-      text-decoration: underline;
-    }
-    button {
-      padding: 10px 20px;
-      font-size: 16px;
-      background-color: #28a745;
+    .close {
+      position: absolute;
+      top: 20px;
+      right: 35px;
       color: white;
-      border: none;
-      border-radius: 5px;
+      font-size: 36px;
+      font-weight: bold;
       cursor: pointer;
-    }
-    button:hover {
-      background-color: #218838;
     }
   </style>
 </head>
@@ -101,11 +101,11 @@
     <div class="images">
       {% for item in media_items %}
         {% if item.type == 'image' %}
-          <img src="/{{ item.path }}" class="preview-thumb" onclick="showModal(this.src)" alt="Image">
+          <img src="/{{ item.path }}" class="media-thumb" onclick="openModal(this.src, 'image')" alt="Job Site Image">
         {% elif item.type == 'video' %}
-          <div>
-            <img src="/{{ item.thumbnail }}" class="preview-thumb" alt="Video Thumbnail">
-            <a href="/{{ item.path }}" target="_blank" class="video-link">▶️ Click to Play Video</a>
+          <div class="media-wrapper" onclick="openModal('/{{ item.path }}', 'video')">
+            <img src="/{{ item.thumbnail }}" class="media-thumb" alt="Video Thumbnail">
+            <div class="play-overlay">▶️</div>
           </div>
         {% endif %}
       {% endfor %}
@@ -120,19 +120,36 @@
     </form>
   </div>
 
-  <div class="modal" id="zoomModal" onclick="hideModal()">
-    <img id="zoomedImg" src="">
+  <!-- Modal -->
+  <div id="mediaModal" class="modal" onclick="closeModal()">
+    <span class="close">&times;</span>
+    <img id="modalImage" class="modal-content" style="display:none;">
+    <video id="modalVideo" class="modal-content" controls autoplay style="display:none;"></video>
   </div>
 
   <script>
-    function showModal(src) {
-      const modal = document.getElementById("zoomModal");
-      const zoomed = document.getElementById("zoomedImg");
-      zoomed.src = src;
-      modal.classList.add("show");
+    function openModal(src, type) {
+      const modal = document.getElementById("mediaModal");
+      const img = document.getElementById("modalImage");
+      const vid = document.getElementById("modalVideo");
+
+      if (type === 'image') {
+        img.src = src;
+        img.style.display = "block";
+        vid.pause();
+        vid.style.display = "none";
+      } else {
+        vid.src = src;
+        vid.style.display = "block";
+        img.style.display = "none";
+      }
+      modal.style.display = "block";
     }
-    function hideModal() {
-      document.getElementById("zoomModal").classList.remove("show");
+
+    function closeModal() {
+      const modal = document.getElementById("mediaModal");
+      document.getElementById("modalVideo").pause();
+      modal.style.display = "none";
     }
   </script>
 </body>
