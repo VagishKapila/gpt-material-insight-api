@@ -1,3 +1,6 @@
+# app.py — v2025.11.01 (Synced Build)
+# ✅ Supports images + videos with thumbnails, AI analysis, clean session management
+
 import os
 import json
 import uuid
@@ -42,7 +45,7 @@ def generate_form():
         print("\n📥 Incoming request.files keys:", list(request.files.keys()))
         print("📥 request.form keys:", list(request.form.keys()))
 
-        # Core form data
+        # --- Core form data ---
         form_data = {
             "project_name": request.form.get("project_name"),
             "client_name": request.form.get("client_name"),
@@ -57,6 +60,7 @@ def generate_form():
         session_id = str(uuid.uuid4())
         media_items, scope_path, safety_path, logo_path = [], None, None, None
 
+        # --- File save helper ---
         def save_file(field, folder):
             if field in request.files and request.files[field].filename:
                 file = request.files[field]
@@ -74,11 +78,13 @@ def generate_form():
         allowed_images = {".jpg", ".jpeg", ".png", ".bmp", ".gif"}
         allowed_videos = {".mp4", ".mov", ".avi", ".mkv"}
 
+        # --- Media handling ---
         for key in request.files:
             if key.startswith("media_files"):
                 for file in request.files.getlist(key):
                     if not file or not file.filename:
                         continue
+
                     ext = os.path.splitext(file.filename)[1].lower()
                     safe_name = f"{session_id}_{uuid.uuid4().hex}{ext}"
                     save_path = os.path.join(UPLOAD_FOLDER, safe_name)
@@ -86,22 +92,36 @@ def generate_form():
                     print(f"📦 Saved media: {save_path}")
 
                     if ext in allowed_images:
-                        media_items.append({"type": "image", "path": save_path})
+                        media_items.append({
+                            "type": "image",
+                            "path": save_path
+                        })
+
                     elif ext in allowed_videos:
                         print(f"🎥 Generating thumbnail for: {file.filename}")
                         thumb = generate_video_thumbnail(save_path)
+
+                        # Avoid duplicate compression or overwrite
                         if thumb and os.path.exists(thumb):
                             media_items.append({
                                 "type": "video",
                                 "path": save_path,
-                                "thumbnail": thumb
+                                "thumbnail": thumb,
+                                "format": ext.replace(".", "")
                             })
                             print(f"✅ Video thumbnail added: {thumb}")
                         else:
                             print(f"⚠️ Failed to create thumbnail for: {file.filename}")
+                            media_items.append({
+                                "type": "video",
+                                "path": save_path,
+                                "thumbnail": None,
+                                "format": ext.replace(".", "")
+                            })
                     else:
                         print(f"⚠️ Unsupported file type: {file.filename}")
 
+        # --- AI Scope Analysis ---
         ai_results, progress_report = {}, {}
         if request.form.get("enable_ai") and scope_path:
             try:
@@ -111,6 +131,7 @@ def generate_form():
                 traceback.print_exc()
                 ai_results = {"error": f"AI failed: {e}"}
 
+        # --- Save session data ---
         session_data = {
             "form_data": form_data,
             "media_items": media_items,
@@ -121,7 +142,8 @@ def generate_form():
             "safety_sheet_path": safety_path,
         }
 
-        with open(os.path.join(SESSION_FOLDER, f"{session_id}.json"), "w") as f:
+        session_file = os.path.join(SESSION_FOLDER, f"{session_id}.json")
+        with open(session_file, "w") as f:
             json.dump(session_data, f, indent=2)
 
         print(f"💾 Session saved {session_id} with {len(media_items)} media entries.")
@@ -162,6 +184,7 @@ def submit_preview():
 
         pdf_name = f"{session_id}_daily_log.pdf"
         save_path = os.path.join(GENERATED_FOLDER, pdf_name)
+
         create_daily_log_pdf(
             data=data.get("form_data", {}),
             image_paths=[m["path"] for m in data.get("media_items", [])],
@@ -172,8 +195,10 @@ def submit_preview():
             weather_icon_path=data.get("weather_icon_path"),
             safety_sheet_path=data.get("safety_sheet_path"),
         )
-        print(f"✅ PDF generated successfully.")
+
+        print(f"✅ PDF generated successfully: {save_path}")
         return redirect(url_for("serve_pdf", filename=pdf_name))
+
     except Exception as e:
         traceback.print_exc()
         return f"❌ Failed to generate PDF: {e}", 500
