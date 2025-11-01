@@ -19,43 +19,48 @@
     h2 {
       color: #444;
     }
-    img {
+    .images {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .preview-thumb {
       max-width: 200px;
       height: auto;
       margin: 10px;
       border-radius: 5px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
       cursor: pointer;
-      transition: transform 0.2s;
     }
-    img:hover {
-      transform: scale(1.02);
-    }
-    .images {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-    .zoom-modal {
+    .modal {
       display: none;
       position: fixed;
-      z-index: 999;
-      padding-top: 60px;
-      left: 0;
+      z-index: 1000;
       top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
-      overflow: auto;
       background-color: rgba(0,0,0,0.8);
+      justify-content: center;
+      align-items: center;
     }
-    .zoom-modal img {
-      display: block;
-      margin: auto;
+    .modal img {
       max-width: 90%;
-      max-height: 80vh;
+      max-height: 90%;
     }
-    .zoom-modal:target {
+    .modal.show {
+      display: flex;
+    }
+    .video-link {
       display: block;
+      text-align: center;
+      font-size: 14px;
+      margin-top: 5px;
+      color: #007bff;
+      text-decoration: none;
+    }
+    .video-link:hover {
+      text-decoration: underline;
     }
     button {
       padding: 10px 20px;
@@ -68,17 +73,6 @@
     }
     button:hover {
       background-color: #218838;
-    }
-    .video-link {
-      display: inline-block;
-      text-align: center;
-      font-size: 14px;
-      color: #007bff;
-      margin-top: 5px;
-      text-decoration: none;
-    }
-    .video-link:hover {
-      text-decoration: underline;
     }
   </style>
 </head>
@@ -107,15 +101,12 @@
     <div class="images">
       {% for item in media_items %}
         {% if item.type == 'image' %}
-          <a href="#zoom{{ loop.index }}"><img src="/{{ item.path }}" alt="Job Site Image"></a>
-          <div id="zoom{{ loop.index }}" class="zoom-modal" onclick="window.location.hash='';">
-            <img src="/{{ item.path }}" alt="Zoomed Image">
-          </div>
+          <img src="/{{ item.path }}" class="preview-thumb" onclick="showModal(this.src)" alt="Image">
         {% elif item.type == 'video' %}
-          <a href="/{{ item.path }}" class="video-link" target="_blank">
-            <img src="/{{ item.thumbnail }}" alt="Video Thumbnail">
-            ▶️ Click to Play Video
-          </a>
+          <div>
+            <img src="/{{ item.thumbnail }}" class="preview-thumb" alt="Video Thumbnail">
+            <a href="/{{ item.path }}" target="_blank" class="video-link">▶️ Click to Play Video</a>
+          </div>
         {% endif %}
       {% endfor %}
     </div>
@@ -128,5 +119,21 @@
       <button type="submit">✅ Confirm and Generate PDF</button>
     </form>
   </div>
+
+  <div class="modal" id="zoomModal" onclick="hideModal()">
+    <img id="zoomedImg" src="">
+  </div>
+
+  <script>
+    function showModal(src) {
+      const modal = document.getElementById("zoomModal");
+      const zoomed = document.getElementById("zoomedImg");
+      zoomed.src = src;
+      modal.classList.add("show");
+    }
+    function hideModal() {
+      document.getElementById("zoomModal").classList.remove("show");
+    }
+  </script>
 </body>
 </html>
