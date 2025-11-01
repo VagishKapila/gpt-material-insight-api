@@ -1,5 +1,8 @@
-# utils/pdf_generator.py — v2025.11.01C
-# 🎞️ Enhanced with play overlay on video thumbnails and better layout alignment
+# ✅ FIXED VERSION — utils/pdf_generator.py (v2025.11.02)
+# Fully addresses:
+# - image rotation
+# - correct rendering of images and videos (even when only videos)
+# - video thumbnail with clickable play link
 
 import os
 import time
@@ -12,25 +15,19 @@ from reportlab.lib.units import inch
 from reportlab.lib import colors
 from PIL import Image as PILImage, ExifTags
 
-
-# ---------------------------------------------------------------------
-# 🧩 Utility: Fix orientation + compress
-# ---------------------------------------------------------------------
 def fix_orientation_and_compress(image_path):
     try:
         img = PILImage.open(image_path)
         exif = img._getexif() if hasattr(img, "_getexif") else None
         if exif:
-            orientation = next(
-                (ExifTags.TAGS.get(tag, tag) for tag, val in exif.items() if ExifTags.TAGS.get(tag) == "Orientation"),
-                None,
-            )
-            if orientation:
-                if exif.get(orientation) == 3:
+            orientation_tag = next((tag for tag, name in ExifTags.TAGS.items() if name == "Orientation"), None)
+            if orientation_tag and orientation_tag in exif:
+                orientation = exif[orientation_tag]
+                if orientation == 3:
                     img = img.rotate(180, expand=True)
-                elif exif.get(orientation) == 6:
+                elif orientation == 6:
                     img = img.rotate(270, expand=True)
-                elif exif.get(orientation) == 8:
+                elif orientation == 8:
                     img = img.rotate(90, expand=True)
 
         img = img.convert("RGB")
@@ -39,13 +36,9 @@ def fix_orientation_and_compress(image_path):
         img.save(temp_path, quality=70)
         return temp_path
     except Exception as e:
-        print(f"⚠️ Image compression failed for {image_path}: {e}")
+        print(f"⚠️ Compression failed: {e}")
         return image_path
 
-
-# ---------------------------------------------------------------------
-# 🎞️ Video thumbnail generator
-# ---------------------------------------------------------------------
 def generate_video_thumbnail(video_path):
     try:
         thumb_path = video_path.rsplit(".", 1)[0] + "_thumb.jpg"
@@ -53,13 +46,9 @@ def generate_video_thumbnail(video_path):
         subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return thumb_path if os.path.exists(thumb_path) else None
     except Exception as e:
-        print(f"⚠️ Thumbnail generation failed: {e}")
+        print(f"⚠️ FFmpeg thumbnail failed: {e}")
         return None
 
-
-# ---------------------------------------------------------------------
-# 🧱 PDF Builder
-# ---------------------------------------------------------------------
 def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_report, save_path,
                          weather_icon_path=None, safety_sheet_path=None):
     try:
@@ -67,9 +56,7 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
         doc = SimpleDocTemplate(save_path, pagesize=letter)
         elements = []
         styles = getSampleStyleSheet()
-
-        def add(text, style="Normal"):
-            elements.append(Paragraph(text, styles[style]))
+        def add(text, style="Normal"): elements.append(Paragraph(text, styles[style]))
 
         # ------------------ PAGE 1 ------------------
         if logo_path and os.path.exists(logo_path):
@@ -77,16 +64,8 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
         add("<b>DAILY LOG</b>", "Title")
         elements.append(Spacer(1, 12))
 
-        info = [
-            ("Project", data.get("project_name")),
-            ("Client", data.get("client_name")),
-            ("Location", data.get("location")),
-            ("Date", data.get("date")),
-            ("Weather", data.get("weather")),
-        ]
-        for k, v in info:
-            add(f"<b>{k}:</b> {v or '—'}")
-
+        for k in ["project_name", "client_name", "location", "date", "weather"]:
+            add(f"<b>{k.replace('_',' ').title()}:</b> {data.get(k, '—')}")
         elements.append(Spacer(1, 12))
         add(f"<b>Work Done:</b> {data.get('work_done', '—')}")
         add(f"<b>Crew Notes:</b> {data.get('crew_notes', '—')}")
@@ -98,7 +77,6 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
         images = [p for p in image_paths if os.path.splitext(p)[1].lower() in [".jpg", ".jpeg", ".png"]]
         videos = [p for p in image_paths if os.path.splitext(p)[1].lower() in [".mp4", ".mov", ".avi", ".mkv"]]
 
-        # --- Images ---
         if images:
             grid, row = [], []
             for i, img_path in enumerate(images):
@@ -110,11 +88,9 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
             if row:
                 grid.append(row)
             elements.append(Table(grid, hAlign="LEFT"))
-        else:
-            add("<font color='gray'>No jobsite images uploaded.</font>")
-        elements.append(Spacer(1, 12))
+        elif not videos:
+            add("<font color='gray'>No jobsite media uploaded.</font>")
 
-        # --- Videos ---
         if videos:
             add("<b>🎥 Uploaded Videos</b>", "Heading2")
             for vid in videos:
@@ -126,8 +102,6 @@ def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_rep
                     add(f"<b>▶️ <a href='{url}'>Click to Play</a></b>")
                 else:
                     add(f"🎬 <a href='{url}'>{name}</a>")
-        else:
-            add("<font color='gray'>No video files uploaded.</font>")
         elements.append(PageBreak())
 
         # ------------------ PAGE 3 ------------------
