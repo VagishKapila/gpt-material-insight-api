@@ -10,11 +10,13 @@ from werkzeug.utils import secure_filename
 # --- Local imports ---
 from utils.compare_scope_vs_log import analyze_scope_vs_log
 from utils.pdf_generator import create_daily_log_pdf
-from utils.video_tools import generate_video_thumbnail  # ✅ Added
+from utils.video_tools import generate_video_thumbnail  # ✅ Added for video thumbnails
 
 app = Flask(__name__)
 
+# ---------------------------------------------------------------------
 # 📁 Folder Setup
+# ---------------------------------------------------------------------
 UPLOAD_FOLDER = "static/uploads"
 GENERATED_FOLDER = "static/generated"
 SCOPE_FOLDER = "static/scope"
@@ -25,23 +27,30 @@ SESSION_FOLDER = "session_data"
 for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER, SAFETY_FOLDER, LOGO_FOLDER, SESSION_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
+# ---------------------------------------------------------------------
 # 🩺 Health Check
+# ---------------------------------------------------------------------
 @app.route("/")
 def health():
     return "✅ Nails & Notes AI Log is running!"
 
+# ---------------------------------------------------------------------
 # 🧱 Form Route
+# ---------------------------------------------------------------------
 @app.route("/form")
 def form():
     return render_template("form.html", datetime=datetime)
 
+# ---------------------------------------------------------------------
 # 🚀 Generate Form / Handle Uploads
+# ---------------------------------------------------------------------
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
     try:
         print("\n📥 Incoming request.files keys:", list(request.files.keys()))
         print("📥 request.form keys:", list(request.form.keys()))
 
+        # --- Core Form Data ---
         form_data = {
             "project_name": request.form.get("project_name"),
             "client_name": request.form.get("client_name"),
@@ -56,7 +65,9 @@ def generate_form():
         session_id = str(uuid.uuid4())
         image_paths, scope_path, safety_path, logo_path = [], None, None, None
 
-        # 💾 Utility to save uploaded files
+        # -----------------------------------------------------------------
+        # 💾 Utility to save any uploaded file
+        # -----------------------------------------------------------------
         def save_file(field, folder):
             if field in request.files and request.files[field].filename:
                 file = request.files[field]
@@ -67,11 +78,16 @@ def generate_form():
                 return path
             return None
 
+        # -----------------------------------------------------------------
+        # 📄 Save optional uploads (logo, safety, scope)
+        # -----------------------------------------------------------------
         logo_path = save_file("logo", LOGO_FOLDER)
         safety_path = save_file("safety_sheet", SAFETY_FOLDER)
         scope_path = save_file("scope_doc", SCOPE_FOLDER)
 
-        # 📸 Handle images and videos
+        # -----------------------------------------------------------------
+        # 📸 Handle jobsite media (images + videos)
+        # -----------------------------------------------------------------
         media_file_keys = [k for k in request.files if k == "media_files" or k.startswith("media_files[")]
         allowed_image_exts = {".jpg", ".jpeg", ".png", ".bmp", ".gif"}
         allowed_video_exts = {".mp4", ".mov", ".avi", ".mkv"}
@@ -85,10 +101,12 @@ def generate_form():
                     file.save(save_path)
                     print(f"📦 Uploaded jobsite media: {save_path}")
 
+                    # ✅ Images
                     if ext in allowed_image_exts:
-                        print(f"🖼️ Added image file: {file.filename}")
                         image_paths.append(save_path)
+                        print(f"🖼️ Added image file: {file.filename}")
 
+                    # ✅ Videos (generate thumbnail)
                     elif ext in allowed_video_exts:
                         print(f"🎥 Processing video: {file.filename}")
                         thumb = generate_video_thumbnail(save_path)
@@ -101,9 +119,12 @@ def generate_form():
                     else:
                         print(f"⚠️ Skipped unsupported file type: {file.filename}")
 
+        # -----------------------------------------------------------------
         # 🤖 AI Scope Comparison
+        # -----------------------------------------------------------------
         ai_results = {}
         progress_report = {}
+
         if request.form.get("enable_ai") and scope_path:
             try:
                 ai_results = analyze_scope_vs_log(scope_path, form_data, image_paths)
@@ -112,7 +133,9 @@ def generate_form():
                 traceback.print_exc()
                 ai_results = {"error": f"AI analysis failed: {str(e)}"}
 
+        # -----------------------------------------------------------------
         # 💾 Save session data
+        # -----------------------------------------------------------------
         session_data = {
             "form_data": form_data,
             "image_paths": image_paths,
@@ -133,7 +156,9 @@ def generate_form():
         traceback.print_exc()
         return f"❌ Error generating form: {str(e)}", 500
 
+# ---------------------------------------------------------------------
 # 🧠 Preview Page
+# ---------------------------------------------------------------------
 @app.route("/preview/<session_id>")
 def preview(session_id):
     json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
@@ -148,7 +173,9 @@ def preview(session_id):
         traceback.print_exc()
         return f"❌ Failed to load preview: {str(e)}", 500
 
+# ---------------------------------------------------------------------
 # 🧾 Submit Preview → Generate PDF
+# ---------------------------------------------------------------------
 @app.route("/submit_preview", methods=["POST"])
 def submit_preview():
     session_id = request.form.get("session_id")
@@ -211,7 +238,9 @@ def submit_preview():
         traceback.print_exc()
         return f"❌ Failed to generate PDF: {str(e)}", 500
 
+# ---------------------------------------------------------------------
 # 📂 Serve Generated PDFs
+# ---------------------------------------------------------------------
 @app.route("/generated/<filename>")
 def serve_pdf(filename):
     path = os.path.join(GENERATED_FOLDER, filename)
@@ -219,7 +248,9 @@ def serve_pdf(filename):
         return f"❌ File not found: {filename}", 404
     return send_from_directory(GENERATED_FOLDER, filename)
 
+# ---------------------------------------------------------------------
 # 🧩 Debug Sessions
+# ---------------------------------------------------------------------
 @app.route("/debug_sessions")
 def debug_sessions():
     try:
@@ -233,10 +264,9 @@ def debug_sessions():
     except Exception as e:
         return f"Failed to load sessions: {str(e)}", 500
 
-# 🚦 Run App
+# ---------------------------------------------------------------------
+# 🚦 Run App (✅ Single Run Block)
+# ---------------------------------------------------------------------
 if __name__ == "__main__":
-    app.run(debug=True)
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # default to 5000 if not on Railway
-    app.run(host="0.0.0.0", port=port)
+    port = int(os.environ.get("PORT", 5000))  # default to 5000 locally
+    app.run(host="0.0.0.0", port=port, debug=True)
