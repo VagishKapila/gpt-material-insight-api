@@ -1,4 +1,3 @@
-<!-- ✅ FINAL preview.html — Fully working image & video modal with "X" close -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -104,12 +103,23 @@
           <img src="/{{ item.path }}" class="media-thumb" onclick="openModal(this.src, 'image')" alt="Job Site Image">
         {% elif item.type == 'video' %}
           <div class="media-wrapper" onclick="openModal('/{{ item.path }}', 'video')">
-            <img src="/{{ item.thumbnail }}" class="media-thumb" alt="Video Thumbnail">
+            {% if item.thumbnail %}
+              <img src="/{{ item.thumbnail }}" class="media-thumb" alt="Video Thumbnail">
+            {% else %}
+              <div class="media-thumb" style="width:200px;height:120px;background:#000;"></div>
+            {% endif %}
             <div class="play-overlay">▶️</div>
           </div>
         {% endif %}
       {% endfor %}
     </div>
+  </div>
+  {% endif %}
+
+  {% if ai_results %}
+  <div class="section">
+    <h2>🤖 AI Scope Matching</h2>
+    <p><strong>Completion:</strong> {{ ai_results.completion }}%</p>
   </div>
   {% endif %}
 
