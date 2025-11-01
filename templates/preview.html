@@ -26,16 +26,36 @@
       border-radius: 5px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
       cursor: pointer;
+      transition: transform 0.2s;
     }
-    video {
-      max-width: 200px;
-      display: block;
-      margin: 10px 0;
+    img:hover {
+      transform: scale(1.02);
     }
     .images {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
+    }
+    .zoom-modal {
+      display: none;
+      position: fixed;
+      z-index: 999;
+      padding-top: 60px;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.8);
+    }
+    .zoom-modal img {
+      display: block;
+      margin: auto;
+      max-width: 90%;
+      max-height: 80vh;
+    }
+    .zoom-modal:target {
+      display: block;
     }
     button {
       padding: 10px 20px;
@@ -48,6 +68,17 @@
     }
     button:hover {
       background-color: #218838;
+    }
+    .video-link {
+      display: inline-block;
+      text-align: center;
+      font-size: 14px;
+      color: #007bff;
+      margin-top: 5px;
+      text-decoration: none;
+    }
+    .video-link:hover {
+      text-decoration: underline;
     }
   </style>
 </head>
@@ -76,10 +107,14 @@
     <div class="images">
       {% for item in media_items %}
         {% if item.type == 'image' %}
-          <img src="/{{ item.path }}" alt="Job Site Image">
+          <a href="#zoom{{ loop.index }}"><img src="/{{ item.path }}" alt="Job Site Image"></a>
+          <div id="zoom{{ loop.index }}" class="zoom-modal" onclick="window.location.hash='';">
+            <img src="/{{ item.path }}" alt="Zoomed Image">
+          </div>
         {% elif item.type == 'video' %}
-          <a href="/{{ item.path }}" target="_blank">
-            <img src="/{{ item.thumbnail }}" alt="Video Thumbnail" title="Click to view video">
+          <a href="/{{ item.path }}" class="video-link" target="_blank">
+            <img src="/{{ item.thumbnail }}" alt="Video Thumbnail">
+            ▶️ Click to Play Video
           </a>
         {% endif %}
       {% endfor %}
@@ -93,6 +128,5 @@
       <button type="submit">✅ Confirm and Generate PDF</button>
     </form>
   </div>
-
 </body>
 </html>
