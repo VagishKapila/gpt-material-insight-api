@@ -1,245 +1,270 @@
+# app.py — v2025.11.01 (Stable + Video Upload Support)
 import os
-from utils.video_tools import generate_video_thumbnail
-import time
+import json
+import uuid
 import traceback
-import subprocess
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import inch
-from PIL import Image as PILImage, ExifTags
+from datetime import datetime
+from flask import Flask, request, render_template, send_from_directory, redirect, url_for
+from werkzeug.utils import secure_filename
+
+# --- Local imports ---
+from utils.compare_scope_vs_log import analyze_scope_vs_log
+from utils.pdf_generator import create_daily_log_pdf
+
+app = Flask(__name__)
 
 # ---------------------------------------------------------------------
-# 🧩 Utility: Fix orientation + compress
+# 📁 Folder Setup
 # ---------------------------------------------------------------------
-def fix_orientation_and_compress(image_path):
-    """Auto‑rotate, resize, and compress an image safely with EXIF support."""
+UPLOAD_FOLDER = "static/uploads"
+GENERATED_FOLDER = "static/generated"
+SCOPE_FOLDER = "static/scope"
+SAFETY_FOLDER = "static/safety"
+LOGO_FOLDER = "static/logo"
+SESSION_FOLDER = "session_data"
+
+for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER, SAFETY_FOLDER, LOGO_FOLDER, SESSION_FOLDER]:
+    os.makedirs(folder, exist_ok=True)
+
+
+# ---------------------------------------------------------------------
+# 🩺 Health Check
+# ---------------------------------------------------------------------
+@app.route("/")
+def health():
+    return "✅ Nails & Notes AI Log is running!"
+
+
+# ---------------------------------------------------------------------
+# 🧱 Form Route
+# ---------------------------------------------------------------------
+@app.route("/form")
+def form():
+    return render_template("form.html", datetime=datetime)
+
+
+# ---------------------------------------------------------------------
+# 🚀 Generate Form / Handle Uploads
+# ---------------------------------------------------------------------
+@app.route("/generate_form", methods=["POST"])
+def generate_form():
     try:
-        start = time.time()
-        img = PILImage.open(image_path)
+        print("\n📥 Incoming request.files keys:", list(request.files.keys()))
+        print("📥 request.form keys:", list(request.form.keys()))
 
-        # ✅ Rotate using EXIF
-        try:
-            exif = img._getexif()
-            if exif:
-                for tag, value in exif.items():
-                    key = ExifTags.TAGS.get(tag, tag)
-                    if key == "Orientation":
-                        if value == 3:
-                            img = img.rotate(180, expand=True)
-                        elif value == 6:
-                            img = img.rotate(270, expand=True)
-                        elif value == 8:
-                            img = img.rotate(90, expand=True)
-                        print(f"↻ Rotated {os.path.basename(image_path)} (orientation={value})")
-                        break
-        except Exception as e:
-            print(f"⚠️ No EXIF orientation for {image_path}: {e}")
+        # --- Core Form Data ---
+        form_data = {
+            "project_name": request.form.get("project_name"),
+            "client_name": request.form.get("client_name"),
+            "location": request.form.get("location"),
+            "date": request.form.get("date"),
+            "weather": request.form.get("weather"),
+            "work_done": request.form.get("work_done"),
+            "crew_notes": request.form.get("crew_notes"),
+            "safety_notes": request.form.get("safety_notes"),
+        }
 
-        img = img.convert("RGB")
-        img.thumbnail((1000, 1000))
-        temp_path = image_path.replace(".jpg", "_compressed.jpg").replace(".png", "_compressed.png")
-        img.save(temp_path, quality=70)
-        print(f"🖼️ Processed {os.path.basename(image_path)} in {round(time.time() - start, 2)}s")
-        return temp_path
+        session_id = str(uuid.uuid4())
+        image_paths, scope_path, safety_path, logo_path = [], None, None, None
 
-    except Exception as e:
-        print(f"❌ Failed to process {image_path}: {e}")
-        return image_path
-
-
-# ---------------------------------------------------------------------
-# 🎞️ Utility: Extract thumbnail from video (fallback safe)
-# ---------------------------------------------------------------------
-def generate_video_thumbnail(video_path):
-    """Create a still thumbnail from a video using FFmpeg; returns image path."""
-    try:
-        thumb_path = video_path.rsplit(".", 1)[0] + "_thumb.jpg"
-        cmd = [
-            "ffmpeg", "-y", "-i", video_path,
-            "-ss", "00:00:01.000", "-vframes", "1", thumb_path
-        ]
-        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-        if os.path.exists(thumb_path):
-            print(f"🎞️ Generated thumbnail: {thumb_path}")
-            return thumb_path
-        else:
-            print(f"⚠️ FFmpeg did not create thumbnail for {video_path}")
+        # -----------------------------------------------------------------
+        # 💾 Utility to save any uploaded file
+        # -----------------------------------------------------------------
+        def save_file(field, folder):
+            if field in request.files and request.files[field].filename:
+                file = request.files[field]
+                filename = secure_filename(file.filename)
+                path = os.path.join(folder, f"{session_id}_{filename}")
+                file.save(path)
+                print(f"✅ Saved {field} to {path}")
+                return path
             return None
-    except Exception as e:
-        print(f"⚠️ Thumbnail generation failed for {video_path}: {e}")
-        return None
-
-
-# ---------------------------------------------------------------------
-# 🧱 Core: Build PDF
-# ---------------------------------------------------------------------
-def create_daily_log_pdf(
-    data,
-    image_paths,
-    logo_path,
-    ai_analysis,
-    progress_report,
-    save_path,
-    weather_icon_path=None,
-    safety_sheet_path=None
-):
-    """Build a complete PDF with job photos, video thumbnails, AI analysis."""
-    try:
-        print("\n🚧 Starting PDF generation...")
-        start_time = time.time()
-
-        # 🔍 DEBUG BLOCK: Check what media files were received
-        print(f"\n📦 Received {len(image_paths)} total media file(s):")
-        for path in image_paths:
-            ext = os.path.splitext(path)[1].lower()
-            print(f"• {path} (ext: {ext})")
-
-        doc = SimpleDocTemplate(save_path, pagesize=letter)
-        elements = []
-        styles = getSampleStyleSheet()
-
-        def add_paragraph(text, style="Normal"):
-            elements.append(Paragraph(text, styles[style]))
 
         # -----------------------------------------------------------------
-        # PAGE 1 – Daily Log Info
+        # 📄 Save optional uploads (logo, safety, scope)
         # -----------------------------------------------------------------
-        if logo_path and os.path.exists(logo_path):
-            elements.append(Image(logo_path, width=120, height=60))
-        add_paragraph("<b>DAILY LOG</b>", "Title")
-        elements.append(Spacer(1, 12))
-
-        info_fields = [
-            ("Project", data.get("project_name")),
-            ("Client", data.get("client_name")),
-            ("Location", data.get("location")),
-            ("Date", data.get("date")),
-            ("Weather", data.get("weather")),
-        ]
-        for label, val in info_fields:
-            add_paragraph(f"<b>{label}:</b> {val or '—'}")
-
-        elements.append(Spacer(1, 12))
-        add_paragraph(f"<b>Work Done:</b> {data.get('work_done', '—')}")
-        add_paragraph(f"<b>Crew Notes:</b> {data.get('crew_notes', '—')}")
-        add_paragraph(f"<b>Safety Notes:</b> {data.get('safety_notes', '—')}")
-        elements.append(PageBreak())
+        logo_path = save_file("logo", LOGO_FOLDER)
+        safety_path = save_file("safety_sheet", SAFETY_FOLDER)
+        scope_path = save_file("scope_doc", SCOPE_FOLDER)
 
         # -----------------------------------------------------------------
-        # PAGE 2 – Jobsite Photos + Videos
+        # 📸 Handle jobsite media (images + videos)
         # -----------------------------------------------------------------
-        print("🧩 Building jobsite media section...")
+        media_file_keys = [k for k in request.files if k == "media_files" or k.startswith("media_files[")]
+        allowed_image_exts = {".jpg", ".jpeg", ".png", ".bmp", ".gif"}
+        allowed_video_exts = {".mp4", ".mov", ".avi", ".mkv"}
 
-        valid_images = [p for p in image_paths if p.lower().endswith((".jpg", ".jpeg", ".png"))]
-        valid_videos = [p for p in image_paths if p.lower().endswith((".mp4", ".mov", ".avi"))]
+        for key in media_file_keys:
+            for file in request.files.getlist(key):
+                if file and file.filename:
+                    ext = os.path.splitext(file.filename)[1].lower()
+                    safe_filename = f"{session_id}_{uuid.uuid4().hex}{ext}"
+                    save_path = os.path.join(UPLOAD_FOLDER, safe_filename)
+                    file.save(save_path)
+                    print(f"📦 Uploaded jobsite media: {save_path}")
 
-        print(f"✅ Found {len(valid_images)} image(s) and {len(valid_videos)} video(s)")
-
-        # ---- Images
-        if valid_images:
-            add_paragraph("<b>📷 Jobsite Photos</b>", "Heading2")
-            photo_table, row = [], []
-            for idx, img_path in enumerate(valid_images):
-                try:
-                    compressed = fix_orientation_and_compress(img_path)
-                    img = Image(compressed, width=2.5 * inch, height=2.5 * inch)
-                    row.append(img)
-                    if len(row) == 2:
-                        photo_table.append(row)
-                        row = []
-                except Exception as e:
-                    print(f"⚠️ Image skipped: {img_path} ({e})")
-            if row:
-                photo_table.append(row)
-            if photo_table:
-                elements.append(Table(photo_table, hAlign="LEFT"))
-        else:
-            print("⚠️ No image files in this session.")
-
-        # ---- Videos
-        if valid_videos:
-            add_paragraph("<b>🎞️ Uploaded Videos</b>", "Heading2")
-            for vid in valid_videos:
-                video_name = os.path.basename(vid)
-                video_url = f"/{vid}" if not vid.startswith("http") else vid
-                thumb = generate_video_thumbnail(vid)
-                if thumb and os.path.exists(thumb):
-                    try:
-                        elements.append(Image(thumb, width=2.5 * inch, height=2.0 * inch))
-                        add_paragraph(f'<a href="{video_url}">{video_name}</a>', "Normal")
-                        print(f"✅ Added video thumbnail for {video_name}")
-                    except Exception as e:
-                        print(f"⚠️ Could not embed thumbnail for {video_name}: {e}")
-                        add_paragraph(f'🎥 <a href="{video_url}">{video_name}</a>', "Normal")
-                else:
-                    print(f"⚠️ No thumbnail found for {video_name}, adding link only.")
-                    add_paragraph(f'🎥 <a href="{video_url}">{video_name}</a>', "Normal")
-
-        elements.append(PageBreak())
+                    # ✅ Add both images + videos to image_paths
+                    if ext in allowed_image_exts:
+                        print(f"🖼️ Added image file: {file.filename}")
+                        image_paths.append(save_path)
+                    elif ext in allowed_video_exts:
+                        print(f"🎥 Added video file: {file.filename}")
+                        image_paths.append(save_path)
+                    else:
+                        print(f"⚠️ Skipped unsupported file type: {file.filename}")
 
         # -----------------------------------------------------------------
-        # PAGE 3 – AI Scope Analysis
+        # 🤖 AI Scope Comparison
         # -----------------------------------------------------------------
-        if ai_analysis:
-            add_paragraph("🤖 AI Scope Comparison", "Heading2")
-            completion = ai_analysis.get("completion", 0)
-            add_paragraph(f"<b>Estimated Completion:</b> {completion}%")
-            elements.append(Spacer(1, 12))
+        ai_results = {}
+        progress_report = {}
 
-            for item in ai_analysis.get("scored_items", []):
-                scope = item.get("scope", "")
-                conf = item.get("confidence", 0)
-                match = item.get("match", False)
-                matched_image = item.get("matched_image")
-                add_paragraph(
-                    f"<b>Scope:</b> {scope}<br/><b>Confidence:</b> {conf}%<br/><b>Match:</b> {'✅' if match else '❌'}"
-                )
-                elements.append(Spacer(1, 6))
-                if matched_image:
-                    possible_paths = [
-                        os.path.join("static/uploads", matched_image),
-                        os.path.join("static/uploads", matched_image.replace("_compressed", "")),
-                    ]
-                    for path in possible_paths:
-                        if os.path.exists(path):
-                            try:
-                                elements.append(
-                                    Image(fix_orientation_and_compress(path), width=2.5 * inch, height=2.5 * inch)
-                                )
-                                break
-                            except Exception as e:
-                                print(f"⚠️ Failed to load matched image: {e}")
-                elements.append(Spacer(1, 10))
-
-            out_items = ai_analysis.get("out_of_scope", [])
-            if out_items:
-                add_paragraph("<b>Out-of-Scope Items:</b>", "Heading3")
-                for line in out_items:
-                    add_paragraph(f"<font color='red'>• {line}</font>")
-            elements.append(PageBreak())
-
-        # -----------------------------------------------------------------
-        # PAGE 4 – Safety Sheet
-        # -----------------------------------------------------------------
-        if safety_sheet_path and os.path.exists(safety_sheet_path):
-            add_paragraph("📎 Attached Safety Sheet", "Heading2")
+        if request.form.get("enable_ai") and scope_path:
             try:
-                ext = os.path.splitext(safety_sheet_path)[1].lower()
-                if ext in [".jpg", ".jpeg", ".png"]:
-                    elements.append(Image(fix_orientation_and_compress(safety_sheet_path), width=5 * inch, height=6 * inch))
-                else:
-                    add_paragraph(f"Safety sheet file: {os.path.basename(safety_sheet_path)} (non-image format)")
+                ai_results = analyze_scope_vs_log(scope_path, form_data, image_paths)
+                print("✅ AI analysis completed successfully.")
             except Exception as e:
-                add_paragraph(f"⚠️ Could not load safety sheet: {e}")
+                traceback.print_exc()
+                ai_results = {"error": f"AI analysis failed: {str(e)}"}
 
         # -----------------------------------------------------------------
-        # BUILD
+        # 💾 Save session data
         # -----------------------------------------------------------------
-        print(f"📝 Building PDF at {save_path}")
-        doc.build(elements)
-        print(f"✅ PDF built successfully in {round(time.time() - start_time, 2)}s")
+        session_data = {
+            "form_data": form_data,
+            "image_paths": image_paths,
+            "logo_path": logo_path,
+            "ai_results": ai_results,
+            "progress_report": progress_report,
+            "weather_icon_path": None,
+            "safety_sheet_path": safety_path,
+        }
+
+        with open(os.path.join(SESSION_FOLDER, f"{session_id}.json"), "w") as f:
+            json.dump(session_data, f, indent=2)
+
+        print(f"💾 Saved session {session_id} with {len(image_paths)} media files.")
+        return redirect(url_for("preview", session_id=session_id))
 
     except Exception as e:
-        print(f"❌ PDF generation error: {e}")
         traceback.print_exc()
+        return f"❌ Error generating form: {str(e)}", 500
+
+
+# ---------------------------------------------------------------------
+# 🧠 Preview Page
+# ---------------------------------------------------------------------
+@app.route("/preview/<session_id>")
+def preview(session_id):
+    json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
+    if not os.path.exists(json_path):
+        return f"❌ Session not found: {session_id}", 404
+    try:
+        with open(json_path, "r") as f:
+            data = json.load(f)
+        print(f"🧩 Loaded session {session_id} for preview.")
+        return render_template("preview.html", session_id=session_id, **data)
+    except Exception as e:
+        traceback.print_exc()
+        return f"❌ Failed to load preview: {str(e)}", 500
+
+
+# ---------------------------------------------------------------------
+# 🧾 Submit Preview → Generate PDF
+# ---------------------------------------------------------------------
+@app.route("/submit_preview", methods=["POST"])
+def submit_preview():
+    session_id = request.form.get("session_id")
+    if not session_id:
+        return "Missing session ID", 400
+
+    json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
+    if not os.path.exists(json_path):
+        return f"❌ Session not found: {session_id}", 404
+
+    try:
+        with open(json_path, "r") as f:
+            data = json.load(f)
+
+        total_items = int(request.form.get("total_items", 0))
+        scored_items = []
+
+        for i in range(total_items):
+            scope = request.form.get(f"scope_{i}", "")
+            confidence = int(request.form.get(f"confidence_{i}", 0))
+            match = f"match_{i}" in request.form
+            matched_image = request.form.get(f"matched_image_{i}", "").strip() or None
+
+            scored_items.append({
+                "scope": scope,
+                "confidence": confidence,
+                "match": match,
+                "matched_image": matched_image
+            })
+
+        estimated_completion = sum(i["confidence"] for i in scored_items if i["match"]) / max(len(scored_items), 1)
+
+        data["ai_results"] = {
+            "completion": round(estimated_completion, 1),
+            "scored_items": scored_items,
+            "out_of_scope": data.get("ai_results", {}).get("out_of_scope", [])
+        }
+
+        with open(json_path, "w") as f:
+            json.dump(data, f, indent=2)
+
+        pdf_name = f"{session_id}_daily_log.pdf"
+        save_path = os.path.join(GENERATED_FOLDER, pdf_name)
+
+        print(f"🧱 Generating PDF for session {session_id}...")
+        create_daily_log_pdf(
+            data=data.get("form_data", {}),
+            image_paths=data.get("image_paths", []),
+            logo_path=data.get("logo_path"),
+            ai_analysis=data.get("ai_results"),
+            progress_report=data.get("progress_report"),
+            save_path=save_path,
+            weather_icon_path=data.get("weather_icon_path"),
+            safety_sheet_path=data.get("safety_sheet_path"),
+        )
+        print(f"✅ PDF generated successfully: {pdf_name}")
+        return redirect(url_for("serve_pdf", filename=pdf_name))
+
+    except Exception as e:
+        traceback.print_exc()
+        return f"❌ Failed to generate PDF: {str(e)}", 500
+
+
+# ---------------------------------------------------------------------
+# 📂 Serve Generated PDFs
+# ---------------------------------------------------------------------
+@app.route("/generated/<filename>")
+def serve_pdf(filename):
+    path = os.path.join(GENERATED_FOLDER, filename)
+    if not os.path.exists(path):
+        return f"❌ File not found: {filename}", 404
+    return send_from_directory(GENERATED_FOLDER, filename)
+
+
+# ---------------------------------------------------------------------
+# 🧩 Debug: List Sessions
+# ---------------------------------------------------------------------
+@app.route("/debug_sessions")
+def debug_sessions():
+    try:
+        session_files = os.listdir(SESSION_FOLDER)
+        session_links = []
+        for file in session_files:
+            if file.endswith(".json"):
+                session_id = file.replace(".json", "")
+                session_links.append(f'<li><a href="/preview/{session_id}">{session_id}</a></li>')
+        return f"<h2>🧠 Debug: Saved Sessions</h2><ul>{''.join(session_links)}</ul>"
+    except Exception as e:
+        return f"Failed to load sessions: {str(e)}", 500
+
+
+# ---------------------------------------------------------------------
+# 🚦 Run App
+# ---------------------------------------------------------------------
+if __name__ == "__main__":
+    app.run(debug=True)
