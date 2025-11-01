@@ -69,21 +69,24 @@ def generate_form():
         safety_path = save_file("safety_sheet", SAFETY_FOLDER)
         scope_path = save_file("scope_doc", SCOPE_FOLDER)
 
-        # ✅ Handle jobsite media uploaded via drag/drop JS
+               # ✅ Handle jobsite media uploaded via drag/drop JS
         media_file_keys = [k for k in request.files if k == "media_files" or k.startswith("media_files[")]
+        allowed_image_exts = {".jpg", ".jpeg", ".png", ".bmp", ".gif"}
+        
         for key in media_file_keys:
             for file in request.files.getlist(key):
                 if file and file.filename:
-                    ext = os.path.splitext(file.filename)[1]
+                    ext = os.path.splitext(file.filename)[1].lower()
                     safe_filename = f"{session_id}_{uuid.uuid4().hex}{ext}"
                     save_path = os.path.join(UPLOAD_FOLDER, safe_filename)
                     file.save(save_path)
-                    image_paths.append(save_path)
                     print(f"📸 Uploaded jobsite media: {save_path}")
 
-        if not image_paths:
-            print("⚠️ No jobsite media uploaded.")
-        print(f"📦 Final image_paths before PDF/preview: {image_paths}")
+                    # ✅ Only add image files to image_paths
+                    if ext in allowed_image_exts:
+                        image_paths.append(save_path)
+                    else:
+                        print(f"⚠️ Skipped non-image file: {file.filename}")
 
         # ✅ AI Scope Comparison
         ai_results = {}
