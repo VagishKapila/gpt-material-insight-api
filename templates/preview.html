@@ -1,179 +1,190 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Daily Log Preview</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; background: #f0f4f7; }
-    h1, h2 { color: #2c3e50; }
-    .section { margin-bottom: 30px; padding: 20px; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-    .label { font-weight: bold; color: #34495e; display: block; margin-top: 10px; }
-    .images { display: flex; flex-wrap: wrap; gap: 10px; }
-    .images img {
-      width: 160px; height: 120px;
-      object-fit: cover;
-      border-radius: 6px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-      cursor: zoom-in;
-    }
-    .score { margin: 12px 0; }
-    .out-of-scope { color: #c0392b; }
-    .button { margin-top: 30px; padding: 14px 28px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer; }
-    .button:hover { background: #2980b9; }
-    .dropdown { margin-top: 6px; font-size: 14px; }
-    .scroll-box { max-height: 350px; overflow-y: auto; padding-right: 10px; }
-  </style>
-</head>
-<body>
-  <h1>📋 Daily Log Preview</h1>
-  <form action="/submit_preview" method="POST">
-    <input type="hidden" name="session_id" value="{{ session_id }}">
+import os
+import json
+import uuid
+import traceback
+from datetime import datetime
+from flask import Flask, request, render_template, send_from_directory, redirect, url_for
+from werkzeug.utils import secure_filename
 
-    <div class="section">
-      <h2>📌 Project Info</h2>
-      <div><span class="label">Project:</span> {{ form_data.project_name }}</div>
-      <div><span class="label">Client:</span> {{ form_data.client_name or "—" }}</div>
-      <div><span class="label">Location:</span> {{ form_data.location }}</div>
-      <div><span class="label">Date:</span> {{ form_data.date }}</div>
-      <div><span class="label">Weather:</span> {{ form_data.weather or "Not Provided" }}</div>
-    </div>
+from utils.compare_scope_vs_log import analyze_scope_vs_log
+from utils.pdf_generator import create_daily_log_pdf
+from utils.video_tools import generate_video_thumbnail
 
-    <div class="section">
-      <h2>🛠️ Work Log</h2>
-      <div><span class="label">Work Done:</span> {{ form_data.work_done }}</div>
-      <div><span class="label">Crew Notes:</span> {{ form_data.crew_notes or "—" }}</div>
-      <div><span class="label">Safety Notes:</span> {{ form_data.safety_notes or "—" }}</div>
-    </div>
+app = Flask(__name__)
 
-    {% if image_paths %}
-    <div class="section">
-      <h2>📷 Job Site Photos</h2>
-      <div class="images">
-        {% for img_path in image_paths %}
-          {% if img_path.endswith('.jpg') or img_path.endswith('.jpeg') or img_path.endswith('.png') or img_path.endswith('.webp') %}
-            <img src="/{{ img_path }}" alt="Job Site Media" onclick="zoomImage(this)">
-          {% else %}
-            <div style="width:160px;height:120px;background:#eee;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#999;">
-              Unsupported Format
-            </div>
-          {% endif %}
-        {% endfor %}
-      </div>
-    </div>
-    {% endif %}
+# ---------------------------------------------------------------------
+# 📁 Folder Setup
+# ---------------------------------------------------------------------
+UPLOAD_FOLDER = "static/uploads"
+GENERATED_FOLDER = "static/generated"
+SCOPE_FOLDER = "static/scope"
+SAFETY_FOLDER = "static/safety"
+LOGO_FOLDER = "static/logo"
+SESSION_FOLDER = "session_data"
 
-    {% if safety_sheet_path %}
-    <div class="section">
-      <h2>📎 Safety Sheet</h2>
-      {% if safety_sheet_path.endswith('.jpg') or safety_sheet_path.endswith('.jpeg') or safety_sheet_path.endswith('.png') %}
-        <img src="/{{ safety_sheet_path }}" style="max-width: 400px; border: 1px solid #ccc;" alt="Safety Sheet">
-      {% else %}
-        <p><strong>Uploaded file:</strong> {{ safety_sheet_path.split('/')[-1] }} (PDF or unsupported preview type)</p>
-      {% endif %}
-    </div>
-    {% endif %}
+for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER, SAFETY_FOLDER, LOGO_FOLDER, SESSION_FOLDER]:
+    os.makedirs(folder, exist_ok=True)
 
-    <div class="section scroll-box">
-      <h2>🤖 AI Scope Comparison</h2>
-      <div><strong>Estimated Completion:</strong> <span id="completion-val">{{ ai_results.completion or 0 }}</span>%</div>
-      <hr>
-      {% for item in ai_results.scored_items %}
-        <div class="score">
-          <input type="checkbox" name="match_{{ loop.index0 }}" class="matchbox" {% if item.match %}checked{% endif %}>
-          <label>
-            {{ item.scope }} — 
-            <input type="range" class="slider" name="confidence_{{ loop.index0 }}" min="0" max="100" step="1" value="{{ item.confidence }}">
-            <span class="conf_val">{{ item.confidence }}</span>%
-          </label>
-          <input type="hidden" name="scope_{{ loop.index0 }}" value="{{ item.scope }}">
 
-          <div class="dropdown">
-            Matched Image:
-            <select name="matched_image_{{ loop.index0 }}">
-              <option value="">(No match)</option>
-              {% for img_path in image_paths %}
-                {% set filename = img_path.split('/')[-1] %}
-                <option value="{{ filename }}" {% if item.matched_image == filename %}selected{% endif %}>{{ filename }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-      {% endfor %}
-      <input type="hidden" name="total_items" value="{{ ai_results.scored_items|length }}">
-    </div>
+@app.route("/")
+def health():
+    return "✅ Nails & Notes AI Log is running!"
 
-    {% if ai_results.out_of_scope %}
-    <div class="section out-of-scope">
-      <strong>Out-of-Scope Items:</strong>
-      <ul>
-        {% for line in ai_results.out_of_scope if line|length > 4 %}
-          <li>{{ line }}</li>
-        {% endfor %}
-      </ul>
-    </div>
-    {% endif %}
 
-    <button type="submit" class="button">✅ Generate Final PDF</button>
-  </form>
+@app.route("/form")
+def form():
+    return render_template("form.html", datetime=datetime)
 
-  <script>
-    const sliders = document.querySelectorAll(".slider");
-    const checkboxes = document.querySelectorAll(".matchbox");
-    const completionDisplay = document.getElementById("completion-val");
 
-    function updateCompletion() {
-      let total = 0, count = 0;
-      sliders.forEach((slider, i) => {
-        if (checkboxes[i].checked) {
-          total += parseInt(slider.value);
-          count++;
+@app.route("/generate_form", methods=["POST"])
+def generate_form():
+    try:
+        print("\n📥 Incoming request.files keys:", list(request.files.keys()))
+        print("📥 request.form keys:", list(request.form.keys()))
+
+        # Core form data
+        form_data = {
+            "project_name": request.form.get("project_name"),
+            "client_name": request.form.get("client_name"),
+            "location": request.form.get("location"),
+            "date": request.form.get("date"),
+            "weather": request.form.get("weather"),
+            "work_done": request.form.get("work_done"),
+            "crew_notes": request.form.get("crew_notes"),
+            "safety_notes": request.form.get("safety_notes"),
         }
-      });
-      const percent = count ? Math.round(total / count) : 0;
-      completionDisplay.textContent = percent;
-    }
 
-    sliders.forEach(slider => {
-      slider.addEventListener("input", e => {
-        e.target.nextElementSibling.textContent = e.target.value;
-        updateCompletion();
-      });
-    });
-    checkboxes.forEach(cb => cb.addEventListener("change", updateCompletion));
-    updateCompletion();
+        session_id = str(uuid.uuid4())
+        media_items, scope_path, safety_path, logo_path = [], None, None, None
 
-    function zoomImage(img) {
-      const isZoomed = img.classList.contains("zoomed");
-      document.querySelectorAll(".zoomed").forEach(el => el.classList.remove("zoomed"));
-      if (!isZoomed) img.classList.add("zoomed");
-    }
+        def save_file(field, folder):
+            if field in request.files and request.files[field].filename:
+                file = request.files[field]
+                filename = secure_filename(file.filename)
+                path = os.path.join(folder, f"{session_id}_{filename}")
+                file.save(path)
+                print(f"✅ Saved {field} to {path}")
+                return path
+            return None
 
-    document.addEventListener("keydown", e => {
-      if (e.key === 'Escape') document.querySelectorAll(".zoomed").forEach(el => el.classList.remove("zoomed"));
-    });
+        logo_path = save_file("logo", LOGO_FOLDER)
+        safety_path = save_file("safety_sheet", SAFETY_FOLDER)
+        scope_path = save_file("scope_doc", SCOPE_FOLDER)
 
-    document.addEventListener("click", e => {
-      if (!e.target.classList.contains("zoomed") && !e.target.closest(".images")) {
-        document.querySelectorAll(".zoomed").forEach(el => el.classList.remove("zoomed"));
-      }
-    });
-  </script>
+        allowed_images = {".jpg", ".jpeg", ".png", ".bmp", ".gif"}
+        allowed_videos = {".mp4", ".mov", ".avi", ".mkv"}
 
-  <style>
-    .zoomed {
-      width: auto !important;
-      max-width: 90vw;
-      max-height: 80vh;
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%) scale(1.2);
-      z-index: 9999;
-      border: 4px solid #fff;
-      box-shadow: 0 0 20px rgba(0,0,0,0.5);
-      background: #fff;
-      cursor: zoom-out;
-    }
-  </style>
-</body>
-</html>
+        for key in request.files:
+            if key.startswith("media_files"):
+                for file in request.files.getlist(key):
+                    if not file or not file.filename:
+                        continue
+                    ext = os.path.splitext(file.filename)[1].lower()
+                    safe_name = f"{session_id}_{uuid.uuid4().hex}{ext}"
+                    save_path = os.path.join(UPLOAD_FOLDER, safe_name)
+                    file.save(save_path)
+                    print(f"📦 Saved media: {save_path}")
+
+                    if ext in allowed_images:
+                        media_items.append({"type": "image", "path": save_path})
+                    elif ext in allowed_videos:
+                        print(f"🎥 Generating thumbnail for: {file.filename}")
+                        thumb = generate_video_thumbnail(save_path)
+                        if thumb and os.path.exists(thumb):
+                            media_items.append({
+                                "type": "video",
+                                "path": save_path,
+                                "thumbnail": thumb
+                            })
+                            print(f"✅ Video thumbnail added: {thumb}")
+                        else:
+                            print(f"⚠️ Failed to create thumbnail for: {file.filename}")
+                    else:
+                        print(f"⚠️ Unsupported file type: {file.filename}")
+
+        ai_results, progress_report = {}, {}
+        if request.form.get("enable_ai") and scope_path:
+            try:
+                ai_results = analyze_scope_vs_log(scope_path, form_data, [m["path"] for m in media_items])
+                print("✅ AI analysis completed.")
+            except Exception as e:
+                traceback.print_exc()
+                ai_results = {"error": f"AI failed: {e}"}
+
+        session_data = {
+            "form_data": form_data,
+            "media_items": media_items,
+            "logo_path": logo_path,
+            "ai_results": ai_results,
+            "progress_report": progress_report,
+            "weather_icon_path": None,
+            "safety_sheet_path": safety_path,
+        }
+
+        with open(os.path.join(SESSION_FOLDER, f"{session_id}.json"), "w") as f:
+            json.dump(session_data, f, indent=2)
+
+        print(f"💾 Session saved {session_id} with {len(media_items)} media entries.")
+        return redirect(url_for("preview", session_id=session_id))
+
+    except Exception as e:
+        traceback.print_exc()
+        return f"❌ Error generating form: {str(e)}", 500
+
+
+@app.route("/preview/<session_id>")
+def preview(session_id):
+    json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
+    if not os.path.exists(json_path):
+        return f"❌ Session not found: {session_id}", 404
+
+    try:
+        with open(json_path, "r") as f:
+            data = json.load(f)
+        print(f"🧩 Loaded session {session_id} for preview.")
+        return render_template("preview.html", session_id=session_id, **data)
+    except Exception as e:
+        traceback.print_exc()
+        return f"❌ Failed to load preview: {e}", 500
+
+
+@app.route("/submit_preview", methods=["POST"])
+def submit_preview():
+    session_id = request.form.get("session_id")
+    json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
+
+    if not os.path.exists(json_path):
+        return "❌ Session not found", 404
+
+    try:
+        with open(json_path, "r") as f:
+            data = json.load(f)
+
+        pdf_name = f"{session_id}_daily_log.pdf"
+        save_path = os.path.join(GENERATED_FOLDER, pdf_name)
+        create_daily_log_pdf(
+            data=data.get("form_data", {}),
+            image_paths=[m["path"] for m in data.get("media_items", [])],
+            logo_path=data.get("logo_path"),
+            ai_analysis=data.get("ai_results"),
+            progress_report=data.get("progress_report"),
+            save_path=save_path,
+            weather_icon_path=data.get("weather_icon_path"),
+            safety_sheet_path=data.get("safety_sheet_path"),
+        )
+        print(f"✅ PDF generated successfully.")
+        return redirect(url_for("serve_pdf", filename=pdf_name))
+    except Exception as e:
+        traceback.print_exc()
+        return f"❌ Failed to generate PDF: {e}", 500
+
+
+@app.route("/generated/<filename>")
+def serve_pdf(filename):
+    return send_from_directory(GENERATED_FOLDER, filename)
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    print(f"🚀 Starting on port {port}")
+    app.run(host="0.0.0.0", port=port, debug=True)
