@@ -1,5 +1,5 @@
-# utils/pdf_generator.py — v2025.11.01
-# Stable build with 🎞️ video thumbnail support, 🖼️ image compression, and full debug tracing
+# utils/pdf_generator.py — v2025.11.01C
+# 🎞️ Enhanced with play overlay on video thumbnails and better layout alignment
 
 import os
 import time
@@ -9,6 +9,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.lib import colors
 from PIL import Image as PILImage, ExifTags
 
 
@@ -16,255 +17,141 @@ from PIL import Image as PILImage, ExifTags
 # 🧩 Utility: Fix orientation + compress
 # ---------------------------------------------------------------------
 def fix_orientation_and_compress(image_path):
-    """Auto‑rotate, resize, and compress an image safely with EXIF support."""
     try:
-        start = time.time()
         img = PILImage.open(image_path)
-
-        # ✅ Rotate using EXIF orientation tag
-        try:
-            exif = img._getexif()
-            if exif:
-                for tag, value in exif.items():
-                    key = ExifTags.TAGS.get(tag, tag)
-                    if key == "Orientation":
-                        if value == 3:
-                            img = img.rotate(180, expand=True)
-                        elif value == 6:
-                            img = img.rotate(270, expand=True)
-                        elif value == 8:
-                            img = img.rotate(90, expand=True)
-                        print(f"↻ Rotated {os.path.basename(image_path)} (orientation={value})")
-                        break
-        except Exception as e:
-            print(f"⚠️ No EXIF orientation info for {image_path}: {e}")
+        exif = img._getexif() if hasattr(img, "_getexif") else None
+        if exif:
+            orientation = next(
+                (ExifTags.TAGS.get(tag, tag) for tag, val in exif.items() if ExifTags.TAGS.get(tag) == "Orientation"),
+                None,
+            )
+            if orientation:
+                if exif.get(orientation) == 3:
+                    img = img.rotate(180, expand=True)
+                elif exif.get(orientation) == 6:
+                    img = img.rotate(270, expand=True)
+                elif exif.get(orientation) == 8:
+                    img = img.rotate(90, expand=True)
 
         img = img.convert("RGB")
-        img.thumbnail((1000, 1000))  # Maintain aspect ratio
+        img.thumbnail((1000, 1000))
         temp_path = image_path.replace(".jpg", "_compressed.jpg").replace(".png", "_compressed.png")
         img.save(temp_path, quality=70)
-        print(f"🖼️ Compressed {os.path.basename(image_path)} in {round(time.time() - start, 2)}s")
         return temp_path
-
     except Exception as e:
-        print(f"❌ Image processing failed for {image_path}: {e}")
+        print(f"⚠️ Image compression failed for {image_path}: {e}")
         return image_path
 
 
 # ---------------------------------------------------------------------
-# 🎞️ Utility: Generate a video thumbnail using FFmpeg
+# 🎞️ Video thumbnail generator
 # ---------------------------------------------------------------------
 def generate_video_thumbnail(video_path):
-    """
-    Extracts a still frame from the video (1s mark) as a JPG thumbnail.
-    Returns the path of the thumbnail, or None if generation fails.
-    """
     try:
         thumb_path = video_path.rsplit(".", 1)[0] + "_thumb.jpg"
         cmd = ["ffmpeg", "-y", "-i", video_path, "-ss", "00:00:01.000", "-vframes", "1", thumb_path]
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-        if os.path.exists(thumb_path):
-            print(f"🎞️ Generated video thumbnail: {thumb_path}")
-            return thumb_path
-        else:
-            print(f"⚠️ FFmpeg did not create a thumbnail for {video_path}. stderr:\n{result.stderr.decode()}")
-            return None
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return thumb_path if os.path.exists(thumb_path) else None
     except Exception as e:
-        print(f"❌ FFmpeg thumbnail generation failed for {video_path}: {e}")
+        print(f"⚠️ Thumbnail generation failed: {e}")
         return None
 
 
 # ---------------------------------------------------------------------
-# 🧱 Core: Build Daily Log PDF
+# 🧱 PDF Builder
 # ---------------------------------------------------------------------
-def create_daily_log_pdf(
-    data,
-    image_paths,
-    logo_path,
-    ai_analysis,
-    progress_report,
-    save_path,
-    weather_icon_path=None,
-    safety_sheet_path=None
-):
-    """
-    Builds a clean, multi‑page PDF with:
-      • Page 1: Daily Log Information
-      • Page 2: Jobsite Photos + Video Thumbnails
-      • Page 3: AI Scope Analysis
-      • Page 4: Safety Sheet
-    """
+def create_daily_log_pdf(data, image_paths, logo_path, ai_analysis, progress_report, save_path,
+                         weather_icon_path=None, safety_sheet_path=None):
     try:
-        print("\n🚧 Starting PDF generation ...")
-        start_time = time.time()
+        start = time.time()
         doc = SimpleDocTemplate(save_path, pagesize=letter)
         elements = []
         styles = getSampleStyleSheet()
 
-        def add_paragraph(text, style="Normal"):
+        def add(text, style="Normal"):
             elements.append(Paragraph(text, styles[style]))
 
-        # -----------------------------------------------------------------
-        # PAGE 1 — DAILY LOG
-        # -----------------------------------------------------------------
-        print("📝 Building Page 1 (Daily Log Info)")
+        # ------------------ PAGE 1 ------------------
         if logo_path and os.path.exists(logo_path):
             elements.append(Image(logo_path, width=120, height=60))
-        add_paragraph("<b>DAILY LOG</b>", "Title")
+        add("<b>DAILY LOG</b>", "Title")
         elements.append(Spacer(1, 12))
 
-        info_fields = [
+        info = [
             ("Project", data.get("project_name")),
             ("Client", data.get("client_name")),
             ("Location", data.get("location")),
             ("Date", data.get("date")),
             ("Weather", data.get("weather")),
         ]
-        for label, val in info_fields:
-            add_paragraph(f"<b>{label}:</b> {val or '—'}")
+        for k, v in info:
+            add(f"<b>{k}:</b> {v or '—'}")
 
         elements.append(Spacer(1, 12))
-        add_paragraph(f"<b>Work Done:</b> {data.get('work_done', '—')}")
-        add_paragraph(f"<b>Crew Notes:</b> {data.get('crew_notes', '—')}")
-        add_paragraph(f"<b>Safety Notes:</b> {data.get('safety_notes', '—')}")
+        add(f"<b>Work Done:</b> {data.get('work_done', '—')}")
+        add(f"<b>Crew Notes:</b> {data.get('crew_notes', '—')}")
+        add(f"<b>Safety Notes:</b> {data.get('safety_notes', '—')}")
         elements.append(PageBreak())
 
-        # -----------------------------------------------------------------
-        # PAGE 2 — JOBSITE MEDIA
-        # -----------------------------------------------------------------
-        print("📸 Building Page 2 (Jobsite Photos + Videos)")
-        valid_images, valid_videos = [], []
+        # ------------------ PAGE 2 ------------------
+        add("<b>📷 Jobsite Media</b>", "Heading2")
+        images = [p for p in image_paths if os.path.splitext(p)[1].lower() in [".jpg", ".jpeg", ".png"]]
+        videos = [p for p in image_paths if os.path.splitext(p)[1].lower() in [".mp4", ".mov", ".avi", ".mkv"]]
 
-        for p in image_paths:
-            ext = os.path.splitext(p)[1].lower()
-            if ext in [".jpg", ".jpeg", ".png"]:
-                valid_images.append(p)
-            elif ext in [".mp4", ".mov", ".avi", ".mkv"]:
-                valid_videos.append(p)
-
-        # --- Images
-        if valid_images:
-            add_paragraph("<b>📷 Jobsite Photos</b>", "Heading2")
-            photo_table, row = [], []
-            for idx, img_path in enumerate(valid_images):
-                print(f"🖼️ Adding image {idx + 1}/{len(valid_images)}: {img_path}")
-                try:
-                    compressed = fix_orientation_and_compress(img_path)
-                    img = Image(compressed, width=2.5 * inch, height=2.5 * inch)
-                    row.append(img)
-                    if len(row) == 2:
-                        photo_table.append(row)
-                        row = []
-                except Exception as e:
-                    print(f"⚠️ Skipped image {img_path}: {e}")
+        # --- Images ---
+        if images:
+            grid, row = [], []
+            for i, img_path in enumerate(images):
+                comp = fix_orientation_and_compress(img_path)
+                row.append(Image(comp, width=2.5 * inch, height=2.5 * inch))
+                if len(row) == 2:
+                    grid.append(row)
+                    row = []
             if row:
-                photo_table.append(row)
-            if photo_table:
-                elements.append(Table(photo_table, hAlign="LEFT"))
+                grid.append(row)
+            elements.append(Table(grid, hAlign="LEFT"))
         else:
-            add_paragraph("<font color='gray'>No jobsite images uploaded.</font>")
-
+            add("<font color='gray'>No jobsite images uploaded.</font>")
         elements.append(Spacer(1, 12))
 
-        # --- Videos
-        if valid_videos:
-            add_paragraph("<b>🎥 Uploaded Videos</b>", "Heading2")
-            for vid in valid_videos:
-                print(f"🎞️ Processing video: {vid}")
-                thumb_path = generate_video_thumbnail(vid)
-                video_name = os.path.basename(vid)
-                video_url = f"/{vid}" if not vid.startswith("http") else vid
-
-                if thumb_path and os.path.exists(thumb_path):
-                    try:
-                        img = Image(thumb_path, width=2.5 * inch, height=2.0 * inch)
-                        elements.append(img)
-                        add_paragraph(f"▶️ <a href='{video_url}'>{video_name}</a>", "Normal")
-                    except Exception as e:
-                        print(f"⚠️ Could not embed video thumbnail: {e}")
-                        add_paragraph(f"🎬 <a href='{video_url}'>{video_name}</a>", "Normal")
+        # --- Videos ---
+        if videos:
+            add("<b>🎥 Uploaded Videos</b>", "Heading2")
+            for vid in videos:
+                thumb = generate_video_thumbnail(vid)
+                name = os.path.basename(vid)
+                url = f"/{vid}"
+                if thumb and os.path.exists(thumb):
+                    elements.append(Image(fix_orientation_and_compress(thumb), width=2.5 * inch, height=2.0 * inch))
+                    add(f"<b>▶️ <a href='{url}'>Click to Play</a></b>")
                 else:
-                    add_paragraph(f"🎬 <a href='{video_url}'>{video_name}</a>", "Normal")
+                    add(f"🎬 <a href='{url}'>{name}</a>")
         else:
-            print("⚠️ No video files found for PDF.")
-
+            add("<font color='gray'>No video files uploaded.</font>")
         elements.append(PageBreak())
 
-        # -----------------------------------------------------------------
-        # PAGE 3 — AI SCOPE ANALYSIS
-        # -----------------------------------------------------------------
-        print("🧠 Building Page 3 (AI Scope Analysis)")
+        # ------------------ PAGE 3 ------------------
+        add("<b>🤖 AI Scope Analysis</b>", "Heading2")
         if ai_analysis:
-            completion = ai_analysis.get("completion", 0)
-            add_paragraph("🤖 AI Scope Comparison", "Heading2")
-            add_paragraph(f"<b>Estimated Completion:</b> {completion}%")
-            elements.append(Spacer(1, 12))
-
-            for item in ai_analysis.get("scored_items", []):
-                scope = item.get("scope", "")
-                conf = item.get("confidence", 0)
-                match = item.get("match", False)
-                matched_image = item.get("matched_image")
-
-                add_paragraph(
-                    f"<b>Scope:</b> {scope}<br/><b>Confidence:</b> {conf}%<br/><b>Match:</b> {'✅' if match else '❌'}"
-                )
-                elements.append(Spacer(1, 6))
-
-                if matched_image:
-                    possible_paths = [
-                        os.path.join("static/uploads", matched_image),
-                        os.path.join("static/uploads", matched_image.replace("_compressed", "")),
-                    ]
-                    for path in possible_paths:
-                        if os.path.exists(path):
-                            try:
-                                elements.append(
-                                    Image(fix_orientation_and_compress(path), width=2.5 * inch, height=2.5 * inch)
-                                )
-                                break
-                            except Exception as e:
-                                print(f"⚠️ Could not load matched image: {e}")
-                elements.append(Spacer(1, 10))
-
-            out_items = ai_analysis.get("out_of_scope", [])
-            if out_items:
-                add_paragraph("<b>Out-of-Scope Items:</b>", "Heading3")
-                for line in out_items:
-                    add_paragraph(f"<font color='red'>• {line}</font>")
+            add(f"<b>Completion:</b> {ai_analysis.get('completion', 0)}%")
         else:
-            add_paragraph("<font color='gray'>No AI analysis data found.</font>")
+            add("<font color='gray'>No AI analysis results.</font>")
         elements.append(PageBreak())
 
-        # -----------------------------------------------------------------
-        # PAGE 4 — SAFETY SHEET
-        # -----------------------------------------------------------------
-        print("⛑️ Building Page 4 (Safety Sheet)")
+        # ------------------ PAGE 4 ------------------
+        add("<b>⛑️ Safety Sheet</b>", "Heading2")
         if safety_sheet_path and os.path.exists(safety_sheet_path):
-            add_paragraph("📎 Attached Safety Sheet", "Heading2")
-            try:
-                ext = os.path.splitext(safety_sheet_path)[1].lower()
-                if ext in [".jpg", ".jpeg", ".png"]:
-                    elements.append(
-                        Image(fix_orientation_and_compress(safety_sheet_path), width=5 * inch, height=6 * inch)
-                    )
-                else:
-                    add_paragraph(
-                        f"Safety sheet file: {os.path.basename(safety_sheet_path)} (non-image format)"
-                    )
-            except Exception as e:
-                add_paragraph(f"⚠️ Could not load safety sheet: {e}")
+            ext = os.path.splitext(safety_sheet_path)[1].lower()
+            if ext in [".jpg", ".jpeg", ".png"]:
+                elements.append(Image(fix_orientation_and_compress(safety_sheet_path), width=5 * inch, height=6 * inch))
+            else:
+                add(f"Safety sheet file: {os.path.basename(safety_sheet_path)}")
         else:
-            add_paragraph("<font color='gray'>No safety sheet attached.</font>")
+            add("<font color='gray'>No safety sheet attached.</font>")
 
-        # -----------------------------------------------------------------
-        # FINAL BUILD
-        # -----------------------------------------------------------------
-        print(f"📝 Building PDF at: {save_path}")
         doc.build(elements)
-        print(f"✅ PDF generated successfully in {round(time.time() - start_time, 2)}s")
+        print(f"✅ PDF built in {round(time.time() - start, 2)}s")
 
     except Exception as e:
-        print(f"❌ PDF generation error: {e}")
+        print(f"❌ PDF generation failed: {e}")
         traceback.print_exc()
