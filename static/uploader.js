@@ -1,169 +1,85 @@
-// ✅ static/uploader.js — Fully integrated drag/drop, compress, preview, zoom, and upload
+// ✅ uploader.js — Handles image & video previews with zoom/play modal
 
-const dropzone = document.getElementById('dropzone');
-const fileInput = document.getElementById('fileInput');
-const previewGrid = document.getElementById('preview-container');
-const progressContainer = document.getElementById("progress-container");
-const progressBar = document.getElementById("progress-bar");
-const statusText = document.getElementById("upload-status");
-const zoomModal = document.getElementById("zoom-modal");
+// Store preview container and input
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("fileInput");
+const previewContainer = document.getElementById("preview-container");
 
-let mediaFiles = [];
-const MAX_FILES = 20;
+let modal = null;
 
-// 🌐 Global drag & drop
-window.addEventListener("dragover", e => e.preventDefault());
-window.addEventListener("drop", e => {
-  e.preventDefault();
-  if (e.dataTransfer?.files?.length) handleFiles(e.dataTransfer.files);
-});
-
-dropzone.addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", e => handleFiles(e.target.files));
-
-function compressImage(file, callback) {
-  const img = new Image();
-  const reader = new FileReader();
-  reader.onload = e => {
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      const maxDim = 1600;
-      let width = img.width, height = img.height;
-      if (width > height && width > maxDim) {
-        height *= maxDim / width;
-        width = maxDim;
-      } else if (height > maxDim) {
-        width *= maxDim / height;
-        height = maxDim;
-      }
-      canvas.width = width;
-      canvas.height = height;
-      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-      canvas.toBlob(blob => {
-        const compressed = new File([blob], file.name, { type: file.type });
-        callback(compressed);
-      }, file.type, 0.7);
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
+// ✅ Create modal overlay (once)
+function createModal() {
+  modal = document.createElement("div");
+  modal.id = "media-modal";
+  modal.innerHTML = `
+    <div class="modal-content" id="modal-content"></div>
+    <span class="modal-close" onclick="closeModal()">&times;</span>
+  `;
+  modal.style.display = "none";
+  document.body.appendChild(modal);
 }
 
+function openModal(innerHtml) {
+  const content = document.getElementById("modal-content");
+  content.innerHTML = innerHtml;
+  modal.style.display = "flex";
+}
+
+function closeModal() {
+  modal.style.display = "none";
+  document.getElementById("modal-content").innerHTML = "";
+}
+
+// ✅ Handle file selection
 function handleFiles(files) {
-  if ((mediaFiles.length + files.length) > MAX_FILES) return alert("⚠️ Max 20 files allowed");
-  Array.from(files).forEach(file => {
-    const isImage = file.type.startsWith("image/");
-    const isVideo = file.type.startsWith("video/");
-    if (!isImage && !isVideo) return;
+  [...files].forEach(file => {
+    const ext = file.name.split('.').pop().toLowerCase();
+    const reader = new FileReader();
 
-    const maxSize = isVideo ? 100 * 1024 * 1024 : 15 * 1024 * 1024;
-    if (file.size > maxSize) return alert(`⚠️ ${file.name} too large`);
+    reader.onload = () => {
+      const url = reader.result;
+      let el;
 
-    if (isImage) {
-      compressImage(file, compressed => {
-        mediaFiles.push({ file: compressed, url: URL.createObjectURL(compressed) });
-        renderPreviews();
-      });
-    } else {
-      mediaFiles.push({ file, url: URL.createObjectURL(file) });
-      renderPreviews();
-    }
+      if (["mp4", "mov", "webm"].includes(ext)) {
+        el = document.createElement("div");
+        el.className = "video-thumb-wrapper";
+        el.innerHTML = `
+          <div class="play-overlay">▶</div>
+          <video class="preview-thumb" src="${url}" muted></video>
+        `;
+        el.onclick = () => openModal(`<video src='${url}' controls autoplay style='max-width:90vw; max-height:80vh'></video>`);
+      } else {
+        el = document.createElement("img");
+        el.src = url;
+        el.className = "preview-thumb";
+        el.onclick = () => openModal(`<img src='${url}' style='max-width:90vw; max-height:80vh'/>`);
+      }
+
+      previewContainer.appendChild(el);
+    };
+    reader.readAsDataURL(file);
   });
 }
 
-function renderPreviews() {
-  previewGrid.innerHTML = "";
-  mediaFiles.forEach((media, index) => {
-    const isVideo = media.file.type.startsWith("video/");
-    const item = document.createElement("div");
-    item.className = "preview-item";
-    item.innerHTML = `
-  ${isVideo ? `<video src="${media.url}" class="preview-media" controls></video>` : `<img src="${media.url}" class="preview-media">`}
-  <button class="remove-btn" onclick="removeFile(${index})">&times;</button>
-`;
-    item.addEventListener("click", e => {
-      if (e.target.classList.contains("remove-btn")) return;
-      zoomModal.innerHTML = `<${isVideo ? 'video controls autoplay' : 'img'} src="${media.url}" />`;
-      zoomModal.style.display = "flex";
-    });
-    previewGrid.appendChild(item);
-  });
-}
-
-function removeFile(index) {
-  const media = mediaFiles[index];
-  if (media.file.type.startsWith("video/")) {
-    document.querySelectorAll(`video[src="${media.url}"]`).forEach(v => {
-      v.pause(); v.src = ""; v.load();
-    });
-  }
-  URL.revokeObjectURL(media.url);
-  mediaFiles.splice(index, 1);
-  renderPreviews();
-}
-
-zoomModal.addEventListener("click", () => {
-  const video = zoomModal.querySelector("video");
-  if (video) {
-    video.pause();
-    video.src = "";
-    video.load();
-  }
-  zoomModal.innerHTML = "";
-  zoomModal.style.display = "none";
+// ✅ Drag & drop behavior
+dropzone.addEventListener("click", () => fileInput.click());
+dropzone.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  dropzone.style.borderColor = "#007bff";
+});
+dropzone.addEventListener("dragleave", () => {
+  dropzone.style.borderColor = "#aaa";
+});
+dropzone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropzone.style.borderColor = "#aaa";
+  handleFiles(e.dataTransfer.files);
+  fileInput.files = e.dataTransfer.files; // to preserve submission
 });
 
-function uploadMedia(callback) {
-  if (mediaFiles.length === 0) return alert("No media to upload.");
-  const formData = new FormData();
-  mediaFiles.forEach(media => formData.append("media_files", media.file));
-  progressContainer.style.display = "block";
-  progressBar.style.width = "0%";
-  statusText.textContent = "";
-  progressBar.style.backgroundColor = "#2ecc71";
-
-  const xhr = new XMLHttpRequest();
-  xhr.open("POST", "/upload_media_temp", true);
-
-  xhr.upload.addEventListener("progress", e => {
-    if (e.lengthComputable) {
-      const percent = Math.round((e.loaded / e.total) * 100);
-      progressBar.style.width = percent + "%";
-    }
-  });
-
-  xhr.onload = () => {
-    if (xhr.status === 200) {
-      const res = JSON.parse(xhr.responseText);
-      statusText.textContent = res.message || "✅ Uploaded!";
-      callback(res.saved_paths);
-    } else {
-      statusText.textContent = "❌ Upload failed";
-      progressBar.style.backgroundColor = "#e74c3c";
-    }
-  };
-
-  xhr.onerror = () => {
-    statusText.textContent = "❌ Upload error";
-    progressBar.style.backgroundColor = "#e74c3c";
-  };
-
- xhr.send(formData);
-}
-
-// ✅ Attach media files to main form on submit (must be outside the function)
-document.querySelector("form").addEventListener("submit", e => {
-  const form = e.target;
-  form.querySelectorAll("input[name='media_files']").forEach(n => n.remove());
-
-  mediaFiles.forEach(m => {
-    const dt = new DataTransfer();
-    dt.items.add(m.file);
-    const input = document.createElement("input");
-    input.type = "file";
-    input.name = "media_files";
-    input.files = dt.files;
-    input.hidden = true;
-    form.appendChild(input);
-  });
+fileInput.addEventListener("change", () => {
+  handleFiles(fileInput.files);
 });
+
+// ✅ Initialize modal on load
+window.onload = createModal;
