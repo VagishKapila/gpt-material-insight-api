@@ -1,4 +1,4 @@
-<!-- ✅ FINAL form.html with X-remove buttons, video/image modal preview, play overlay, and upload preview --><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -54,10 +54,11 @@
     </form>
   </div>
 
-  <!-- 🖼️ Modal Viewer -->
-  <div id="mediaModal" class="modal">
+  <!-- Modal for previewing media -->
+  <div id="mediaModal" class="modal" onclick="closeModal()">
     <span class="close">&times;</span>
-    <div class="modal-content" id="modalMedia"></div>
+    <img id="modalImage" class="modal-content" style="display:none;" />
+    <video id="modalVideo" class="modal-content" controls autoplay style="display:none;"></video>
   </div>
 </body>
 </html>
