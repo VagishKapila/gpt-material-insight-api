@@ -9,7 +9,6 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from PIL import Image as PILImage, ExifTags
 
-
 # ---------------------------------------------------------------------
 # 🧩 Utility: Fix orientation + compress
 # ---------------------------------------------------------------------
@@ -89,6 +88,13 @@ def create_daily_log_pdf(
     try:
         print("\n🚧 Starting PDF generation...")
         start_time = time.time()
+
+        # 🔍 DEBUG BLOCK: Check what media files were received
+        print(f"\n📦 Received {len(image_paths)} total media file(s):")
+        for path in image_paths:
+            ext = os.path.splitext(path)[1].lower()
+            print(f"• {path} (ext: {ext})")
+
         doc = SimpleDocTemplate(save_path, pagesize=letter)
         elements = []
         styles = getSampleStyleSheet()
@@ -124,15 +130,11 @@ def create_daily_log_pdf(
         # PAGE 2 – Jobsite Photos + Videos
         # -----------------------------------------------------------------
         print("🧩 Building jobsite media section...")
-        valid_images = []
-        valid_videos = []
 
-        for p in image_paths:
-            ext = os.path.splitext(p)[1].lower()
-            if ext in [".jpg", ".jpeg", ".png"]:
-                valid_images.append(p)
-            elif ext in [".mp4", ".mov", ".avi"]:
-                valid_videos.append(p)
+        valid_images = [p for p in image_paths if p.lower().endswith((".jpg", ".jpeg", ".png"))]
+        valid_videos = [p for p in image_paths if p.lower().endswith((".mp4", ".mov", ".avi"))]
+
+        print(f"✅ Found {len(valid_images)} image(s) and {len(valid_videos)} video(s)")
 
         # ---- Images
         if valid_images:
@@ -159,17 +161,19 @@ def create_daily_log_pdf(
         if valid_videos:
             add_paragraph("<b>🎞️ Uploaded Videos</b>", "Heading2")
             for vid in valid_videos:
-                thumb = generate_video_thumbnail(vid)
                 video_name = os.path.basename(vid)
                 video_url = f"/{vid}" if not vid.startswith("http") else vid
+                thumb = generate_video_thumbnail(vid)
                 if thumb and os.path.exists(thumb):
                     try:
                         elements.append(Image(thumb, width=2.5 * inch, height=2.0 * inch))
                         add_paragraph(f'<a href="{video_url}">{video_name}</a>', "Normal")
+                        print(f"✅ Added video thumbnail for {video_name}")
                     except Exception as e:
-                        print(f"⚠️ Could not embed thumbnail: {e}")
-                        add_paragraph(f'<a href="{video_url}">{video_name}</a>', "Normal")
+                        print(f"⚠️ Could not embed thumbnail for {video_name}: {e}")
+                        add_paragraph(f'🎥 <a href="{video_url}">{video_name}</a>', "Normal")
                 else:
+                    print(f"⚠️ No thumbnail found for {video_name}, adding link only.")
                     add_paragraph(f'🎥 <a href="{video_url}">{video_name}</a>', "Normal")
 
         elements.append(PageBreak())
