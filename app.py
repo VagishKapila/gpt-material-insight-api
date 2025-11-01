@@ -1,4 +1,3 @@
-# app.py — v2025.11.01 (Stable + Video Thumbnail Integration)
 import os
 import json
 import uuid
@@ -7,10 +6,9 @@ from datetime import datetime
 from flask import Flask, request, render_template, send_from_directory, redirect, url_for
 from werkzeug.utils import secure_filename
 
-# --- Local imports ---
 from utils.compare_scope_vs_log import analyze_scope_vs_log
 from utils.pdf_generator import create_daily_log_pdf
-from utils.video_tools import generate_video_thumbnail  # ✅ Added for video thumbnails
+from utils.video_tools import generate_video_thumbnail
 
 app = Flask(__name__)
 
@@ -27,30 +25,24 @@ SESSION_FOLDER = "session_data"
 for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER, SAFETY_FOLDER, LOGO_FOLDER, SESSION_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
-# ---------------------------------------------------------------------
-# 🩺 Health Check
-# ---------------------------------------------------------------------
+
 @app.route("/")
 def health():
     return "✅ Nails & Notes AI Log is running!"
 
-# ---------------------------------------------------------------------
-# 🧱 Form Route
-# ---------------------------------------------------------------------
+
 @app.route("/form")
 def form():
     return render_template("form.html", datetime=datetime)
 
-# ---------------------------------------------------------------------
-# 🚀 Generate Form / Handle Uploads
-# ---------------------------------------------------------------------
+
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
     try:
         print("\n📥 Incoming request.files keys:", list(request.files.keys()))
         print("📥 request.form keys:", list(request.form.keys()))
 
-        # --- Core Form Data ---
+        # Core form data
         form_data = {
             "project_name": request.form.get("project_name"),
             "client_name": request.form.get("client_name"),
@@ -63,11 +55,8 @@ def generate_form():
         }
 
         session_id = str(uuid.uuid4())
-        image_paths, scope_path, safety_path, logo_path = [], None, None, None
+        media_items, scope_path, safety_path, logo_path = [], None, None, None
 
-        # -----------------------------------------------------------------
-        # 💾 Utility to save any uploaded file
-        # -----------------------------------------------------------------
         def save_file(field, folder):
             if field in request.files and request.files[field].filename:
                 file = request.files[field]
@@ -78,67 +67,53 @@ def generate_form():
                 return path
             return None
 
-        # -----------------------------------------------------------------
-        # 📄 Save optional uploads (logo, safety, scope)
-        # -----------------------------------------------------------------
         logo_path = save_file("logo", LOGO_FOLDER)
         safety_path = save_file("safety_sheet", SAFETY_FOLDER)
         scope_path = save_file("scope_doc", SCOPE_FOLDER)
 
-        # -----------------------------------------------------------------
-        # 📸 Handle jobsite media (images + videos)
-        # -----------------------------------------------------------------
-        media_file_keys = [k for k in request.files if k == "media_files" or k.startswith("media_files[")]
-        allowed_image_exts = {".jpg", ".jpeg", ".png", ".bmp", ".gif"}
-        allowed_video_exts = {".mp4", ".mov", ".avi", ".mkv"}
+        allowed_images = {".jpg", ".jpeg", ".png", ".bmp", ".gif"}
+        allowed_videos = {".mp4", ".mov", ".avi", ".mkv"}
 
-        for key in media_file_keys:
-            for file in request.files.getlist(key):
-                if file and file.filename:
+        for key in request.files:
+            if key.startswith("media_files"):
+                for file in request.files.getlist(key):
+                    if not file or not file.filename:
+                        continue
                     ext = os.path.splitext(file.filename)[1].lower()
-                    safe_filename = f"{session_id}_{uuid.uuid4().hex}{ext}"
-                    save_path = os.path.join(UPLOAD_FOLDER, safe_filename)
+                    safe_name = f"{session_id}_{uuid.uuid4().hex}{ext}"
+                    save_path = os.path.join(UPLOAD_FOLDER, safe_name)
                     file.save(save_path)
-                    print(f"📦 Uploaded jobsite media: {save_path}")
+                    print(f"📦 Saved media: {save_path}")
 
-                    # ✅ Images
-                    if ext in allowed_image_exts:
-                        image_paths.append(save_path)
-                        print(f"🖼️ Added image file: {file.filename}")
-
-                    # ✅ Videos (generate thumbnail)
-                    elif ext in allowed_video_exts:
-                        print(f"🎥 Processing video: {file.filename}")
+                    if ext in allowed_images:
+                        media_items.append({"type": "image", "path": save_path})
+                    elif ext in allowed_videos:
+                        print(f"🎥 Generating thumbnail for: {file.filename}")
                         thumb = generate_video_thumbnail(save_path)
                         if thumb and os.path.exists(thumb):
-                            image_paths.append(thumb)
-                            print(f"✅ Added video thumbnail: {thumb}")
+                            media_items.append({
+                                "type": "video",
+                                "path": save_path,
+                                "thumbnail": thumb
+                            })
+                            print(f"✅ Video thumbnail added: {thumb}")
                         else:
-                            print(f"⚠️ Thumbnail generation failed for {file.filename}, skipping preview.")
-
+                            print(f"⚠️ Failed to create thumbnail for: {file.filename}")
                     else:
-                        print(f"⚠️ Skipped unsupported file type: {file.filename}")
+                        print(f"⚠️ Unsupported file type: {file.filename}")
 
-        # -----------------------------------------------------------------
-        # 🤖 AI Scope Comparison
-        # -----------------------------------------------------------------
-        ai_results = {}
-        progress_report = {}
-
+        ai_results, progress_report = {}, {}
         if request.form.get("enable_ai") and scope_path:
             try:
-                ai_results = analyze_scope_vs_log(scope_path, form_data, image_paths)
-                print("✅ AI analysis completed successfully.")
+                ai_results = analyze_scope_vs_log(scope_path, form_data, [m["path"] for m in media_items])
+                print("✅ AI analysis completed.")
             except Exception as e:
                 traceback.print_exc()
-                ai_results = {"error": f"AI analysis failed: {str(e)}"}
+                ai_results = {"error": f"AI failed: {e}"}
 
-        # -----------------------------------------------------------------
-        # 💾 Save session data
-        # -----------------------------------------------------------------
         session_data = {
             "form_data": form_data,
-            "image_paths": image_paths,
+            "media_items": media_items,
             "logo_path": logo_path,
             "ai_results": ai_results,
             "progress_report": progress_report,
@@ -149,21 +124,20 @@ def generate_form():
         with open(os.path.join(SESSION_FOLDER, f"{session_id}.json"), "w") as f:
             json.dump(session_data, f, indent=2)
 
-        print(f"💾 Saved session {session_id} with {len(image_paths)} image/video previews.")
+        print(f"💾 Session saved {session_id} with {len(media_items)} media entries.")
         return redirect(url_for("preview", session_id=session_id))
 
     except Exception as e:
         traceback.print_exc()
         return f"❌ Error generating form: {str(e)}", 500
 
-# ---------------------------------------------------------------------
-# 🧠 Preview Page
-# ---------------------------------------------------------------------
+
 @app.route("/preview/<session_id>")
 def preview(session_id):
     json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
     if not os.path.exists(json_path):
         return f"❌ Session not found: {session_id}", 404
+
     try:
         with open(json_path, "r") as f:
             data = json.load(f)
@@ -171,59 +145,26 @@ def preview(session_id):
         return render_template("preview.html", session_id=session_id, **data)
     except Exception as e:
         traceback.print_exc()
-        return f"❌ Failed to load preview: {str(e)}", 500
+        return f"❌ Failed to load preview: {e}", 500
 
-# ---------------------------------------------------------------------
-# 🧾 Submit Preview → Generate PDF
-# ---------------------------------------------------------------------
+
 @app.route("/submit_preview", methods=["POST"])
 def submit_preview():
     session_id = request.form.get("session_id")
-    if not session_id:
-        return "Missing session ID", 400
-
     json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
+
     if not os.path.exists(json_path):
-        return f"❌ Session not found: {session_id}", 404
+        return "❌ Session not found", 404
 
     try:
         with open(json_path, "r") as f:
             data = json.load(f)
 
-        total_items = int(request.form.get("total_items", 0))
-        scored_items = []
-
-        for i in range(total_items):
-            scope = request.form.get(f"scope_{i}", "")
-            confidence = int(request.form.get(f"confidence_{i}", 0))
-            match = f"match_{i}" in request.form
-            matched_image = request.form.get(f"matched_image_{i}", "").strip() or None
-
-            scored_items.append({
-                "scope": scope,
-                "confidence": confidence,
-                "match": match,
-                "matched_image": matched_image
-            })
-
-        estimated_completion = sum(i["confidence"] for i in scored_items if i["match"]) / max(len(scored_items), 1)
-
-        data["ai_results"] = {
-            "completion": round(estimated_completion, 1),
-            "scored_items": scored_items,
-            "out_of_scope": data.get("ai_results", {}).get("out_of_scope", [])
-        }
-
-        with open(json_path, "w") as f:
-            json.dump(data, f, indent=2)
-
         pdf_name = f"{session_id}_daily_log.pdf"
         save_path = os.path.join(GENERATED_FOLDER, pdf_name)
-
-        print(f"🧱 Generating PDF for session {session_id}...")
         create_daily_log_pdf(
             data=data.get("form_data", {}),
-            image_paths=data.get("image_paths", []),
+            image_paths=[m["path"] for m in data.get("media_items", [])],
             logo_path=data.get("logo_path"),
             ai_analysis=data.get("ai_results"),
             progress_report=data.get("progress_report"),
@@ -231,44 +172,19 @@ def submit_preview():
             weather_icon_path=data.get("weather_icon_path"),
             safety_sheet_path=data.get("safety_sheet_path"),
         )
-        print(f"✅ PDF generated successfully: {pdf_name}")
+        print(f"✅ PDF generated successfully.")
         return redirect(url_for("serve_pdf", filename=pdf_name))
-
     except Exception as e:
         traceback.print_exc()
-        return f"❌ Failed to generate PDF: {str(e)}", 500
+        return f"❌ Failed to generate PDF: {e}", 500
 
-# ---------------------------------------------------------------------
-# 📂 Serve Generated PDFs
-# ---------------------------------------------------------------------
+
 @app.route("/generated/<filename>")
 def serve_pdf(filename):
-    path = os.path.join(GENERATED_FOLDER, filename)
-    if not os.path.exists(path):
-        return f"❌ File not found: {filename}", 404
     return send_from_directory(GENERATED_FOLDER, filename)
 
-# ---------------------------------------------------------------------
-# 🧩 Debug Sessions
-# ---------------------------------------------------------------------
-@app.route("/debug_sessions")
-def debug_sessions():
-    try:
-        session_files = os.listdir(SESSION_FOLDER)
-        session_links = []
-        for file in session_files:
-            if file.endswith(".json"):
-                session_id = file.replace(".json", "")
-                session_links.append(f'<li><a href="/preview/{session_id}">{session_id}</a></li>')
-        return f"<h2>🧠 Debug: Saved Sessions</h2><ul>{''.join(session_links)}</ul>"
-    except Exception as e:
-        return f"Failed to load sessions: {str(e)}", 500
 
-# ---------------------------------------------------------------------
-# 🚦 Run App (✅ Single Run Block)
-# ---------------------------------------------------------------------
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # default to 5000 locally
-    print(f"🚀 Starting server on port {port} ...")  # 👈 Add this line
+    port = int(os.environ.get("PORT", 5000))
+    print(f"🚀 Starting on port {port}")
     app.run(host="0.0.0.0", port=port, debug=True)
-    
