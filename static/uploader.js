@@ -1,36 +1,34 @@
-// ✅ uploader.js — Handles image & video previews with zoom/play modal
+// uploader.js — Handles preview + delete + zoom for images & videos
 
-// Store preview container and input
 const dropzone = document.getElementById("dropzone");
 const fileInput = document.getElementById("fileInput");
 const previewContainer = document.getElementById("preview-container");
 
-let modal = null;
+function openModal(src, type) {
+  const modal = document.getElementById("mediaModal");
+  const img = document.getElementById("modalImage");
+  const vid = document.getElementById("modalVideo");
 
-// ✅ Create modal overlay (once)
-function createModal() {
-  modal = document.createElement("div");
-  modal.id = "media-modal";
-  modal.innerHTML = `
-    <div class="modal-content" id="modal-content"></div>
-    <span class="modal-close" onclick="closeModal()">&times;</span>
-  `;
-  modal.style.display = "none";
-  document.body.appendChild(modal);
-}
-
-function openModal(innerHtml) {
-  const content = document.getElementById("modal-content");
-  content.innerHTML = innerHtml;
-  modal.style.display = "flex";
+  if (type === 'image') {
+    img.src = src;
+    img.style.display = "block";
+    vid.pause();
+    vid.style.display = "none";
+  } else {
+    vid.src = src;
+    vid.style.display = "block";
+    img.style.display = "none";
+  }
+  modal.style.display = "block";
 }
 
 function closeModal() {
+  const modal = document.getElementById("mediaModal");
+  const vid = document.getElementById("modalVideo");
+  vid.pause();
   modal.style.display = "none";
-  document.getElementById("modal-content").innerHTML = "";
 }
 
-// ✅ Handle file selection
 function handleFiles(files) {
   [...files].forEach(file => {
     const ext = file.name.split('.').pop().toLowerCase();
@@ -38,48 +36,55 @@ function handleFiles(files) {
 
     reader.onload = () => {
       const url = reader.result;
-      let el;
+      const wrapper = document.createElement("div");
+      wrapper.className = "media-wrapper";
+
+      const deleteBtn = document.createElement("span");
+      deleteBtn.className = "delete-button";
+      deleteBtn.innerHTML = "&times;";
+      deleteBtn.onclick = () => wrapper.remove();
 
       if (["mp4", "mov", "webm"].includes(ext)) {
-        el = document.createElement("div");
-        el.className = "video-thumb-wrapper";
-        el.innerHTML = `
+        const thumb = document.createElement("div");
+        thumb.className = "video-thumb-wrapper";
+        thumb.innerHTML = `
           <div class="play-overlay">▶</div>
           <video class="preview-thumb" src="${url}" muted></video>
         `;
-        el.onclick = () => openModal(`<video src='${url}' controls autoplay style='max-width:90vw; max-height:80vh'></video>`);
+        thumb.onclick = () => openModal(url, 'video');
+        wrapper.appendChild(deleteBtn);
+        wrapper.appendChild(thumb);
       } else {
-        el = document.createElement("img");
-        el.src = url;
-        el.className = "preview-thumb";
-        el.onclick = () => openModal(`<img src='${url}' style='max-width:90vw; max-height:80vh'/>`);
+        const img = document.createElement("img");
+        img.src = url;
+        img.className = "preview-thumb";
+        img.onclick = () => openModal(url, 'image');
+        wrapper.appendChild(deleteBtn);
+        wrapper.appendChild(img);
       }
 
-      previewContainer.appendChild(el);
+      previewContainer.appendChild(wrapper);
     };
+
     reader.readAsDataURL(file);
   });
 }
 
-// ✅ Drag & drop behavior
 dropzone.addEventListener("click", () => fileInput.click());
-dropzone.addEventListener("dragover", (e) => {
+dropzone.addEventListener("dragover", e => {
   e.preventDefault();
   dropzone.style.borderColor = "#007bff";
 });
 dropzone.addEventListener("dragleave", () => {
   dropzone.style.borderColor = "#aaa";
 });
-dropzone.addEventListener("drop", (e) => {
+dropzone.addEventListener("drop", e => {
   e.preventDefault();
   dropzone.style.borderColor = "#aaa";
   handleFiles(e.dataTransfer.files);
-  fileInput.files = e.dataTransfer.files; // to preserve submission
+  fileInput.files = e.dataTransfer.files;
 });
 
 fileInput.addEventListener("change", () => {
   handleFiles(fileInput.files);
 });
-
-// ✅ Initialize modal on load
-window.onload = createModal;
