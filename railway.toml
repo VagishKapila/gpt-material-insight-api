@@ -3,4 +3,4 @@ builder = "NIXPACKS"
 nixpacksConfigPath = "nixpacks.toml"
 
 [deploy]
-startCommand = "gunicorn app:app --bind 0.0.0.0:$PORT --timeout 180"
+startCommand = "apt update && apt install -y ffmpeg && gunicorn app:app --bind 0.0.0.0:$PORT --timeout 180"
