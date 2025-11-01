@@ -1,4 +1,5 @@
 import os
+from utils.video_tools import generate_video_thumbnail
 import time
 import traceback
 import subprocess
