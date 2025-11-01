@@ -22,20 +22,24 @@ SESSION_FOLDER = "session_data"
 for folder in [UPLOAD_FOLDER, GENERATED_FOLDER, SCOPE_FOLDER, SAFETY_FOLDER, LOGO_FOLDER, SESSION_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
-
 @app.route("/")
 def health():
     return "✅ Nails & Notes AI Log is running!"
-
 
 @app.route("/form")
 def form():
     return render_template("form.html", datetime=datetime)
 
-
 @app.route("/generate_form", methods=["POST"])
 def generate_form():
     try:
+        # 🔍 DEBUG: Print incoming form + file keys
+        print("\n📥 Incoming request.files keys:")
+        print(list(request.files.keys()))
+        print("📥 request.form keys:")
+        print(list(request.form.keys()))
+        print()
+
         form_data = {
             "project_name": request.form.get("project_name"),
             "client_name": request.form.get("client_name"),
@@ -65,7 +69,7 @@ def generate_form():
         safety_path = save_file("safety_sheet", SAFETY_FOLDER)
         scope_path = save_file("scope_doc", SCOPE_FOLDER)
 
-        # ✅ FIX: Handle jobsite media uploaded via drag/drop JS
+        # ✅ Handle jobsite media uploaded via drag/drop JS
         media_file_keys = [k for k in request.files if k == "media_files" or k.startswith("media_files[")]
         for key in media_file_keys:
             for file in request.files.getlist(key):
@@ -110,7 +114,6 @@ def generate_form():
         traceback.print_exc()
         return f"❌ Error generating form: {str(e)}", 500
 
-
 @app.route("/preview/<session_id>")
 def preview(session_id):
     json_path = os.path.join(SESSION_FOLDER, f"{session_id}.json")
@@ -123,7 +126,6 @@ def preview(session_id):
     except Exception as e:
         traceback.print_exc()
         return f"❌ Failed to load preview: {str(e)}", 500
-
 
 @app.route("/submit_preview", methods=["POST"])
 def submit_preview():
@@ -186,14 +188,12 @@ def submit_preview():
         traceback.print_exc()
         return f"❌ Failed to generate PDF: {str(e)}", 500
 
-
 @app.route("/generated/<filename>")
 def serve_pdf(filename):
     path = os.path.join(GENERATED_FOLDER, filename)
     if not os.path.exists(path):
         return f"❌ File not found: {filename}", 404
     return send_from_directory(GENERATED_FOLDER, filename)
-
 
 @app.route("/debug_sessions")
 def debug_sessions():
@@ -207,7 +207,6 @@ def debug_sessions():
         return f"<h2>🧠 Debug: Saved Sessions</h2><ul>{''.join(session_links)}</ul>"
     except Exception as e:
         return f"Failed to load sessions: {str(e)}", 500
-
 
 if __name__ == "__main__":
     app.run(debug=True)
