@@ -1,4 +1,4 @@
-# app.py — v2025.11.01 (Stable + Video Upload Support)
+# app.py — v2025.11.01 (Stable + Video Thumbnail Integration)
 import os
 import json
 import uuid
@@ -10,6 +10,7 @@ from werkzeug.utils import secure_filename
 # --- Local imports ---
 from utils.compare_scope_vs_log import analyze_scope_vs_log
 from utils.pdf_generator import create_daily_log_pdf
+from utils.video_tools import generate_video_thumbnail  # ✅ Added for video thumbnails
 
 app = Flask(__name__)
 
@@ -103,13 +104,19 @@ def generate_form():
                     file.save(save_path)
                     print(f"📦 Uploaded jobsite media: {save_path}")
 
-                    # ✅ Add both images + videos to image_paths
                     if ext in allowed_image_exts:
                         print(f"🖼️ Added image file: {file.filename}")
                         image_paths.append(save_path)
+
                     elif ext in allowed_video_exts:
-                        print(f"🎥 Added video file: {file.filename}")
-                        image_paths.append(save_path)
+                        print(f"🎥 Processing video: {file.filename}")
+                        thumb = generate_video_thumbnail(save_path)
+                        if thumb and os.path.exists(thumb):
+                            image_paths.append(thumb)
+                            print(f"✅ Added video thumbnail: {thumb}")
+                        else:
+                            print(f"⚠️ Thumbnail generation failed for {file.filename}, skipping preview.")
+
                     else:
                         print(f"⚠️ Skipped unsupported file type: {file.filename}")
 
@@ -143,7 +150,7 @@ def generate_form():
         with open(os.path.join(SESSION_FOLDER, f"{session_id}.json"), "w") as f:
             json.dump(session_data, f, indent=2)
 
-        print(f"💾 Saved session {session_id} with {len(image_paths)} media files.")
+        print(f"💾 Saved session {session_id} with {len(image_paths)} image/video previews.")
         return redirect(url_for("preview", session_id=session_id))
 
     except Exception as e:
