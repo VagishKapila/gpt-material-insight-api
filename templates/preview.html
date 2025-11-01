@@ -1,4 +1,4 @@
-<!-- ✅ preview.html with working modals for image & video preview -->
+<!-- ✅ FINAL preview.html — Fully working image & video modal with "X" close -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -47,7 +47,6 @@
       position: relative;
       display: inline-block;
     }
-    /* Modal styling */
     .modal {
       display: none;
       position: fixed;
@@ -73,6 +72,7 @@
       font-size: 36px;
       font-weight: bold;
       cursor: pointer;
+      z-index: 1001;
     }
   </style>
 </head>
@@ -120,10 +120,10 @@
     </form>
   </div>
 
-  <!-- Modal -->
-  <div id="mediaModal" class="modal" onclick="closeModal()">
-    <span class="close">&times;</span>
-    <img id="modalImage" class="modal-content" style="display:none;">
+  <!-- ✅ Modal for Image and Video -->
+  <div id="mediaModal" class="modal">
+    <span class="close" onclick="closeModal()">&times;</span>
+    <img id="modalImage" class="modal-content" style="display:none;" />
     <video id="modalVideo" class="modal-content" controls autoplay style="display:none;"></video>
   </div>
 
@@ -148,7 +148,8 @@
 
     function closeModal() {
       const modal = document.getElementById("mediaModal");
-      document.getElementById("modalVideo").pause();
+      const vid = document.getElementById("modalVideo");
+      vid.pause();
       modal.style.display = "none";
     }
   </script>
