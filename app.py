@@ -269,4 +269,5 @@ def debug_sessions():
 # ---------------------------------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))  # default to 5000 locally
+    print(f"🚀 Starting server on port {port} ...")  # 👈 Add this line
     app.run(host="0.0.0.0", port=port, debug=True)
