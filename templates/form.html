@@ -1,3 +1,4 @@
+<!-- ✅ FINAL form.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,7 +12,6 @@
   <div class="container">
     <h1>🛠️ Submit Daily Log</h1>
     <form action="/generate_form" method="POST" enctype="multipart/form-data">
-      <!-- Core Fields -->
       <label>Project Name</label>
       <input type="text" name="project_name" required>
       <label>Client Name</label>
@@ -29,7 +29,6 @@
       <label>Safety Notes</label>
       <textarea name="safety_notes" rows="2"></textarea>
 
-      <!-- Media Upload -->
       <label>Jobsite Media (Images or Videos)</label>
       <div id="dropzone" class="dropzone">
         <p>📸 Drag & drop up to 20 files here, or click to select</p>
@@ -37,7 +36,6 @@
       </div>
       <div id="preview-container"></div>
 
-      <!-- Uploads -->
       <label>Upload Scope of Work</label>
       <input type="file" name="scope_doc" accept=".pdf,.doc,.docx,.txt,.xlsx,.pptx" required>
       <label>Upload Safety Sheet</label>
@@ -54,9 +52,9 @@
     </form>
   </div>
 
-  <!-- Modal for previewing media -->
-  <div id="mediaModal" class="modal" onclick="closeModal()">
-    <span class="close">&times;</span>
+  <!-- Modal -->
+  <div id="mediaModal" class="modal">
+    <span class="close" onclick="closeModal()">&times;</span>
     <img id="modalImage" class="modal-content" style="display:none;" />
     <video id="modalVideo" class="modal-content" controls autoplay style="display:none;"></video>
   </div>
