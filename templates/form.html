@@ -1,8 +1,9 @@
+<!-- ✅ FINAL form.html (2025-11-01) -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Daily Log Form</title>
   <link rel="stylesheet" href="/static/style.css" />
   <script defer src="/static/uploader.js"></script>
@@ -11,41 +12,40 @@
   <div class="container">
     <h1>🛠️ Submit Daily Log</h1>
     <form action="/generate_form" method="POST" enctype="multipart/form-data">
+      <!-- Standard Fields -->
       <label>Project Name</label>
-      <input type="text" name="project_name" required>
+      <input type="text" name="project_name" required />
       <label>Client Name</label>
-      <input type="text" name="client_name" required>
+      <input type="text" name="client_name" required />
       <label>Location</label>
-      <input type="text" name="location" required>
+      <input type="text" name="location" required />
       <label>Date</label>
-      <input type="date" name="date" value="{{ datetime.utcnow().date() }}" required>
+      <input type="date" name="date" required />
       <label>Weather</label>
-      <input type="text" name="weather">
+      <input type="text" name="weather" />
       <label>Work Done Today</label>
-      <textarea name="work_done" rows="3" required></textarea>
+      <textarea name="work_done" rows="3"></textarea>
       <label>Crew Notes</label>
       <textarea name="crew_notes" rows="2"></textarea>
       <label>Safety Notes</label>
       <textarea name="safety_notes" rows="2"></textarea>
 
+      <!-- Media Uploader -->
       <label>Jobsite Media (Images or Videos)</label>
       <div id="dropzone" class="dropzone">
         <p>📸 Drag & drop up to 20 files here, or click to select</p>
         <input type="file" id="fileInput" name="media_files" accept="image/*,video/*" multiple hidden>
       </div>
-      <div id="preview-container" class="images"></div>
+      <div id="preview-container" class="media-preview-grid"></div>
 
+      <!-- Other uploads -->
       <label>Upload Scope of Work</label>
-      <input type="file" name="scope_doc" accept=".pdf,.doc,.docx,.txt,.xlsx,.pptx" required>
+      <input type="file" name="scope_doc" accept=".pdf,.doc,.docx,.txt,.xlsx,.pptx" />
       <label>Upload Safety Sheet</label>
-      <input type="file" name="safety_sheet" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx">
+      <input type="file" name="safety_sheet" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" />
       <label>Upload Logo</label>
-      <input type="file" name="logo" accept=".png,.jpg,.jpeg,.svg">
-
-      <label>
-        <input type="checkbox" name="enable_ai" checked>
-        Enable AI Scope Matching
-      </label>
+      <input type="file" name="logo" accept=".png,.jpg,.jpeg,.svg" />
+      <label><input type="checkbox" name="enable_ai" checked /> Enable AI Scope Matching</label>
 
       <button type="submit">🚀 Generate Preview</button>
     </form>
