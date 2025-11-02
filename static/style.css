@@ -1,66 +1,114 @@
-/* ✅ style.css — styling for media preview in Form */
-.media-preview-grid {
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f9f9f9;
+  padding: 20px;
+}
+
+.container {
+  background: white;
+  max-width: 800px;
+  margin: auto;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+label {
+  font-weight: bold;
+  display: block;
+  margin-top: 15px;
+}
+
+input[type="text"],
+input[type="date"],
+textarea,
+input[type="file"] {
+  width: 100%;
+  padding: 8px;
+  margin-top: 4px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+button {
+  margin-top: 20px;
+  padding: 12px 20px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.dropzone {
+  border: 2px dashed #aaa;
+  border-radius: 5px;
+  padding: 15px;
+  text-align: center;
+  margin-bottom: 10px;
+  background-color: #f1f1f1;
+  cursor: pointer;
+}
+
+.preview-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 10px;
 }
 
-.media-wrapper {
-  position: relative;
+.preview-thumb {
   width: 180px;
-  height: 120px;
-}
-
-.media-thumb {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 6px;
+  height: auto;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
   cursor: pointer;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  position: relative;
 }
 
-.play-overlay {
+.video-thumb-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.video-thumb-wrapper .play-overlay {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 28px;
+  font-size: 40px;
   color: white;
   pointer-events: none;
+  text-shadow: 0 0 10px black;
 }
 
-.delete-x {
-  position: absolute;
-  top: -10px;
-  right: -10px;
-  background: #ff4444;
-  color: white;
-  border-radius: 50%;
-  font-size: 16px;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 10;
-}
-
-/* Modal */
 .modal {
   display: none;
   position: fixed;
-  z-index: 9999;
-  left: 0; top: 0;
-  width: 100%; height: 100%;
-  background: rgba(0, 0, 0, 0.8);
-  justify-content: center;
-  align-items: center;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(0, 0, 0, 0.85);
 }
 
 .modal-content {
-  max-width: 90vw;
+  margin: 5% auto;
+  display: block;
+  max-width: 90%;
   max-height: 80vh;
+}
+
+.close {
+  position: absolute;
+  top: 20px;
+  right: 35px;
+  color: white;
+  font-size: 36px;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 1001;
 }
