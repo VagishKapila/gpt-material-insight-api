@@ -1,5 +1,4 @@
-# ✅ Full app.py with debuggers to trace media upload issues
-
+# ✅ Full updated `app.py` with detailed debuggers and consistent media ordering
 import os
 import uuid
 import json
@@ -35,13 +34,11 @@ def generate_form():
 
     form_data = request.form.to_dict()
     media_items = []
+    print("\n📥 Form Submission Received")
+    print(f"Form Fields: {form_data}")
 
-    print("\n📥 Incoming form submission")
-    print(f"Form fields: {form_data}")
-
-    # Handle media uploads (images + video)
     files = request.files.getlist("media_files")
-    print(f"🔎 Received {len(files)} media files")
+    print(f"🔍 Received {len(files)} media files")
 
     for file in files:
         if file.filename:
@@ -54,43 +51,39 @@ def generate_form():
             media_type = 'video' if ext in ['.mp4', '.mov', '.avi', '.webm'] else 'image'
             media_item = {'type': media_type, 'path': save_path.replace('static/', '')}
 
-            # Optional: generate thumbnail if video
             if media_type == 'video':
                 from utils.pdf_generator import generate_video_thumbnail
                 thumb_path = generate_video_thumbnail(save_path)
-                media_item['thumbnail'] = thumb_path.replace('static/', '') if thumb_path else None
+                if thumb_path:
+                    media_item['thumbnail'] = thumb_path.replace('static/', '')
 
             media_items.append(media_item)
-            print(f"✅ Saved {media_type}: {media_item}")
+            print(f"✅ Saved {media_type.upper()}: {media_item}")
 
-    # Save optional logo
     logo_path = None
     if 'logo' in request.files and request.files['logo'].filename:
         logo_file = request.files['logo']
         ext = os.path.splitext(logo_file.filename)[1]
         logo_path = os.path.join(LOGO_FOLDER, f"{session_id}{ext}")
         logo_file.save(logo_path)
-        print(f"✅ Logo saved to {logo_path}")
+        print(f"🖼️ Logo saved: {logo_path}")
 
-    # Save scope of work
     scope_path = None
     if 'scope_doc' in request.files and request.files['scope_doc'].filename:
         scope_file = request.files['scope_doc']
         ext = os.path.splitext(scope_file.filename)[1]
         scope_path = os.path.join(SCOPE_FOLDER, f"{session_id}{ext}")
         scope_file.save(scope_path)
-        print(f"📄 Scope file saved to {scope_path}")
+        print(f"📄 Scope of Work saved: {scope_path}")
 
-    # Save safety sheet
     safety_path = None
     if 'safety_sheet' in request.files and request.files['safety_sheet'].filename:
         safety_file = request.files['safety_sheet']
         ext = os.path.splitext(safety_file.filename)[1]
         safety_path = os.path.join(SAFETY_FOLDER, f"{session_id}{ext}")
         safety_file.save(safety_path)
-        print(f"✅ Safety sheet saved to {safety_path}")
+        print(f"🛡️ Safety Sheet saved: {safety_path}")
 
-    # Save session to JSON
     session_data = {
         'form_data': form_data,
         'media_items': media_items,
@@ -100,7 +93,7 @@ def generate_form():
     }
     with open(session_path, 'w') as f:
         json.dump(session_data, f)
-        print(f"💾 Session saved: {session_path}")
+        print(f"💾 Session data saved: {session_path}")
 
     return render_template('preview.html',
                            form_data=form_data,
@@ -120,7 +113,9 @@ def submit_preview():
 
     form_data = session.get('form_data', {})
     media_items = session.get('media_items', [])
-    image_paths = ["static/" + item['path'] for item in media_items]
+    image_paths = ["static/" + item['path'] for item in media_items if item['type'] == 'image']
+    video_paths = ["static/" + item['path'] for item in media_items if item['type'] == 'video']
+
     logo_path = session.get('logo_path')
     scope_path = session.get('scope_path')
     safety_path = session.get('safety_path')
@@ -128,13 +123,13 @@ def submit_preview():
     ai_result = None
     if form_data.get('enable_ai') and scope_path:
         ai_result = analyze_scope_vs_log(scope_path, form_data, image_paths)
-        print("🤖 AI analysis result:", ai_result)
-
-    output_pdf = os.path.join("static/generated", f"{session_id}.pdf")
-    os.makedirs("static/generated", exist_ok=True)
+        print("🤖 AI Match Results:", ai_result)
 
     from utils.weather_icon import get_weather_icon
     weather_icon = get_weather_icon(form_data.get("weather"))
+
+    output_pdf = os.path.join("static/generated", f"{session_id}.pdf")
+    os.makedirs("static/generated", exist_ok=True)
 
     create_daily_log_pdf(
         data=form_data,
