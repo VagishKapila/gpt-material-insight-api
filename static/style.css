@@ -1,114 +1,51 @@
-body {
-  font-family: Arial, sans-serif;
-  background-color: #f9f9f9;
-  padding: 20px;
-}
 
-.container {
-  background: white;
-  max-width: 800px;
-  margin: auto;
-  padding: 30px;
-  border-radius: 8px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-}
-
-label {
-  font-weight: bold;
-  display: block;
-  margin-top: 15px;
-}
-
-input[type="text"],
-input[type="date"],
-textarea,
-input[type="file"] {
-  width: 100%;
-  padding: 8px;
-  margin-top: 4px;
-  margin-bottom: 10px;
-  border-radius: 4px;
-  border: 1px solid #ccc;
-}
-
-button {
-  margin-top: 20px;
-  padding: 12px 20px;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.dropzone {
+/* ✅ style.css — Supports both image and video preview thumbnails */
+#dropzone {
   border: 2px dashed #aaa;
-  border-radius: 5px;
-  padding: 15px;
+  padding: 20px;
+  margin: 10px 0;
   text-align: center;
-  margin-bottom: 10px;
-  background-color: #f1f1f1;
   cursor: pointer;
+  background: #f9f9f9;
 }
-
-.preview-grid {
+#preview-container {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 12px;
 }
-
-.preview-thumb {
-  width: 180px;
-  height: auto;
-  border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-  cursor: pointer;
+.preview-thumb, .video-thumb-wrapper {
   position: relative;
+  width: 150px;
+  height: 120px;
+  border-radius: 6px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
-
-.video-thumb-wrapper {
-  position: relative;
-  display: inline-block;
+.preview-thumb img, .video-thumb-wrapper video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
 }
-
-.video-thumb-wrapper .play-overlay {
+.play-overlay {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 40px;
+  font-size: 28px;
   color: white;
   pointer-events: none;
-  text-shadow: 0 0 10px black;
 }
-
-.modal {
-  display: none;
-  position: fixed;
-  z-index: 1000;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  overflow: auto;
-  background-color: rgba(0, 0, 0, 0.85);
-}
-
-.modal-content {
-  margin: 5% auto;
-  display: block;
-  max-width: 90%;
-  max-height: 80vh;
-}
-
-.close {
+.preview-x {
   position: absolute;
-  top: 20px;
-  right: 35px;
+  top: -8px;
+  right: -8px;
+  background: red;
   color: white;
-  font-size: 36px;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  text-align: center;
+  line-height: 18px;
   font-weight: bold;
   cursor: pointer;
-  z-index: 1001;
 }
