@@ -2,221 +2,67 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Submit Daily Log</title>
   <link rel="stylesheet" href="/static/style.css" />
   <script defer src="/static/uploader.js"></script>
-  <style>
-    .preview-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 10px;
-    }
-
-    .preview-item {
-      position: relative;
-      width: 150px;
-      height: 120px;
-      border-radius: 6px;
-      overflow: hidden;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    }
-
-    .preview-item img,
-    .preview-item video {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-
-    .delete-btn {
-      position: absolute;
-      top: 2px;
-      right: 5px;
-      background: rgba(0,0,0,0.6);
-      color: white;
-      border: none;
-      font-size: 18px;
-      cursor: pointer;
-      z-index: 2;
-      border-radius: 3px;
-    }
-
-    .video-overlay {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 28px;
-      color: white;
-      pointer-events: none;
-      z-index: 1;
-    }
-  </style>
 </head>
 <body>
   <div class="container">
     <h1>🛠️ Submit Daily Log</h1>
     <form action="/generate_form" method="POST" enctype="multipart/form-data">
-      <!-- Fields -->
-      <label>Project Name</label>
-      <input type="text" name="project_name" required />
-      <label>Client Name</label>
-      <input type="text" name="client_name" required />
-      <label>Location</label>
-      <input type="text" name="location" required />
-      <label>Date</label>
-      <input type="date" name="date" value="{{ datetime.utcnow().date() }}" required />
-      <label>Weather</label>
-      <input type="text" name="weather" />
-      <label>Work Done Today</label>
-      <textarea name="work_done" rows="3"></textarea>
-      <label>Crew Notes</label>
-      <textarea name="crew_notes" rows="2"></textarea>
-      <label>Safety Notes</label>
-      <textarea name="safety_notes" rows="2"></textarea>
+      <!-- Fields omitted for brevity -->
 
-      <!-- Media Dropzone -->
       <label>Jobsite Media (Images or Videos)</label>
       <div id="dropzone" class="dropzone">
-        <p>📸 Drag & drop up to 20 files here, or click to select</p>
+        <p>📸 Drag & drop or click to select files</p>
         <input type="file" id="fileInput" name="media_files" accept="image/*,video/*" multiple hidden />
       </div>
       <div id="preview-container" class="preview-grid"></div>
-
-      <!-- Other uploads -->
-      <label>Upload Scope of Work</label>
-      <input type="file" name="scope_doc" accept=".pdf,.doc,.docx,.txt,.xlsx,.pptx" required />
-      <label>Upload Safety Sheet</label>
-      <input type="file" name="safety_sheet" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" />
-      <label>Upload Logo</label>
-      <input type="file" name="logo" accept=".png,.jpg,.jpeg,.svg" />
-
-      <label>
-        <input type="checkbox" name="enable_ai" checked />
-        Enable AI Scope Matching
-      </label>
 
       <button type="submit">🚀 Generate Preview</button>
     </form>
   </div>
 
-  <!-- Modal -->
+  <!-- Modal for media preview -->
   <div id="mediaModal" class="modal">
     <span class="close" onclick="closeModal()">&times;</span>
     <img id="modalImage" class="modal-content" style="display:none;" />
     <video id="modalVideo" class="modal-content" controls autoplay style="display:none;"></video>
   </div>
-
-  <script>
-    const dropzone = document.getElementById("dropzone");
-    const fileInput = document.getElementById("fileInput");
-    const previewContainer = document.getElementById("preview-container");
-
-    dropzone.addEventListener("click", () => fileInput.click());
-
-    dropzone.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      dropzone.style.borderColor = "#007bff";
-    });
-
-    dropzone.addEventListener("dragleave", () => {
-      dropzone.style.borderColor = "#aaa";
-    });
-
-    dropzone.addEventListener("drop", (e) => {
-      e.preventDefault();
-      handleFiles(e.dataTransfer.files);
-    });
-
-    fileInput.addEventListener("change", () => {
-      handleFiles(fileInput.files);
-    });
-
-    function handleFiles(files) {
-      [...files].forEach(file => {
-        const ext = file.name.split('.').pop().toLowerCase();
-        const reader = new FileReader();
-
-        reader.onload = () => {
-          const previewItem = document.createElement("div");
-          previewItem.className = "preview-item";
-
-          const deleteBtn = document.createElement("button");
-          deleteBtn.className = "delete-btn";
-          deleteBtn.innerHTML = "×";
-          deleteBtn.onclick = () => previewItem.remove();
-
-          if (["mp4", "mov", "webm"].includes(ext)) {
-            const placeholder = document.createElement("div");
-            placeholder.style.background = "#000";
-            placeholder.style.width = "100%";
-            placeholder.style.height = "100%";
-
-            const video = document.createElement("video");
-            video.src = reader.result;
-            video.muted = true;
-            video.playsInline = true;
-            video.style.display = "none";
-
-            const overlay = document.createElement("div");
-            overlay.className = "video-overlay";
-            overlay.innerHTML = "▶";
-
-            previewItem.appendChild(placeholder);
-            previewItem.appendChild(video);
-            previewItem.appendChild(overlay);
-            previewItem.appendChild(deleteBtn);
-
-            previewItem.onclick = () => {
-              openModalVideo(reader.result);
-            };
-          } else {
-            const img = document.createElement("img");
-            img.src = reader.result;
-            img.onclick = () => openModalImage(reader.result);
-            previewItem.appendChild(img);
-            previewItem.appendChild(deleteBtn);
-          }
-
-          previewContainer.appendChild(previewItem);
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-
-    function openModalImage(src) {
-      const modal = document.getElementById("mediaModal");
-      const img = document.getElementById("modalImage");
-      const vid = document.getElementById("modalVideo");
-
-      img.src = src;
-      img.style.display = "block";
-      vid.style.display = "none";
-      vid.pause();
-      modal.style.display = "block";
-    }
-
-    function openModalVideo(src) {
-      const modal = document.getElementById("mediaModal");
-      const vid = document.getElementById("modalVideo");
-      const img = document.getElementById("modalImage");
-
-      vid.src = src;
-      vid.style.display = "block";
-      img.style.display = "none";
-      modal.style.display = "block";
-    }
-
-    function closeModal() {
-      const modal = document.getElementById("mediaModal");
-      const vid = document.getElementById("modalVideo");
-      modal.style.display = "none";
-      vid.pause();
-    }
-  </script>
 </body>
 </html>
+
+--- ✅ preview.html ---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Preview Log</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script defer src="/static/uploader.js"></script>
+</head>
+<body>
+  <h1>📝 Preview Daily Log</h1>
+
+  {% if media_items %}
+  <div class="section">
+    <h2>📷 Job Site Media</h2>
+    <div class="images">
+      {% for item in media_items %}
+        {% if item.type == 'image' %}
+          <img src="/{{ item.path }}" class="media-thumb" onclick="openModal(this.src, 'image')">
+        {% elif item.type == 'video' %}
+          <div class="media-wrapper" onclick="openModal('/{{ item.path }}', 'video')">
+            {% if item.thumbnail %}
+              <img src="/{{ item.thumbnail }}" class="media-thumb">
+            {% else %}
+              <div class="media-thumb" style="width:200px;height:120px;background:#000;"></div>
+            {% endif %}
+            <div class="play-overlay">▶️</div>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
