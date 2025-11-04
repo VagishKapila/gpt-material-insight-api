@@ -1,84 +1,85 @@
-const dropzone = document.getElementById("dropzone");
-const fileInput = document.getElementById("fileInput");
-const previewContainer = document.getElementById("preview-container");
+// ✅ uploader.js — handles previews, modal zoom, delete buttons
 
-function createMediaThumb(url, type) {
-  const wrapper = document.createElement("div");
-  wrapper.className = "media-wrapper";
+document.addEventListener("DOMContentLoaded", () => {
+  const dropzone = document.getElementById("dropzone");
+  const fileInput = document.getElementById("fileInput");
+  const previewContainer = document.getElementById("preview-container");
 
-  if (type === "video") {
-    const placeholder = document.createElement("div");
-    placeholder.className = "media-thumb";
-    placeholder.style.background = "#000";
-    placeholder.innerHTML = "<div class='play-overlay'>▶️</div>";
-    wrapper.appendChild(placeholder);
+  function createThumb(file, url) {
+    const ext = file.name.split(".").pop().toLowerCase();
+    const wrapper = document.createElement("div");
+    wrapper.className = "thumb-wrapper";
 
-    wrapper.onclick = () => openModal(url, 'video');
-  } else {
-    const img = document.createElement("img");
-    img.src = url;
-    img.className = "media-thumb";
-    img.onclick = () => openModal(url, 'image');
-    wrapper.appendChild(img);
+    const closeBtn = document.createElement("span");
+    closeBtn.className = "thumb-close";
+    closeBtn.innerHTML = "&times;";
+    closeBtn.onclick = () => wrapper.remove();
+
+    if (["mp4", "mov", "webm"].includes(ext)) {
+      wrapper.innerHTML += `
+        <div class="video-thumb">
+          <video src="${url}" muted></video>
+          <div class="play-overlay">▶</div>
+        </div>
+      `;
+      wrapper.querySelector(".video-thumb").onclick = () => openModal(`<video src='${url}' controls autoplay></video>`);
+    } else {
+      const img = document.createElement("img");
+      img.src = url;
+      img.className = "preview-thumb";
+      img.onclick = () => openModal(`<img src='${url}'/>`);
+      wrapper.appendChild(img);
+    }
+    wrapper.appendChild(closeBtn);
+    previewContainer.appendChild(wrapper);
   }
 
-  // Add X button
-  const closeBtn = document.createElement("span");
-  closeBtn.className = "close-btn";
-  closeBtn.innerHTML = "&times;";
-  closeBtn.onclick = () => previewContainer.removeChild(wrapper);
-  wrapper.appendChild(closeBtn);
+  function handleFiles(files) {
+    [...files].forEach(file => {
+      const reader = new FileReader();
+      reader.onload = () => createThumb(file, reader.result);
+      reader.readAsDataURL(file);
+    });
+  }
 
-  previewContainer.appendChild(wrapper);
-}
+  dropzone.onclick = () => fileInput.click();
+  dropzone.ondragover = e => {
+    e.preventDefault();
+    dropzone.classList.add("drag-over");
+  };
+  dropzone.ondragleave = () => dropzone.classList.remove("drag-over");
+  dropzone.ondrop = e => {
+    e.preventDefault();
+    dropzone.classList.remove("drag-over");
+    handleFiles(e.dataTransfer.files);
+  };
 
-function handleFiles(files) {
-  [...files].forEach(file => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const ext = file.name.split('.').pop().toLowerCase();
-      const url = reader.result;
-      const type = ["mp4", "mov", "webm"].includes(ext) ? "video" : "image";
-      createMediaThumb(url, type);
-    };
-    reader.readAsDataURL(file);
-  });
-}
+  fileInput.addEventListener("change", () => handleFiles(fileInput.files));
 
-dropzone.addEventListener("click", () => fileInput.click());
-dropzone.addEventListener("dragover", e => { e.preventDefault(); dropzone.classList.add("active"); });
-dropzone.addEventListener("dragleave", () => dropzone.classList.remove("active"));
-dropzone.addEventListener("drop", e => {
-  e.preventDefault();
-  dropzone.classList.remove("active");
-  const files = e.dataTransfer.files;
-  fileInput.files = files;
-  handleFiles(files);
+  // Modal logic
+  const modal = document.getElementById("mediaModal");
+  const modalImg = document.getElementById("modalImage");
+  const modalVideo = document.getElementById("modalVideo");
+  const close = document.querySelector(".close");
+
+  window.openModal = (html) => {
+    if (html.includes("video")) {
+      modalVideo.src = html.match(/src='(.*?)'/)[1];
+      modalVideo.style.display = "block";
+      modalImg.style.display = "none";
+    } else {
+      modalImg.src = html.match(/src='(.*?)'/)[1];
+      modalImg.style.display = "block";
+      modalVideo.pause();
+      modalVideo.style.display = "none";
+    }
+    modal.style.display = "block";
+  };
+
+  window.closeModal = () => {
+    modal.style.display = "none";
+    modalImg.src = "";
+    modalVideo.pause();
+    modalVideo.src = "";
+  };
 });
-
-fileInput.addEventListener("change", () => handleFiles(fileInput.files));
-
-function openModal(src, type) {
-  const modal = document.getElementById("mediaModal");
-  const img = document.getElementById("modalImage");
-  const vid = document.getElementById("modalVideo");
-
-  if (type === 'image') {
-    img.src = src;
-    img.style.display = "block";
-    vid.style.display = "none";
-    vid.pause();
-  } else {
-    vid.src = src;
-    vid.style.display = "block";
-    img.style.display = "none";
-  }
-  modal.style.display = "block";
-}
-
-function closeModal() {
-  const modal = document.getElementById("mediaModal");
-  const vid = document.getElementById("modalVideo");
-  modal.style.display = "none";
-  vid.pause();
-}
