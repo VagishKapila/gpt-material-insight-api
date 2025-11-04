@@ -1,3 +1,4 @@
+<!-- ✅ preview.html (v2025.11.02) with working image & video modal, X close, thumbnails -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,79 +6,9 @@
   <title>Preview Log</title>
   <link rel="stylesheet" href="/static/style.css">
   <script defer src="/static/uploader.js"></script>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 30px;
-      background-color: #f7f7f7;
-    }
-    .section {
-      margin-bottom: 30px;
-      padding: 20px;
-      background: white;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.05);
-    }
-    h2 {
-      color: #444;
-    }
-    .images {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-    .media-thumb {
-      max-width: 200px;
-      height: auto;
-      border-radius: 5px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      cursor: pointer;
-    }
-    .play-overlay {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 32px;
-      color: white;
-      pointer-events: none;
-    }
-    .media-wrapper {
-      position: relative;
-      display: inline-block;
-    }
-    .modal {
-      display: none;
-      position: fixed;
-      z-index: 1000;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-      overflow: auto;
-      background-color: rgba(0, 0, 0, 0.8);
-    }
-    .modal-content {
-      margin: 5% auto;
-      display: block;
-      max-width: 90%;
-      max-height: 80vh;
-    }
-    .close {
-      position: absolute;
-      top: 20px;
-      right: 35px;
-      color: white;
-      font-size: 36px;
-      font-weight: bold;
-      cursor: pointer;
-      z-index: 1001;
-    }
-  </style>
 </head>
 <body>
   <h1>📝 Preview Daily Log</h1>
-
   <div class="section">
     <h2>📋 Project Info</h2>
     <p><strong>Project:</strong> {{ form_data.project_name }}</p>
@@ -86,7 +17,6 @@
     <p><strong>Date:</strong> {{ form_data.date }}</p>
     <p><strong>Weather:</strong> {{ form_data.weather }}</p>
   </div>
-
   <div class="section">
     <h2>🛠️ Work Details</h2>
     <p><strong>Work Done:</strong> {{ form_data.work_done }}</p>
@@ -97,18 +27,22 @@
   {% if media_items %}
   <div class="section">
     <h2>📷 Job Site Media</h2>
-    <div class="images">
+    <div class="media-grid">
       {% for item in media_items %}
         {% if item.type == 'image' %}
           <div class="media-wrapper">
-            <span class="close" onclick="removeMedia(this)">&times;</span>
-            <img src="/{{ item.path }}" class="media-thumb" onclick="openModal(this.src, 'image')" alt="Job Site Image">
+            <img src="/{{ item.path }}" class="media-thumb" onclick="openModal(this.src, 'image')">
+            <span class="close-thumb" onclick="removeItem(this)">&times;</span>
           </div>
         {% elif item.type == 'video' %}
-          <div class="media-wrapper">
-            <span class="close" onclick="removeMedia(this)">&times;</span>
-            <img src="/{{ item.thumbnail }}" class="media-thumb" onclick="openModal('/{{ item.path }}', 'video')" alt="Video Thumbnail">
+          <div class="media-wrapper" onclick="openModal('/{{ item.path }}', 'video')">
+            {% if item.thumbnail %}
+              <img src="/{{ item.thumbnail }}" class="media-thumb" alt="Video Thumbnail">
+            {% else %}
+              <div class="media-thumb video-placeholder">🎥</div>
+            {% endif %}
             <div class="play-overlay">▶️</div>
+            <span class="close-thumb" onclick="removeItem(this)">&times;</span>
           </div>
         {% endif %}
       {% endfor %}
@@ -145,8 +79,8 @@
       if (type === 'image') {
         img.src = src;
         img.style.display = "block";
-        vid.pause();
         vid.style.display = "none";
+        vid.pause();
       } else {
         vid.src = src;
         vid.style.display = "block";
@@ -157,14 +91,8 @@
 
     function closeModal() {
       const modal = document.getElementById("mediaModal");
-      const vid = document.getElementById("modalVideo");
-      vid.pause();
       modal.style.display = "none";
-    }
-
-    function removeMedia(button) {
-      const wrapper = button.closest(".media-wrapper");
-      wrapper.remove();
+      document.getElementById("modalVideo").pause();
     }
   </script>
 </body>
